@@ -50,3 +50,63 @@ kendovarは、**高速映像解析**を通じて、これらの判定をサポ�
 
 剣道についての詳しい情報は、以下をご参照ください：
 - [全日本剣道連盟 (All Japan Kendo Association)](https://www.all-japan-kendo.or.jp/)
+
+## Usage / 使い方
+
+Below are general usage instructions for kendovar. These describe the typical workflow and recommended settings; adapt them to your environment and to the concrete scripts/tools provided in this repository.
+
+### 1) Requirements / 前提条件
+
+- Hardware: high-speed camera (recommended 240 FPS or higher), stable mounting (tripod), good lighting
+- Software dependencies: tools for video processing (e.g., ffmpeg), and typical analysis libraries (e.g., Python 3.8+, OpenCV, NumPy). Adjust according to the implementation in this repo.
+
+### 2) Prepare and record / 録画の準備
+
+- Use a high frame-rate camera and set consistent lighting to capture clear motion
+- Record from one or more cameras covering the match area; ensure timestamps or synchronized frames if using multiple angles
+- Recommended settings (example): 240–480 fps, resolution 720p or 1080p depending on camera capability
+
+### 3) Import and convert videos / 動画の取り込み・変換
+
+- Transfer recordings to your analysis machine
+- If needed, transcode to a consistent format and frame rate with ffmpeg. Example (adjust as necessary):
+
+```bash
+# convert to mp4 with target frame rate
+ffmpeg -i input_raw.mov -r 240 -c:v libx264 -crf 18 output_240fps.mp4
+```
+
+### 4) Run analysis / 解析の実行
+
+- Use the repository's analysis scripts or tools to process the prepared videos. Typical steps:
+  1. Run automated detection to locate candidate strikes and key frames
+  2. Extract short clips or frames around candidate events
+  3. Apply pose/motion analysis to verify target, technique, and timing
+- Example (conceptual):
+
+```bash
+# conceptual example — replace with the actual script/CLI used by this repo
+python analyze.py --input ./videos/output_240fps.mp4 --out ./results/
+```
+
+### 5) Review and assist judgment / 判定の補助とレビュー
+
+- Review extracted frames/clips and annotated output using the viewer/UI (if provided)
+- Use slow-motion replay and frame-by-frame navigation to confirm which competitor landed the strike, whether it hit a valid target, and the precise timing order
+
+### 6) Export and report / レポート出力
+
+- Export final annotated videos, still images, and a CSV/JSON report summarizing candidate events and confidence scores
+- Share exported results with referees or competition officials for final decision support
+
+### Notes and troubleshooting / 注意事項・トラブルシューティング
+
+- Video quality and frame rate are critical — poor lighting or low FPS will reduce detection accuracy
+- If processing is slow, verify hardware acceleration (GPU) and adjust analysis parameters (e.g., frame sampling rate)
+- For multi-camera setups, ensure correct synchronization between streams
+
+### Contributing / 貢献
+
+Contributions, issue reports, and pull requests are welcome. Please follow standard GitHub contribution practices and include reproducible steps for bugs or feature requests.
+
+---
