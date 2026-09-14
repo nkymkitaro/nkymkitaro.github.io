@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>剣道2カメラVAR</title>
+
+  <!-- PWA / 全画面表示設定 (iOS & Android) -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="剣道VAR">
+  <meta name="theme-color" content="#121212">
+
+  <!-- インライン Web App Manifest (Android Chrome用) -->
+  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道2カメラVAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#121212","theme_color":"#121212","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23e53935\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
+
+  <!-- アプリアイコン (iOS用) -->
+  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23e53935"/><text x="50" y="65" font-size="50" text-anchor="middle" fill="white">⚔️</text></svg>'>
+
+  <!-- WebRTC通信用ライブラリ (PeerJS) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #121212;
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+      min-height: 100vh;
+      overscroll-behavior: none;
+    }
+    h1 { font-size: 1.2rem; margin: 4px 0 8px 0; }
+    .card {
+      background: #1e1e1e;
+      padding: 14px;
+      border-radius: 12px;
+      margin: 0 auto;
+      max-width: 480px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+    }
+    input, button {
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      border-radius: 8px;
+      margin: 3px;
+      font-weight: bold;
+      touch-action: manipulation;
+    }
+    input {
+      background: #2a2a2a;
+      color: #fff;
+      border: 1px solid #444;
+    }
+    button {
+      background: #0284c7;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:active { opacity: 0.8; transform: scale(0.98); }
+    .btn-danger { background: #e53935; }
+    .btn-warning { background: #fb8c00; color: #fff; }
+    .btn-secondary { background: #475569; }
+    .btn-active { background: #10b981 !important; border: 2px solid #fff; }
+    canvas {
+      width: 100%;
+      height: auto;
+      background: #000;
+      border-radius: 8px;
+      display: block;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .bg-live { background: #e53935; }
+    .bg-replay { background: #fb8c00; }
+    #cameraArea, #monitorArea { display: none; }
+    .controls-row {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+    .cam-selector {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .cam-selector button {
+      flex: 1;
+      padding: 10px 4px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>⚔️ 剣道2カメラVAR</h1>
+
+  <!-- 1. 役割選択画面 -->
+  <div id="setupArea" class="card">
+    <h3>役割を選択してください</h3>
+    <button onclick="startMonitor()" style="width: 100%; padding: 16px; font-size: 1rem;">📺 【親機】(モニター＋親機カメラ)</button>
+    <br><br>
+    <button onclick="startCamera()" class="btn-secondary" style="width: 100%; padding: 16px; font-size: 1rem;">📷 【子機】(2台目カメラ追加用)</button>
+  </div>
+
+  <!-- 2. 子機（カメラ専用）画面 -->
+  <div id="cameraArea" class="card">
+    <h3>📷 子機カメラ送信モード</h3>
+    <p>親機画面に表示された4桁のIDを入力:</p>
+    <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
+    <br><br>
+    <button onclick="connectToMonitor()" style="width: 85%; padding: 14px;">親機へ映像送信 🚀</button>
+    <div id="cameraStatus" style="margin-top:15px; color:#aaa; font-weight:bold;">接続待機中...</div>
+    <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
+  </div>
+
+  <!-- 3. 親機（モニター＋カメラ）画面 -->
+  <div id="monitorArea" class="card">
+    <div class="badge bg-live" id="statusBadge">● LIVE 撮影中</div>
+    <div>接続ID: <strong id="myIdDisplay" style="color:#38bdf8; font-size:1.8rem; letter-spacing: 2px;">....</strong></div>
+
+    <div class="cam-selector" style="margin-top: 8px;">
+      <button id="btnCamLocal" class="btn-active" onclick="switchCameraSource('local')">🎥 親機カメラ</button>
+      <button id="btnCamRemote" class="btn-secondary" onclick="switchCameraSource('remote')">📱 子機カメラ (未接続)</button>
+    </div>
+
+    <div style="position:relative; width:100%;">
+      <canvas id="displayCanvas" width="480" height="360"></canvas>
+    </div>
+
+    <div class="controls-row" style="margin-top: 10px;">
+      <button class="btn-danger" onclick="rewind(5)" style="flex:1; padding:14px; font-size:1rem;">⏪ 5秒前VAR</button>
+      <button class="btn-warning" onclick="goLive()" style="flex:1; padding:14px; font-size:1rem;">🔴 LIVEに戻る</button>
+    </div>
+    <div class="controls-row">
+      <button onclick="setSpeed(0.25)">0.25x</button>
+      <button onclick="setSpeed(0.5)">0.5x</button>
+      <button onclick="stepFrame(-1)" style="padding:10px 16px;">◀ 1コマ戻る</button>
+      <button onclick="stepFrame(1)" style="padding:10px 16px;">1コマ進む ▶</button>
+    </div>
+
+    <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
+    <video id="remoteVideo" autoplay playsinline muted style="display:none;"></video>
+  </div>
+
+  <script>
+    let peer = null;
+    let myId = '';
+    const frameBuffer = [];
+    const MAX_FRAMES = 300;
+    let isReplay = false;
+    let replayIndex = 0;
+    let playbackSpeed = 0.5;
+    let replayTimer = null;
+    let activeSource = 'local';
+    let isRemoteConnected = false;
+
+    const canvas = document.getElementById('displayCanvas');
+    const ctx = canvas.getContext('2d');
+    const localMonitorVideo = document.getElementById('localMonitorVideo');
+    const remoteVideo = document.getElementById('remoteVideo');
+
+    function generateShortId() {
+      return Math.floor(1000 + Math.random() * 9000).toString();
+    }
+
+    async function startMonitor() {
+      document.getElementById('setupArea').style.display = 'none';
+      document.getElementById('monitorArea').style.display = 'block';
+
+      myId = generateShortId();
+      document.getElementById('myIdDisplay').textContent = myId;
+
+      try {
+        const localStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        localMonitorVideo.srcObject = localStream;
+        localMonitorVideo.onloadedmetadata = () => {
+          localMonitorVideo.play();
+          canvas.width = localMonitorVideo.videoWidth || 480;
+          canvas.height = localMonitorVideo.videoHeight || 360;
+          requestAnimationFrame(captureLoop);
+        };
+      } catch (err) {
+        alert("親機カメラの起動失敗: " + err);
+      }
+
+      peer = new Peer('kendo-var-room-' + myId);
+      peer.on('call', (call) => {
+        call.answer();
+        call.on('stream', (remoteStream) => {
+          remoteVideo.srcObject = remoteStream;
+          remoteVideo.onloadedmetadata = () => {
+            remoteVideo.play();
+            isRemoteConnected = true;
+            document.getElementById('btnCamRemote').textContent = '📱 子機カメラ (接続中)';
+            document.getElementById('btnCamRemote').className = 'btn-secondary';
+          };
+        });
+      });
+    }
+
+    function switchCameraSource(source) {
+      if (source === 'remote' && !isRemoteConnected) {
+        return alert('子機カメラが未接続です。子機側で4桁IDを入力して送信してください。');
+      }
+
+      activeSource = source;
+      frameBuffer.length = 0;
+
+      if (source === 'local') {
+        document.getElementById('btnCamLocal').className = 'btn-active';
+        document.getElementById('btnCamRemote').className = 'btn-secondary';
+      } else {
+        document.getElementById('btnCamRemote').className = 'btn-active';
+        document.getElementById('btnCamLocal').className = 'btn-secondary';
+      }
+
+      if (isReplay) goLive();
+    }
+
+    function captureLoop() {
+      const currentVideo = (activeSource === 'local') ? localMonitorVideo : remoteVideo;
+
+      if (!isReplay && currentVideo && currentVideo.readyState === currentVideo.HAVE_ENOUGH_DATA) {
+        ctx.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
+        const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        frameBuffer.push(frameData);
+        if (frameBuffer.length > MAX_FRAMES) frameBuffer.shift();
+      }
+
+      if (!isReplay) {
+        requestAnimationFrame(captureLoop);
+      }
+    }
+
+    function startCamera() {
+      document.getElementById('setupArea').style.display = 'none';
+      document.getElementById('cameraArea').style.display = 'block';
+      peer = new Peer();
+    }
+
+    async function connectToMonitor() {
+      const targetId = document.getElementById('targetIdInput').value.trim();
+      if (!targetId) return alert('IDを入力してください');
+
+      document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+
+        document.getElementById('cameraStatus').textContent = '親機へ接続中...';
+        peer.call('kendo-var-room-' + targetId, stream);
+        document.getElementById('cameraStatus').textContent = '✅ 親機へ映像リアルタイム送信中！';
+      } catch (err) {
+        alert('接続エラー: ' + err);
+      }
+    }
+
+    function rewind(seconds) {
+      if (frameBuffer.length === 0) return;
+      isReplay = true;
+      clearInterval(replayTimer);
+      const rewindFrames = Math.min(seconds * 30, frameBuffer.length - 1);
+      replayIndex = frameBuffer.length - 1 - rewindFrames;
+      document.getElementById('statusBadge').textContent = `🎬 VAR REPLAY (${playbackSpeed}x)`;
+      document.getElementById('statusBadge').className = 'badge bg-replay';
+      startReplayLoop();
+    }
+
+    function startReplayLoop() {
+      clearInterval(replayTimer);
+      const intervalMs = (1000 / 30) / playbackSpeed;
+      replayTimer = setInterval(() => {
+        if (!isReplay) return;
+        if (replayIndex < frameBuffer.length) {
+          ctx.putImageData(frameBuffer[replayIndex], 0, 0);
+          replayIndex++;
+        } else {
+          replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex));
+        }
+      }, intervalMs);
+    }
+
+    function goLive() {
+      isReplay = false;
+      clearInterval(replayTimer);
+      document.getElementById('statusBadge').textContent = '● LIVE 撮影中';
+      document.getElementById('statusBadge').className = 'badge bg-live';
+      requestAnimationFrame(captureLoop);
+    }
+
+    function setSpeed(speed) {
+      playbackSpeed = speed;
+      if (isReplay) startReplayLoop();
+    }
+
+    function stepFrame(dir) {
+      if (!isReplay) rewind(0);
+      clearInterval(replayTimer);
+      replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex + dir));
+      ctx.putImageData(frameBuffer[replayIndex], 0, 0);
+    }
+  </script>
+</body>
+</html>
+
