@@ -53,57 +53,37 @@ kendovarは、**高速映像解析**を通じて、これらの判定をサポ�
 
 ## Usage / 使い方
 
-Below are general usage instructions for kendovar. These describe the typical workflow and recommended settings; adapt them to your environment and to the concrete scripts/tools provided in this repository.
+このリポジトリには、ブラウザで動くシンプルな2カメラVARデモが含まれています（index.html）。以下は最小限で分かりやすい手順です。
 
-### 1) Requirements / 前提条件
+English (short)
 
-- Hardware: high-speed camera (recommended 240 FPS or higher), stable mounting (tripod), good lighting
-- Software dependencies: tools for video processing (e.g., ffmpeg), and typical analysis libraries (e.g., Python 3.8+, OpenCV, NumPy). Adjust according to the implementation in this repo.
+1. Open index.html in a browser (recommended: serve it on localhost with a simple server, e.g. `python -m http.server`, because camera access often requires secure/origin context).
+2. On the monitor device (large screen): click the 📺 【親機】 button. Allow camera access when prompted. A 4-digit ID will appear.
+3. On the second device (phone / child camera): open the same index.html, click 📷 【子機】, enter the 4-digit ID shown on the monitor, then press the send/connect button to stream video to the monitor.
+4. On the monitor, choose camera source: 親機カメラ (local) or 子機カメラ (remote). Use the controls:
+   - ⏪ 5秒前VAR: rewind and start replay from ~5 seconds earlier
+   - 🔴 LIVEに戻る: return to live capture
+   - 0.25x / 0.5x: slow-motion playback speed
+   - ◀ 1コマ戻る / 1コマ進む ▶: step one frame backward/forward
+5. Use the viewer (canvas) for frame-by-frame confirmation. Exporting results is not implemented in the demo — capture the screen or extend the code if needed.
 
-### 2) Prepare and record / 録画の準備
+日本語（簡潔）
 
-- Use a high frame-rate camera and set consistent lighting to capture clear motion
-- Record from one or more cameras covering the match area; ensure timestamps or synchronized frames if using multiple angles
-- Recommended settings (example): 240–480 fps, resolution 720p or 1080p depending on camera capability
+1. index.html をブラウザで開きます（推奨：ローカルサーバーで配信、例 `python -m http.server`。カメラの許可/制限のため）。
+2. 親機（モニター）側で「📺 【親機】」を押し、カメラの許可を与えます。画面に4桁の接続IDが表示されます。
+3. 子機側（スマホ等）で同じ index.html を開き、「📷 【子機】」を押して4桁IDを入力し、親機へ送信します。
+4. 親機画面で表示ソースを切り替え、以下の操作でVAR（リプレイ）を使います：
+   - 「⏪ 5秒前VAR」：直近のバッファを巻き戻してリプレイを開始
+   - 「🔴 LIVEに戻る」：ライブ表示に戻す
+   - 「0.25x / 0.5x」：再生速度（スローモーション）
+   - 「◀ 1コマ戻る / 1コマ進む ▶」：フレーム単位で進める/戻す
+5. リプレイは画面上で確認し、必要なら画面録画やスクリーンショットで結果を保存してください。
 
-### 3) Import and convert videos / 動画の取り込み・変換
+Tips / 注意点
 
-- Transfer recordings to your analysis machine
-- If needed, transcode to a consistent format and frame rate with ffmpeg. Example (adjust as necessary):
-
-```bash
-# convert to mp4 with target frame rate
-ffmpeg -i input_raw.mov -r 240 -c:v libx264 -crf 18 output_240fps.mp4
-```
-
-### 4) Run analysis / 解析の実行
-
-- Use the repository's analysis scripts or tools to process the prepared videos. Typical steps:
-  1. Run automated detection to locate candidate strikes and key frames
-  2. Extract short clips or frames around candidate events
-  3. Apply pose/motion analysis to verify target, technique, and timing
-- Example (conceptual):
-
-```bash
-# conceptual example — replace with the actual script/CLI used by this repo
-python analyze.py --input ./videos/output_240fps.mp4 --out ./results/
-```
-
-### 5) Review and assist judgment / 判定の補助とレビュー
-
-- Review extracted frames/clips and annotated output using the viewer/UI (if provided)
-- Use slow-motion replay and frame-by-frame navigation to confirm which competitor landed the strike, whether it hit a valid target, and the precise timing order
-
-### 6) Export and report / レポート出力
-
-- Export final annotated videos, still images, and a CSV/JSON report summarizing candidate events and confidence scores
-- Share exported results with referees or competition officials for final decision support
-
-### Notes and troubleshooting / 注意事項・トラブルシューティング
-
-- Video quality and frame rate are critical — poor lighting or low FPS will reduce detection accuracy
-- If processing is slow, verify hardware acceleration (GPU) and adjust analysis parameters (e.g., frame sampling rate)
-- For multi-camera setups, ensure correct synchronization between streams
+- 高フレームレート（例：240FPS 以上）のカメラがベストですが、まずは手元の機材で動作確認してください。
+- 同一ネットワークでの接続や、ブラウザのカメラ許可を確認してください。Peer接続が失敗する場合はネットワーク設定（ファイアウォール、プライベートネットワーク）を確認してください。
+- このREADMEでは操作手順に絞っています。内部実装や詳細なコード修正は index.html を参照してください。
 
 ### Contributing / 貢献
 
