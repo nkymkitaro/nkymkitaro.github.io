@@ -40,6 +40,20 @@ function switchCameraSource(source) {
   });
 }
 
+// --- 使い方ヘルプ(ボトムシート) ---
+const helpSheet = document.getElementById('helpSheet');
+const helpOverlay = document.getElementById('helpOverlay');
+
+function openHelp() {
+  helpSheet.classList.add('open');
+  helpOverlay.classList.add('open');
+}
+
+function closeHelp() {
+  helpSheet.classList.remove('open');
+  helpOverlay.classList.remove('open');
+}
+
 // --- イベント配線 ---
 document.getElementById('btnStartMonitor').addEventListener('click', startMonitor);
 document.getElementById('btnStartCamera').addEventListener('click', startCamera);
@@ -55,3 +69,10 @@ document.getElementById('btnPlayPause').addEventListener('click', () => player.t
 document.getElementById('btnStepForward').addEventListener('click', () => player.stepFrame(1));
 document.getElementById('btnSpeed').addEventListener('click', () => player.cycleSpeed());
 document.getElementById('seekBar').addEventListener('input', (e) => player.onSeekInput(e.target.value));
+
+document.getElementById('btnHelp').addEventListener('click', openHelp);
+document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
+helpOverlay.addEventListener('click', closeHelp);
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeHelp();
+});

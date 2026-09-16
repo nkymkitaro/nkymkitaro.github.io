@@ -236,3 +236,67 @@ input[type="range"]::-moz-range-thumb {
 }
 input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-dim); }
 input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
+
+/* --- 初心者向けの補足説明 --- */
+.help-text {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-weight: 400;
+  line-height: 1.5;
+  margin: 4px 4px 0 4px;
+  text-align: left;
+}
+
+/* --- 使い方ヘルプ(FAB + ボトムシート) --- */
+.help-fab {
+  position: fixed;
+  right: 18px;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--glass-strong);
+  font-size: 1.2rem;
+  font-weight: 700;
+  z-index: 60;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.5);
+}
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 55;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease);
+}
+.help-overlay.open { opacity: 1; pointer-events: auto; }
+.help-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 65vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border-top: 1px solid var(--hairline);
+  border-radius: 20px 20px 0 0;
+  padding: 10px 20px max(20px, env(safe-area-inset-bottom));
+  z-index: 58;
+  text-align: left;
+  transform: translateY(100%);
+  transition: transform 0.28s var(--ease);
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
+}
+.help-sheet.open { transform: translateY(0); }
+.help-sheet-handle {
+  width: 36px;
+  height: 4px;
+  background: var(--hairline);
+  border-radius: 2px;
+  margin: 4px auto 14px;
+}
+.help-sheet h3 { margin: 0 0 12px 0; font-size: 1.05rem; }
+.help-sheet h4 { margin: 16px 0 4px 0; font-size: 0.92rem; }
+.help-sheet h4:first-of-type { margin-top: 0; }
+.help-sheet p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.65; }

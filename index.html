@@ -37,14 +37,15 @@
   <div id="setupArea" class="card">
     <h3 style="margin-top:0;">役割を選択してください</h3>
     <button id="btnStartMonitor" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 【親機】(モニター＋親機カメラ)</button>
-    <br><br>
-    <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem;">📷 【子機】(2台目カメラ追加用)</button>
+    <p class="help-text">会場に置いて操作する側です。1台だけで使う場合はこちらを選んでください。</p>
+    <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem; margin-top:14px;">📷 【子機】(2台目カメラ追加用)</button>
+    <p class="help-text">もう1台のスマホで、別アングルの映像を親機に送りたいときに選びます。</p>
   </div>
 
   <!-- 2. 子機（カメラ専用）画面 -->
   <div id="cameraArea" class="card">
     <h3 style="margin-top:0;">📷 子機カメラ送信モード</h3>
-    <p style="color:var(--text-dim);">親機画面に表示された4桁のIDを入力:</p>
+    <p style="color:var(--text-dim);">親機の画面に表示されている4桁の数字を、下の欄に入力してください。</p>
     <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
     <br><br>
     <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">親機へ映像送信 🚀</button>
@@ -56,6 +57,7 @@
   <div id="monitorArea" class="card">
     <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
     <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
+    <p class="help-text">2台目のスマホ(子機)を追加する場合、この番号をそちらの端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
 
     <div class="cam-selector" style="margin-top: 10px;">
       <button id="btnCamLocal" class="btn-active">🎥 親機カメラ</button>
@@ -95,6 +97,25 @@
 
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
     <video id="remoteVideo" autoplay playsinline muted style="display:none;"></video>
+  </div>
+
+  <!-- 使い方ヘルプ(常時表示のFAB + ボトムシート) -->
+  <button id="btnHelp" class="help-fab" aria-label="使い方を見る">?</button>
+  <div id="helpOverlay" class="help-overlay"></div>
+  <div id="helpSheet" class="help-sheet">
+    <div class="help-sheet-handle"></div>
+    <h3>使い方</h3>
+
+    <h4>📺 親機(モニター)</h4>
+    <p>会場でこの画面を見ながら操作する側です。起動すると4桁の接続IDが表示されます。1台のスマホだけで使う場合はそのままでOKです。</p>
+
+    <h4>📷 子機(2台目カメラ)</h4>
+    <p>別アングルの映像を追加したいときに、もう1台のスマホで選びます。親機に表示された4桁のIDを入力すると、その映像が親機に届きます。</p>
+
+    <h4>⏪ VARで見返す</h4>
+    <p>「15秒前VAR」を押すと、直前の映像を巻き戻して確認できます。シークバーやコマ送りボタン(⏮/⏭)で好きな瞬間まで動かせて、再生ボタンで止めたり再開したりできます。速度ボタンで0.25x/0.5x/1xを切り替え可能です。「LIVEに戻る」を押すとライブ映像に戻ります。</p>
+
+    <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>
 
   <script type="module" src="js/app.js"></script>
