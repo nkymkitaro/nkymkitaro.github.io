@@ -146,7 +146,7 @@
     </div>
 
     <div class="controls-row" style="margin-top: 10px;">
-      <button class="btn-danger" onclick="rewind(5)" style="flex:1; padding:14px; font-size:1rem;">⏪ 5秒前VAR</button>
+      <button class="btn-danger" onclick="rewind(15)" style="flex:1; padding:14px; font-size:1rem;">⏪ 15秒前VAR</button>
       <button class="btn-warning" onclick="goLive()" style="flex:1; padding:14px; font-size:1rem;">🔴 LIVEに戻る</button>
     </div>
     <div class="controls-row">
@@ -164,7 +164,7 @@
     let peer = null;
     let myId = '';
     const frameBuffer = [];
-    const MAX_FRAMES = 300;
+    const MAX_FRAMES = 450; // 30fps × 15秒分をバッファ
     let isReplay = false;
     let replayIndex = 0;
     let playbackSpeed = 0.5;
