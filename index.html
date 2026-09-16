@@ -10,31 +10,38 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="剣道VAR">
-  <meta name="theme-color" content="#121212">
+  <meta name="theme-color" content="#000000">
 
   <!-- インライン Web App Manifest (Android Chrome用) -->
-  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道2カメラVAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#121212","theme_color":"#121212","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23e53935\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
+  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道2カメラVAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23ff3b30\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
 
   <!-- アプリアイコン (iOS用) -->
-  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23e53935"/><text x="50" y="65" font-size="50" text-anchor="middle" fill="white">⚔️</text></svg>'>
+  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23ff3b30"/><text x="50" y="65" font-size="50" text-anchor="middle" fill="white">⚔️</text></svg>'>
 
   <!-- WebRTC通信用ライブラリ (PeerJS) -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
   <style>
+    /*
+      デザイン方針:
+      色は「意味を持つ場所」だけに使う。
+      赤 = LIVE(撮影中)、アンバー = VAR REPLAY(再生中)。それ以外は白黒のグレースケールで統一する。
+    */
     :root {
-      --bg: #121212;
-      --card-bg: #1e1e1e;
-      --input-bg: #2a2a2a;
-      --border: #444;
-      --text-dim: #9ca3af;
-      --accent-red: #e53935;
-      --accent-orange: #fb8c00;
-      --accent-green: #10b981;
-      --accent-blue: #0284c7;
-      --accent-gray: #475569;
-      --radius: 10px;
-      --gap: 8px;
+      --bg: #000000;
+      --surface: #1c1c1e;
+      --surface-2: #2c2c2e;
+      --hairline: rgba(255,255,255,0.12);
+      --glass: rgba(255,255,255,0.08);
+      --glass-strong: rgba(255,255,255,0.16);
+      --text: #ffffff;
+      --text-dim: #8e8e93;
+      --accent-live: #ff3b30;
+      --accent-replay: #ff9f0a;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --gap: 10px;
+      --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
     }
     * {
       box-sizing: border-box;
@@ -42,65 +49,95 @@
       user-select: none;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
       background: var(--bg);
-      color: #fff;
+      color: var(--text);
       text-align: center;
       margin: 0;
       padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
       min-height: 100vh;
       overscroll-behavior: none;
+      -webkit-font-smoothing: antialiased;
     }
-    h1 { font-size: 1.2rem; margin: 4px 0 8px 0; }
+    h1 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin: 4px 0 14px 0;
+      color: var(--text-dim);
+    }
     .card {
-      background: var(--card-bg);
-      padding: 14px;
-      border-radius: 12px;
+      background: var(--surface);
+      padding: 16px;
+      border-radius: 20px;
       margin: 0 auto;
       max-width: 480px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      border: 1px solid var(--hairline);
     }
     input, button {
       padding: 12px 14px;
       font-size: 0.95rem;
-      border-radius: var(--radius);
+      border-radius: var(--radius-md);
       margin: 3px;
-      font-weight: bold;
+      font-weight: 600;
+      font-family: inherit;
       touch-action: manipulation;
+      transition: background-color 0.2s var(--ease), opacity 0.15s var(--ease), transform 0.15s var(--ease);
     }
     input {
-      background: var(--input-bg);
-      color: #fff;
-      border: 1px solid var(--border);
+      background: var(--surface-2);
+      color: var(--text);
+      border: 1px solid var(--hairline);
     }
     button {
-      background: var(--accent-blue);
-      color: white;
-      border: none;
+      background: var(--glass);
+      color: var(--text);
+      border: 1px solid var(--hairline);
       cursor: pointer;
     }
-    button:active { opacity: 0.8; transform: scale(0.98); }
-    .btn-danger { background: var(--accent-red); }
-    .btn-warning { background: var(--accent-orange); color: #fff; }
-    .btn-secondary { background: var(--accent-gray); }
-    .btn-active { background: var(--accent-green) !important; border: 2px solid #fff; }
+    button:active { opacity: 0.6; transform: scale(0.97); }
+
+    /* 意味のある2色だけ: LIVE(赤) / REPLAY(アンバー) */
+    .btn-live { background: var(--accent-live); border-color: var(--accent-live); }
+    .btn-replay { background: var(--accent-replay); border-color: var(--accent-replay); color: #1a1200; }
+    .btn-hero { background: var(--text); color: #000; border-color: var(--text); }
+    .btn-active { background: var(--text) !important; color: #000 !important; border-color: var(--text) !important; }
+
     canvas {
       width: 100%;
       height: auto;
       background: #000;
-      border-radius: 8px;
+      border-radius: var(--radius-md);
       display: block;
     }
     .badge {
-      display: inline-block;
-      padding: 4px 10px;
-      border-radius: 6px;
-      font-size: 0.85rem;
-      font-weight: bold;
-      margin-bottom: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      margin-bottom: 10px;
+      background: var(--glass);
+      border: 1px solid var(--hairline);
     }
-    .bg-live { background: var(--accent-red); }
-    .bg-replay { background: var(--accent-orange); }
+    .badge.bg-live { color: var(--accent-live); }
+    .badge.bg-replay { color: var(--accent-replay); }
+    .rec-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .badge.bg-live .rec-dot { animation: pulse 1.4s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.8); }
+    }
+
     #cameraArea, #monitorArea { display: none; }
     .controls-row {
       display: flex;
@@ -113,103 +150,116 @@
       display: flex;
       justify-content: space-between;
       gap: 6px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
     .cam-selector button {
       flex: 1;
       padding: 10px 4px;
-      font-size: 0.85rem;
+      font-size: 0.82rem;
     }
 
     /* --- 再生コントロール（プレイヤーツールバー） --- */
     .time-readout {
-      font-size: 0.8rem;
-      font-weight: bold;
+      font-size: 0.78rem;
+      font-weight: 700;
       color: var(--text-dim);
-      letter-spacing: 0.5px;
-      margin-top: 6px;
+      letter-spacing: 0.3px;
+      margin-top: 8px;
       font-variant-numeric: tabular-nums;
+      transition: color 0.2s var(--ease);
     }
-    .time-readout.is-replay { color: var(--accent-orange); }
+    .time-readout.is-replay { color: var(--accent-replay); }
 
-    .primary-actions { margin-top: 8px; }
-    .action-btn { flex: 1; padding: 14px; font-size: 1rem; }
+    .primary-actions { margin-top: 10px; }
+    .action-btn {
+      flex: 1;
+      padding: 15px;
+      font-size: 0.98rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .action-btn svg { width: 18px; height: 18px; }
 
     .player-toolbar {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: var(--gap);
-      margin-top: 10px;
+      gap: 14px;
+      margin-top: 14px;
     }
     .icon-btn {
       flex: 0 0 auto;
-      width: 52px;
-      height: 52px;
+      width: 48px;
+      height: 48px;
       padding: 0;
       margin: 0;
-      font-size: 1.3rem;
       border-radius: 50%;
-      background: var(--accent-gray);
+      background: var(--glass);
       display: flex;
       align-items: center;
       justify-content: center;
       line-height: 1;
     }
+    .icon-btn svg { width: 20px; height: 20px; }
     .icon-btn-primary {
-      width: 64px;
-      height: 64px;
-      font-size: 1.7rem;
-      background: var(--accent-blue);
+      width: 60px;
+      height: 60px;
+      background: var(--text);
+      color: #000;
     }
+    .icon-btn-primary svg { width: 24px; height: 24px; }
     .speed-btn {
       width: auto;
-      min-width: 58px;
-      height: 44px;
-      border-radius: 22px;
-      font-size: 0.95rem;
+      min-width: 56px;
+      height: 40px;
+      border-radius: 20px;
+      font-size: 0.9rem;
       padding: 0 14px;
-      background: var(--accent-gray);
+      background: var(--glass);
       align-self: center;
     }
+
     input[type="range"] {
       -webkit-appearance: none;
       appearance: none;
       width: 100%;
       height: 28px;
       padding: 0;
-      margin: 8px 0 2px 0;
+      margin: 10px 0 0 0;
       background: transparent;
     }
     input[type="range"]::-webkit-slider-runnable-track {
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
+      height: 4px;
+      background: var(--glass-strong);
+      border-radius: 2px;
     }
     input[type="range"]::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      background: var(--accent-red);
-      margin-top: -7px;
+      background: var(--text);
+      margin-top: -6px;
       border: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
     }
     input[type="range"]::-moz-range-track {
-      height: 6px;
-      background: var(--border);
-      border-radius: 3px;
+      height: 4px;
+      background: var(--glass-strong);
+      border-radius: 2px;
     }
     input[type="range"]::-moz-range-thumb {
-      width: 20px;
-      height: 20px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      background: var(--accent-red);
+      background: var(--text);
       border: none;
     }
-    input[type="range"]:disabled::-webkit-slider-thumb { background: #666; }
-    input[type="range"]:disabled::-moz-range-thumb { background: #666; }
+    input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-dim); }
+    input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   </style>
 </head>
 <body>
@@ -218,31 +268,31 @@
 
   <!-- 1. 役割選択画面 -->
   <div id="setupArea" class="card">
-    <h3>役割を選択してください</h3>
-    <button onclick="startMonitor()" style="width: 100%; padding: 16px; font-size: 1rem;">📺 【親機】(モニター＋親機カメラ)</button>
+    <h3 style="margin-top:0;">役割を選択してください</h3>
+    <button onclick="startMonitor()" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 【親機】(モニター＋親機カメラ)</button>
     <br><br>
-    <button onclick="startCamera()" class="btn-secondary" style="width: 100%; padding: 16px; font-size: 1rem;">📷 【子機】(2台目カメラ追加用)</button>
+    <button onclick="startCamera()" style="width: 100%; padding: 16px; font-size: 1rem;">📷 【子機】(2台目カメラ追加用)</button>
   </div>
 
   <!-- 2. 子機（カメラ専用）画面 -->
   <div id="cameraArea" class="card">
-    <h3>📷 子機カメラ送信モード</h3>
-    <p>親機画面に表示された4桁のIDを入力:</p>
+    <h3 style="margin-top:0;">📷 子機カメラ送信モード</h3>
+    <p style="color:var(--text-dim);">親機画面に表示された4桁のIDを入力:</p>
     <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
     <br><br>
-    <button onclick="connectToMonitor()" style="width: 85%; padding: 14px;">親機へ映像送信 🚀</button>
-    <div id="cameraStatus" style="margin-top:15px; color:#aaa; font-weight:bold;">接続待機中...</div>
+    <button onclick="connectToMonitor()" class="btn-hero" style="width: 85%; padding: 14px;">親機へ映像送信 🚀</button>
+    <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">接続待機中...</div>
     <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
   </div>
 
   <!-- 3. 親機（モニター＋カメラ）画面 -->
   <div id="monitorArea" class="card">
-    <div class="badge bg-live" id="statusBadge">● LIVE 撮影中</div>
-    <div>接続ID: <strong id="myIdDisplay" style="color:#38bdf8; font-size:1.8rem; letter-spacing: 2px;">....</strong></div>
+    <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
+    <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
 
-    <div class="cam-selector" style="margin-top: 8px;">
+    <div class="cam-selector" style="margin-top: 10px;">
       <button id="btnCamLocal" class="btn-active" onclick="switchCameraSource('local')">🎥 親機カメラ</button>
-      <button id="btnCamRemote" class="btn-secondary" onclick="switchCameraSource('remote')">📱 子機カメラ (未接続)</button>
+      <button id="btnCamRemote" onclick="switchCameraSource('remote')">📱 子機カメラ (未接続)</button>
     </div>
 
     <div style="position:relative; width:100%;">
@@ -250,19 +300,31 @@
     </div>
 
     <input type="range" id="seekBar" min="0" max="0" value="0" step="1" disabled
-           oninput="onSeekInput(this.value)">
-    <div class="time-readout" id="timeReadout">● LIVE</div>
+           oninput="player.onSeekInput(this.value)">
+    <div class="time-readout" id="timeReadout">LIVE</div>
 
     <div class="controls-row primary-actions">
-      <button class="btn-danger action-btn" onclick="rewind(15)">⏪ 15秒前VAR</button>
-      <button class="btn-warning action-btn" onclick="goLive()">🔴 LIVEに戻る</button>
+      <button class="btn-replay action-btn" onclick="player.rewind(15)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5V1L4 7l7 6V9c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H3c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        15秒前VAR
+      </button>
+      <button class="btn-live action-btn" onclick="player.goLive()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+        LIVEに戻る
+      </button>
     </div>
 
     <div class="player-toolbar">
-      <button class="icon-btn" onclick="stepFrame(-1)" aria-label="1コマ戻る">⏮</button>
-      <button id="btnPlayPause" class="icon-btn icon-btn-primary" onclick="togglePlayPause()" aria-label="再生">▶</button>
-      <button class="icon-btn" onclick="stepFrame(1)" aria-label="1コマ進む">⏭</button>
-      <button id="btnSpeed" class="speed-btn" onclick="cycleSpeed()" aria-label="再生速度切り替え">0.5x</button>
+      <button class="icon-btn" onclick="player.stepFrame(-1)" aria-label="1コマ戻る">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.2" height="14"/><path d="M19 5v14l-9-7z"/></svg>
+      </button>
+      <button id="btnPlayPause" class="icon-btn icon-btn-primary" onclick="player.togglePlayPause()" aria-label="再生">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button class="icon-btn" onclick="player.stepFrame(1)" aria-label="1コマ進む">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="16.8" y="5" width="2.2" height="14"/><path d="M5 5v14l9-7z"/></svg>
+      </button>
+      <button id="btnSpeed" class="speed-btn" onclick="player.cycleSpeed()" aria-label="再生速度切り替え">0.5x</button>
     </div>
 
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
@@ -270,259 +332,301 @@
   </div>
 
   <script>
-    let peer = null;
-    let myId = '';
-    const frameBuffer = [];
-    const MAX_FRAMES = 450; // 30fps × 15秒分をバッファ
-    let isReplay = false;
-    let isPlaying = false;
-    let replayIndex = 0;
-    const speedOptions = [0.25, 0.5, 1]; // 今後ここに追加するだけで速度を増やせる
-    let playbackSpeed = 0.5;
-    let replayTimer = null;
-    let activeSource = 'local';
-    let isRemoteConnected = false;
+    /*
+      オブジェクト指向構成:
+      - CameraLink  … WebRTC(PeerJS)によるカメラ映像の取得・配信を担当
+      - VARPlayer   … フレームバッファの記録・巻き戻し再生(VAR)を担当
+      グローバルにはインスタンスと、HTML(onclick)から呼ばれる薄いエントリ関数だけを置く。
+    */
 
-    const canvas = document.getElementById('displayCanvas');
-    const ctx = canvas.getContext('2d');
-    const localMonitorVideo = document.getElementById('localMonitorVideo');
-    const remoteVideo = document.getElementById('remoteVideo');
-    const seekBar = document.getElementById('seekBar');
+    class CameraLink {
+      constructor() {
+        this.peer = null;
+        this.myId = '';
+        this.isRemoteConnected = false;
+        this.activeSource = 'local';
 
-    function updatePlaybackUI() {
-      if (seekBar) {
-        seekBar.max = Math.max(0, frameBuffer.length - 1);
-        seekBar.value = replayIndex;
+        this.localMonitorVideo = document.getElementById('localMonitorVideo');
+        this.remoteVideo = document.getElementById('remoteVideo');
+        this.btnCamLocal = document.getElementById('btnCamLocal');
+        this.btnCamRemote = document.getElementById('btnCamRemote');
       }
-      const readout = document.getElementById('timeReadout');
-      if (readout) {
-        if (!isReplay || frameBuffer.length === 0) {
-          readout.textContent = '● LIVE';
-          readout.classList.remove('is-replay');
-        } else {
-          const behindFrames = (frameBuffer.length - 1) - replayIndex;
-          const behindSeconds = (behindFrames / 30).toFixed(1);
-          readout.textContent = behindFrames === 0 ? '● 最新フレーム' : `− ${behindSeconds}秒`;
-          readout.classList.add('is-replay');
+
+      static generateShortId() {
+        return Math.floor(1000 + Math.random() * 9000).toString();
+      }
+
+      getActiveVideoElement() {
+        return this.activeSource === 'local' ? this.localMonitorVideo : this.remoteVideo;
+      }
+
+      // 親機として起動: 自分のカメラを取得し、子機からの着信も受け付ける
+      async startAsMonitor(onLocalStreamReady) {
+        this.myId = CameraLink.generateShortId();
+        document.getElementById('myIdDisplay').textContent = this.myId;
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          });
+          this.localMonitorVideo.srcObject = stream;
+          this.localMonitorVideo.onloadedmetadata = () => {
+            this.localMonitorVideo.play();
+            onLocalStreamReady(this.localMonitorVideo);
+          };
+        } catch (err) {
+          alert('親機カメラの起動失敗: ' + err);
+        }
+
+        this.peer = new Peer('kendo-var-room-' + this.myId);
+        this.peer.on('call', (call) => {
+          call.answer();
+          call.on('stream', (remoteStream) => {
+            this.remoteVideo.srcObject = remoteStream;
+            this.remoteVideo.onloadedmetadata = () => {
+              this.remoteVideo.play();
+              this.isRemoteConnected = true;
+              this.btnCamRemote.textContent = '📱 子機カメラ (接続中)';
+            };
+          });
+        });
+      }
+
+      // 子機として起動: 映像を送るだけの軽量ピア
+      startAsCamera() {
+        this.peer = new Peer();
+      }
+
+      async connectToMonitor(targetId) {
+        const statusEl = document.getElementById('cameraStatus');
+        statusEl.textContent = 'カメラ起動中...';
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+            audio: false
+          });
+          statusEl.textContent = '親機へ接続中...';
+          this.peer.call('kendo-var-room-' + targetId, stream);
+          statusEl.textContent = '✅ 親機へ映像リアルタイム送信中！';
+        } catch (err) {
+          alert('接続エラー: ' + err);
         }
       }
-    }
 
-    function onSeekInput(value) {
-      if (!isReplay) return;
-      pauseReplay();
-      replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, parseInt(value, 10)));
-      if (frameBuffer[replayIndex]) {
-        ctx.putImageData(frameBuffer[replayIndex], 0, 0);
+      switchSource(source, onSwitch) {
+        if (source === 'remote' && !this.isRemoteConnected) {
+          alert('子機カメラが未接続です。子機側で4桁IDを入力して送信してください。');
+          return;
+        }
+        this.activeSource = source;
+        this.btnCamLocal.className = source === 'local' ? 'btn-active' : '';
+        this.btnCamRemote.className = source === 'remote' ? 'btn-active' : '';
+        onSwitch();
       }
-      updatePlaybackUI();
     }
 
-    function generateShortId() {
-      return Math.floor(1000 + Math.random() * 9000).toString();
+    class VARPlayer {
+      constructor(canvas, getVideoElement) {
+        this.canvas = canvas;
+        this.ctx = canvas.getContext('2d', { willReadFrequently: true });
+        this.getVideoElement = getVideoElement;
+
+        this.frameBuffer = [];
+        this.MAX_FRAMES = 450; // 30fps × 15秒分をバッファ
+        this.isReplay = false;
+        this.isPlaying = false;
+        this.replayIndex = 0;
+        this.speedOptions = [0.25, 0.5, 1]; // 今後ここに追加するだけで速度を増やせる
+        this.playbackSpeed = 0.5;
+        this.replayTimer = null;
+
+        this.seekBar = document.getElementById('seekBar');
+        this.timeReadout = document.getElementById('timeReadout');
+        this.playPauseBtn = document.getElementById('btnPlayPause');
+        this.speedBtn = document.getElementById('btnSpeed');
+        this.statusBadge = document.getElementById('statusBadge');
+
+        this._captureLoop = this._captureLoop.bind(this);
+      }
+
+      start() {
+        requestAnimationFrame(this._captureLoop);
+      }
+
+      clearBuffer() {
+        this.frameBuffer.length = 0;
+      }
+
+      _captureLoop() {
+        const video = this.getVideoElement();
+        if (!this.isReplay && video && video.readyState === video.HAVE_ENOUGH_DATA) {
+          this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
+          const frame = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+          this.frameBuffer.push(frame);
+          if (this.frameBuffer.length > this.MAX_FRAMES) this.frameBuffer.shift();
+        }
+        if (!this.isReplay) {
+          requestAnimationFrame(this._captureLoop);
+        }
+      }
+
+      rewind(seconds) {
+        if (this.frameBuffer.length === 0) return;
+        this.isReplay = true;
+        const rewindFrames = Math.min(seconds * 30, this.frameBuffer.length - 1);
+        this.replayIndex = this.frameBuffer.length - 1 - rewindFrames;
+        this.statusBadge.innerHTML = `🎬&nbsp;VAR REPLAY (${this.playbackSpeed}x)`;
+        this.statusBadge.className = 'badge bg-replay';
+        this.seekBar.disabled = false;
+        this._updateUI();
+        this._startReplayLoop();
+      }
+
+      _startReplayLoop() {
+        clearInterval(this.replayTimer);
+        this.isPlaying = true;
+        this._updatePlayPauseButton();
+        const intervalMs = (1000 / 30) / this.playbackSpeed;
+        this.replayTimer = setInterval(() => {
+          if (!this.isReplay) return;
+          if (this.replayIndex < this.frameBuffer.length) {
+            this.ctx.putImageData(this.frameBuffer[this.replayIndex], 0, 0);
+            this.replayIndex++;
+            this._updateUI();
+          } else {
+            this.replayIndex = Math.max(0, Math.min(this.frameBuffer.length - 1, this.replayIndex));
+            this.pause(); // 末尾まで再生したら自動停止
+          }
+        }, intervalMs);
+      }
+
+      pause() {
+        clearInterval(this.replayTimer);
+        this.replayTimer = null;
+        this.isPlaying = false;
+        this._updatePlayPauseButton();
+        this._updateUI();
+      }
+
+      play() {
+        if (!this.isReplay) return;
+        this._startReplayLoop();
+      }
+
+      togglePlayPause() {
+        if (!this.isReplay) return;
+        this.isPlaying ? this.pause() : this.play();
+      }
+
+      goLive() {
+        this.isReplay = false;
+        this.isPlaying = false;
+        clearInterval(this.replayTimer);
+        this.replayTimer = null;
+        this.statusBadge.innerHTML = '<span class="rec-dot"></span>LIVE 撮影中';
+        this.statusBadge.className = 'badge bg-live';
+        this.seekBar.disabled = true;
+        this.seekBar.max = 0;
+        this.seekBar.value = 0;
+        this._updateUI();
+        requestAnimationFrame(this._captureLoop);
+      }
+
+      setSpeed(speed) {
+        this.playbackSpeed = speed;
+        if (this.isReplay) {
+          this.statusBadge.innerHTML = `🎬&nbsp;VAR REPLAY (${this.playbackSpeed}x)`;
+        }
+        if (this.isReplay && this.isPlaying) this._startReplayLoop();
+        this._updateSpeedButton();
+      }
+
+      cycleSpeed() {
+        const idx = this.speedOptions.indexOf(this.playbackSpeed);
+        const next = this.speedOptions[(idx + 1) % this.speedOptions.length];
+        this.setSpeed(next);
+      }
+
+      stepFrame(dir) {
+        if (!this.isReplay) this.rewind(0);
+        this.pause();
+        this.replayIndex = Math.max(0, Math.min(this.frameBuffer.length - 1, this.replayIndex + dir));
+        this.ctx.putImageData(this.frameBuffer[this.replayIndex], 0, 0);
+        this._updateUI();
+      }
+
+      onSeekInput(value) {
+        if (!this.isReplay) return;
+        this.pause();
+        this.replayIndex = Math.max(0, Math.min(this.frameBuffer.length - 1, parseInt(value, 10)));
+        if (this.frameBuffer[this.replayIndex]) {
+          this.ctx.putImageData(this.frameBuffer[this.replayIndex], 0, 0);
+        }
+        this._updateUI();
+      }
+
+      _updateUI() {
+        this.seekBar.max = Math.max(0, this.frameBuffer.length - 1);
+        this.seekBar.value = this.replayIndex;
+        if (!this.isReplay || this.frameBuffer.length === 0) {
+          this.timeReadout.textContent = 'LIVE';
+          this.timeReadout.classList.remove('is-replay');
+        } else {
+          const behindFrames = (this.frameBuffer.length - 1) - this.replayIndex;
+          const behindSeconds = (behindFrames / 30).toFixed(1);
+          this.timeReadout.textContent = behindFrames === 0 ? '最新フレーム' : `− ${behindSeconds}秒`;
+          this.timeReadout.classList.add('is-replay');
+        }
+      }
+
+      _updatePlayPauseButton() {
+        this.playPauseBtn.innerHTML = this.isPlaying
+          ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+        this.playPauseBtn.setAttribute('aria-label', this.isPlaying ? '一時停止' : '再生');
+      }
+
+      _updateSpeedButton() {
+        this.speedBtn.textContent = this.playbackSpeed + 'x';
+      }
     }
 
-    async function startMonitor() {
+    // --- 起動処理: インスタンス生成とHTMLから呼ばれる薄いエントリ関数 ---
+    const cameraLink = new CameraLink();
+    const player = new VARPlayer(
+      document.getElementById('displayCanvas'),
+      () => cameraLink.getActiveVideoElement()
+    );
+
+    function startMonitor() {
       document.getElementById('setupArea').style.display = 'none';
       document.getElementById('monitorArea').style.display = 'block';
-
-      myId = generateShortId();
-      document.getElementById('myIdDisplay').textContent = myId;
-
-      try {
-        const localStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false
-        });
-        localMonitorVideo.srcObject = localStream;
-        localMonitorVideo.onloadedmetadata = () => {
-          localMonitorVideo.play();
-          canvas.width = localMonitorVideo.videoWidth || 480;
-          canvas.height = localMonitorVideo.videoHeight || 360;
-          requestAnimationFrame(captureLoop);
-        };
-      } catch (err) {
-        alert("親機カメラの起動失敗: " + err);
-      }
-
-      peer = new Peer('kendo-var-room-' + myId);
-      peer.on('call', (call) => {
-        call.answer();
-        call.on('stream', (remoteStream) => {
-          remoteVideo.srcObject = remoteStream;
-          remoteVideo.onloadedmetadata = () => {
-            remoteVideo.play();
-            isRemoteConnected = true;
-            document.getElementById('btnCamRemote').textContent = '📱 子機カメラ (接続中)';
-            document.getElementById('btnCamRemote').className = 'btn-secondary';
-          };
-        });
+      cameraLink.startAsMonitor((video) => {
+        player.canvas.width = video.videoWidth || 480;
+        player.canvas.height = video.videoHeight || 360;
+        player.start();
       });
-    }
-
-    function switchCameraSource(source) {
-      if (source === 'remote' && !isRemoteConnected) {
-        return alert('子機カメラが未接続です。子機側で4桁IDを入力して送信してください。');
-      }
-
-      activeSource = source;
-      frameBuffer.length = 0;
-
-      if (source === 'local') {
-        document.getElementById('btnCamLocal').className = 'btn-active';
-        document.getElementById('btnCamRemote').className = 'btn-secondary';
-      } else {
-        document.getElementById('btnCamRemote').className = 'btn-active';
-        document.getElementById('btnCamLocal').className = 'btn-secondary';
-      }
-
-      if (isReplay) goLive();
-    }
-
-    function captureLoop() {
-      const currentVideo = (activeSource === 'local') ? localMonitorVideo : remoteVideo;
-
-      if (!isReplay && currentVideo && currentVideo.readyState === currentVideo.HAVE_ENOUGH_DATA) {
-        ctx.drawImage(currentVideo, 0, 0, canvas.width, canvas.height);
-        const frameData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        frameBuffer.push(frameData);
-        if (frameBuffer.length > MAX_FRAMES) frameBuffer.shift();
-      }
-
-      if (!isReplay) {
-        requestAnimationFrame(captureLoop);
-      }
     }
 
     function startCamera() {
       document.getElementById('setupArea').style.display = 'none';
       document.getElementById('cameraArea').style.display = 'block';
-      peer = new Peer();
+      cameraLink.startAsCamera();
     }
 
-    async function connectToMonitor() {
+    function connectToMonitor() {
       const targetId = document.getElementById('targetIdInput').value.trim();
       if (!targetId) return alert('IDを入力してください');
-
-      document.getElementById('cameraStatus').textContent = 'カメラ起動中...';
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
-          audio: false
-        });
-
-        document.getElementById('cameraStatus').textContent = '親機へ接続中...';
-        peer.call('kendo-var-room-' + targetId, stream);
-        document.getElementById('cameraStatus').textContent = '✅ 親機へ映像リアルタイム送信中！';
-      } catch (err) {
-        alert('接続エラー: ' + err);
-      }
+      cameraLink.connectToMonitor(targetId);
     }
 
-    function rewind(seconds) {
-      if (frameBuffer.length === 0) return;
-      isReplay = true;
-      const rewindFrames = Math.min(seconds * 30, frameBuffer.length - 1);
-      replayIndex = frameBuffer.length - 1 - rewindFrames;
-      document.getElementById('statusBadge').textContent = `🎬 VAR REPLAY (${playbackSpeed}x)`;
-      document.getElementById('statusBadge').className = 'badge bg-replay';
-      if (seekBar) seekBar.disabled = false;
-      updatePlaybackUI();
-      startReplayLoop();
-    }
-
-    function startReplayLoop() {
-      clearInterval(replayTimer);
-      isPlaying = true;
-      updatePlayPauseButton();
-      const intervalMs = (1000 / 30) / playbackSpeed;
-      replayTimer = setInterval(() => {
-        if (!isReplay) return;
-        if (replayIndex < frameBuffer.length) {
-          ctx.putImageData(frameBuffer[replayIndex], 0, 0);
-          replayIndex++;
-          updatePlaybackUI();
-        } else {
-          replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex));
-          pauseReplay(); // 末尾まで再生したら自動停止
-        }
-      }, intervalMs);
-    }
-
-    function pauseReplay() {
-      clearInterval(replayTimer);
-      replayTimer = null;
-      isPlaying = false;
-      updatePlayPauseButton();
-      updatePlaybackUI();
-    }
-
-    function playReplay() {
-      if (!isReplay) return;
-      startReplayLoop();
-    }
-
-    function togglePlayPause() {
-      if (!isReplay) return;
-      if (isPlaying) {
-        pauseReplay();
-      } else {
-        playReplay();
-      }
-    }
-
-    function updatePlayPauseButton() {
-      const btn = document.getElementById('btnPlayPause');
-      if (!btn) return;
-      btn.textContent = isPlaying ? '⏸' : '▶';
-      btn.setAttribute('aria-label', isPlaying ? '一時停止' : '再生');
-    }
-
-    function goLive() {
-      isReplay = false;
-      isPlaying = false;
-      clearInterval(replayTimer);
-      replayTimer = null;
-      document.getElementById('statusBadge').textContent = '● LIVE 撮影中';
-      document.getElementById('statusBadge').className = 'badge bg-live';
-      if (seekBar) {
-        seekBar.disabled = true;
-        seekBar.max = 0;
-        seekBar.value = 0;
-      }
-      updatePlaybackUI();
-      requestAnimationFrame(captureLoop);
-    }
-
-    function setSpeed(speed) {
-      playbackSpeed = speed;
-      if (isReplay) {
-        document.getElementById('statusBadge').textContent = `🎬 VAR REPLAY (${playbackSpeed}x)`;
-      }
-      if (isReplay && isPlaying) startReplayLoop();
-    }
-
-    function updateSpeedButton() {
-      const btn = document.getElementById('btnSpeed');
-      if (btn) btn.textContent = playbackSpeed + 'x';
-    }
-
-    function cycleSpeed() {
-      const idx = speedOptions.indexOf(playbackSpeed);
-      const next = speedOptions[(idx + 1) % speedOptions.length];
-      setSpeed(next);
-      updateSpeedButton();
-    }
-
-    function stepFrame(dir) {
-      if (!isReplay) rewind(0);
-      pauseReplay();
-      replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex + dir));
-      ctx.putImageData(frameBuffer[replayIndex], 0, 0);
-      updatePlaybackUI();
+    function switchCameraSource(source) {
+      cameraLink.switchSource(source, () => {
+        player.clearBuffer();
+        if (player.isReplay) player.goLive();
+      });
     }
   </script>
 </body>
 </html>
-
