@@ -150,10 +150,13 @@
       <button class="btn-warning" onclick="goLive()" style="flex:1; padding:14px; font-size:1rem;">🔴 LIVEに戻る</button>
     </div>
     <div class="controls-row">
+      <button onclick="stepFrame(-1)" style="padding:10px 16px;">◀ 1コマ戻る</button>
+      <button id="btnPlayPause" class="btn-secondary" onclick="togglePlayPause()" style="padding:10px 16px; min-width:110px;">▶ 再生</button>
+      <button onclick="stepFrame(1)" style="padding:10px 16px;">1コマ進む ▶</button>
+    </div>
+    <div class="controls-row">
       <button onclick="setSpeed(0.25)">0.25x</button>
       <button onclick="setSpeed(0.5)">0.5x</button>
-      <button onclick="stepFrame(-1)" style="padding:10px 16px;">◀ 1コマ戻る</button>
-      <button onclick="stepFrame(1)" style="padding:10px 16px;">1コマ進む ▶</button>
     </div>
 
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
@@ -166,6 +169,7 @@
     const frameBuffer = [];
     const MAX_FRAMES = 450; // 30fps × 15秒分をバッファ
     let isReplay = false;
+    let isPlaying = false;
     let replayIndex = 0;
     let playbackSpeed = 0.5;
     let replayTimer = null;
@@ -282,7 +286,6 @@
     function rewind(seconds) {
       if (frameBuffer.length === 0) return;
       isReplay = true;
-      clearInterval(replayTimer);
       const rewindFrames = Math.min(seconds * 30, frameBuffer.length - 1);
       replayIndex = frameBuffer.length - 1 - rewindFrames;
       document.getElementById('statusBadge').textContent = `🎬 VAR REPLAY (${playbackSpeed}x)`;
@@ -292,6 +295,8 @@
 
     function startReplayLoop() {
       clearInterval(replayTimer);
+      isPlaying = true;
+      updatePlayPauseButton();
       const intervalMs = (1000 / 30) / playbackSpeed;
       replayTimer = setInterval(() => {
         if (!isReplay) return;
@@ -300,13 +305,43 @@
           replayIndex++;
         } else {
           replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex));
+          pauseReplay(); // 末尾まで再生したら自動停止
         }
       }, intervalMs);
     }
 
+    function pauseReplay() {
+      clearInterval(replayTimer);
+      replayTimer = null;
+      isPlaying = false;
+      updatePlayPauseButton();
+    }
+
+    function playReplay() {
+      if (!isReplay) return;
+      startReplayLoop();
+    }
+
+    function togglePlayPause() {
+      if (!isReplay) return;
+      if (isPlaying) {
+        pauseReplay();
+      } else {
+        playReplay();
+      }
+    }
+
+    function updatePlayPauseButton() {
+      const btn = document.getElementById('btnPlayPause');
+      if (!btn) return;
+      btn.textContent = isPlaying ? '⏸ 一時停止' : '▶ 再生';
+    }
+
     function goLive() {
       isReplay = false;
+      isPlaying = false;
       clearInterval(replayTimer);
+      replayTimer = null;
       document.getElementById('statusBadge').textContent = '● LIVE 撮影中';
       document.getElementById('statusBadge').className = 'badge bg-live';
       requestAnimationFrame(captureLoop);
@@ -314,12 +349,12 @@
 
     function setSpeed(speed) {
       playbackSpeed = speed;
-      if (isReplay) startReplayLoop();
+      if (isReplay && isPlaying) startReplayLoop();
     }
 
     function stepFrame(dir) {
       if (!isReplay) rewind(0);
-      clearInterval(replayTimer);
+      pauseReplay();
       replayIndex = Math.max(0, Math.min(frameBuffer.length - 1, replayIndex + dir));
       ctx.putImageData(frameBuffer[replayIndex], 0, 0);
     }
