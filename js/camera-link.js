@@ -70,7 +70,7 @@ export class CameraLink {
       });
       statusEl.textContent = '親機へ接続中...';
       this.peer.call('kendo-var-room-' + targetId, stream);
-      statusEl.textContent = '✅ 親機へ映像リアルタイム送信中！';
+      statusEl.textContent = '送信中';
     } catch (err) {
       alert('接続エラー: ' + err);
     }

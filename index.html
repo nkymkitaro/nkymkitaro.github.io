@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>剣道2カメラVAR</title>
+  <title>剣道VAR</title>
 
   <!-- PWA / 全画面表示設定 (iOS & Android) -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -13,7 +13,7 @@
   <meta name="theme-color" content="#000000">
 
   <!-- インライン Web App Manifest (Android Chrome用) -->
-  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道2カメラVAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23ff3b30\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
+  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道VAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23ff3b30\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
 
   <!-- アプリアイコン (iOS用) -->
   <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23ff3b30"/><text x="50" y="65" font-size="50" text-anchor="middle" fill="white">⚔️</text></svg>'>
@@ -31,25 +31,25 @@
 </head>
 <body>
 
-  <h1>⚔️ 剣道2カメラVAR</h1>
+  <h1>⚔️ 剣道VAR</h1>
 
   <!-- 1. 役割選択画面 -->
   <div id="setupArea" class="card">
-    <h3 style="margin-top:0;">役割を選択してください</h3>
-    <button id="btnStartMonitor" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 【親機】(モニター＋親機カメラ)</button>
-    <p class="help-text">会場に置いて操作する側です。1台だけで使う場合はこちらを選んでください。</p>
-    <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem; margin-top:14px;">📷 【子機】(2台目カメラ追加用)</button>
-    <p class="help-text">もう1台のスマホで、別アングルの映像を親機に送りたいときに選びます。</p>
+    <h3 style="margin-top:0;">どちらで使いますか？</h3>
+    <button id="btnStartMonitor" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 親機として使う</button>
+    <p class="help-text">会場に置いて、映像を見ながら操作する端末です。1台だけで使うときはこちらを選んでください。</p>
+    <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem; margin-top:14px;">📷 子機として参加する</button>
+    <p class="help-text">もう1台のスマホを、別アングルのカメラとして追加できます。</p>
   </div>
 
   <!-- 2. 子機（カメラ専用）画面 -->
   <div id="cameraArea" class="card">
-    <h3 style="margin-top:0;">📷 子機カメラ送信モード</h3>
-    <p style="color:var(--text-dim);">親機の画面に表示されている4桁の数字を、下の欄に入力してください。</p>
+    <h3 style="margin-top:0;">📷 子機カメラ</h3>
+    <p style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
     <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
     <br><br>
-    <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">親機へ映像送信 🚀</button>
-    <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">接続待機中...</div>
+    <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">接続する</button>
+    <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
     <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
   </div>
 
@@ -107,13 +107,13 @@
     <h3>使い方</h3>
 
     <h4>📺 親機(モニター)</h4>
-    <p>会場でこの画面を見ながら操作する側です。起動すると4桁の接続IDが表示されます。1台のスマホだけで使う場合はそのままでOKです。</p>
+    <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときはそのままでOK。</p>
 
     <h4>📷 子機(2台目カメラ)</h4>
-    <p>別アングルの映像を追加したいときに、もう1台のスマホで選びます。親機に表示された4桁のIDを入力すると、その映像が親機に届きます。</p>
+    <p>別アングルを追加したいときに、もう1台のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。</p>
 
     <h4>⏪ VARで見返す</h4>
-    <p>「15秒前VAR」を押すと、直前の映像を巻き戻して確認できます。シークバーやコマ送りボタン(⏮/⏭)で好きな瞬間まで動かせて、再生ボタンで止めたり再開したりできます。速度ボタンで0.25x/0.5x/1xを切り替え可能です。「LIVEに戻る」を押すとライブ映像に戻ります。</p>
+    <p>「15秒前VAR」で直前の映像を巻き戻せます。あとはシークバーや戻る/進むボタンで好きな瞬間まで動かして、再生ボタンで止めたり再開したり。速度も0.25x〜1xで変えられます。見終わったら「LIVEに戻る」でライブに戻りましょう。</p>
 
     <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>
