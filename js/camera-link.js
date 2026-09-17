@@ -1,6 +1,8 @@
 // CameraLink: WebRTC(PeerJS)によるカメラ映像の取得・配信を担当するクラス。
 // VARPlayer(録画・再生ロジック)からは完全に独立しており、
 // 「今どの映像ソースを見るべきか」を getActiveVideoElement() だけで教える。
+import { showToast } from './toast.js';
+
 export class CameraLink {
   constructor() {
     this.peer = null;
@@ -38,7 +40,8 @@ export class CameraLink {
         onLocalStreamReady(this.localMonitorVideo);
       };
     } catch (err) {
-      alert('親機カメラの起動失敗: ' + err);
+      console.error(err);
+      showToast('カメラを起動できませんでした。カメラの利用を許可してください。');
     }
 
     this.peer = new Peer('kendo-var-room-' + this.myId);
@@ -72,13 +75,15 @@ export class CameraLink {
       this.peer.call('kendo-var-room-' + targetId, stream);
       statusEl.textContent = '送信中';
     } catch (err) {
-      alert('接続エラー: ' + err);
+      console.error(err);
+      statusEl.textContent = '未接続';
+      showToast('接続できませんでした。もう一度お試しください。');
     }
   }
 
   switchSource(source, onSwitch) {
     if (source === 'remote' && !this.isRemoteConnected) {
-      alert('子機カメラが未接続です。子機側で4桁IDを入力して送信してください。');
+      showToast('子機カメラが未接続です。子機側でIDを入力してください。');
       return;
     }
     this.activeSource = source;

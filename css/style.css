@@ -36,11 +36,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 h1 {
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-  margin: 4px 0 14px 0;
-  color: var(--text-dim);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  margin: 10px 0 20px 0;
+  color: var(--text);
 }
 .card {
   background: var(--surface);
@@ -236,6 +236,33 @@ input[type="range"]::-moz-range-thumb {
 }
 input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-dim); }
 input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
+
+/* --- トースト通知(alert()の代わり) --- */
+.toast {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%) translateY(-16px);
+  max-width: 86vw;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--text);
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  z-index: 80;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
 
 /* --- 初心者向けの補足説明 --- */
 .help-text {

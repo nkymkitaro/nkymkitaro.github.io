@@ -4,6 +4,7 @@
 //   (「このボタンは何をするか」を知りたければこのファイルだけ見ればよい)
 import { CameraLink } from './camera-link.js';
 import { VARPlayer } from './var-player.js';
+import { showToast } from './toast.js';
 
 const cameraLink = new CameraLink();
 const player = new VARPlayer(
@@ -29,7 +30,7 @@ function startCamera() {
 
 function connectToMonitor() {
   const targetId = document.getElementById('targetIdInput').value.trim();
-  if (!targetId) return alert('IDを入力してください');
+  if (!targetId) return showToast('IDを入力してください');
   cameraLink.connectToMonitor(targetId);
 }
 
