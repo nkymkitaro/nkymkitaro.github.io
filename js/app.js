@@ -1,24 +1,28 @@
 // app.js: このアプリの合成ルート(composition root)。
-// - CameraLink と VARPlayer をここで生成して繋ぎ合わせる
+// - CameraLink(カメラ接続) / MultiCamRecorder(常時バックグラウンド録画) / ReplayPlayer(再生)
+//   をここで生成して繋ぎ合わせる
 // - HTMLにonclickを書かず、ボタンとロジックの対応関係をここに一元化する
 //   (「このボタンは何をするか」を知りたければこのファイルだけ見ればよい)
 import { CameraLink } from './camera-link.js';
-import { VARPlayer } from './var-player.js';
+import { MultiCamRecorder } from './multi-cam-recorder.js';
+import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 
 const cameraLink = new CameraLink();
-const player = new VARPlayer(
-  document.getElementById('displayCanvas'),
-  () => cameraLink.getActiveVideoElement()
-);
+const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
+const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 function startMonitor() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('monitorArea').style.display = 'block';
+
+  recorder.start(); // カメラが増えるたびに登録していく。まだ0台でも動かして問題ない
+  cameraLink.onCamsChanged = handleCamsChanged;
+
   cameraLink.startAsMonitor((video) => {
     player.canvas.width = video.videoWidth || 480;
     player.canvas.height = video.videoHeight || 360;
-    player.start();
+    player.startLiveLoop(() => cameraLink.getActiveVideoElement());
   });
 }
 
@@ -34,11 +38,42 @@ function connectToMonitor() {
   cameraLink.connectToMonitor(targetId);
 }
 
-function switchCameraSource(source) {
-  cameraLink.switchSource(source, () => {
-    player.clearBuffer();
-    if (player.isReplay) player.goLive();
+// 接続中カメラの一覧が変わった(増えた/切断された)たびに呼ばれる
+function handleCamsChanged(sources) {
+  sources.forEach((src) => {
+    if (!recorder.listCameraIds().includes(src.id)) {
+      recorder.registerCamera(src.id, src.label, () => src.videoEl);
+    }
   });
+  renderCamSelector(sources);
+}
+
+// カメラ切り替えボタンを、接続中カメラの数(最大4つ)に合わせて描き直す
+function renderCamSelector(sources) {
+  const container = document.getElementById('camSelector');
+  container.innerHTML = '';
+  const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
+
+  sources.forEach((src) => {
+    const btn = document.createElement('button');
+    const classes = [];
+    if (src.id === highlightId) classes.push('btn-active');
+    if (!src.connected) classes.push('cam-offline');
+    btn.className = classes.join(' ');
+    btn.textContent = src.connected ? src.label : `${src.label}(切断)`;
+    btn.addEventListener('click', () => selectCamera(src.id));
+    container.appendChild(btn);
+  });
+}
+
+// ライブ中はカメラの切り替え、リプレイ中は「同じ瞬間を別アングルで見る」切り替えになる
+function selectCamera(id) {
+  if (player.isReplay) {
+    player.switchAngle(id);
+  } else {
+    cameraLink.switchSource(id);
+  }
+  renderCamSelector(cameraLink.getAllSources());
 }
 
 // --- 使い方ヘルプ(ボトムシート) ---
@@ -60,11 +95,18 @@ document.getElementById('btnStartMonitor').addEventListener('click', startMonito
 document.getElementById('btnStartCamera').addEventListener('click', startCamera);
 document.getElementById('btnConnectToMonitor').addEventListener('click', connectToMonitor);
 
-document.getElementById('btnCamLocal').addEventListener('click', () => switchCameraSource('local'));
-document.getElementById('btnCamRemote').addEventListener('click', () => switchCameraSource('remote'));
-
-document.getElementById('btnRewind').addEventListener('click', () => player.rewind(15));
-document.getElementById('btnGoLive').addEventListener('click', () => player.goLive());
+document.getElementById('btnRewind').addEventListener('click', () => {
+  const ok = player.rewind(15, cameraLink.activeSource);
+  if (!ok) {
+    showToast('録画データがまだありません');
+    return;
+  }
+  renderCamSelector(cameraLink.getAllSources());
+});
+document.getElementById('btnGoLive').addEventListener('click', () => {
+  player.goLive();
+  renderCamSelector(cameraLink.getAllSources());
+});
 document.getElementById('btnStepBack').addEventListener('click', () => player.stepFrame(-1));
 document.getElementById('btnPlayPause').addEventListener('click', () => player.togglePlayPause());
 document.getElementById('btnStepForward').addEventListener('click', () => player.stepFrame(1));

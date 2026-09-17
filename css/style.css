@@ -124,14 +124,19 @@ canvas {
 }
 .cam-selector {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
 }
 .cam-selector button {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 72px;
   padding: 10px 4px;
   font-size: 0.82rem;
+}
+.cam-selector button.cam-offline {
+  opacity: 0.4;
 }
 
 /* --- 再生コントロール（プレイヤーツールバー） --- */

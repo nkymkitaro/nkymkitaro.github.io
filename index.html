@@ -41,7 +41,7 @@
     <button id="btnStartMonitor" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 親機として使う</button>
     <p class="help-text">会場に置いて、映像を見ながら操作する端末です。1台だけで使うときはこちらを選んでください。</p>
     <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem; margin-top:14px;">📷 子機として参加する</button>
-    <p class="help-text">もう1台のスマホを、別アングルのカメラとして追加できます。</p>
+    <p class="help-text">他のスマホを、別アングルのカメラとして最大3台まで追加できます。</p>
   </div>
 
   <!-- 2. 子機（カメラ専用）画面 -->
@@ -59,12 +59,9 @@
   <div id="monitorArea" class="card">
     <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
     <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
-    <p class="help-text">2台目のスマホ(子機)を追加する場合、この番号をそちらの端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
+    <p class="help-text">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
 
-    <div class="cam-selector" style="margin-top: 10px;">
-      <button id="btnCamLocal" class="btn-active">🎥 親機カメラ</button>
-      <button id="btnCamRemote">📱 子機カメラ (未接続)</button>
-    </div>
+    <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
 
     <div style="position:relative; width:100%;">
       <canvas id="displayCanvas" width="480" height="360"></canvas>
@@ -98,7 +95,6 @@
     </div>
 
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
-    <video id="remoteVideo" autoplay playsinline muted style="display:none;"></video>
   </div>
 
   <!-- 使い方ヘルプ(常時表示のFAB + ボトムシート) -->
@@ -111,11 +107,11 @@
     <h4>📺 親機(モニター)</h4>
     <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときはそのままでOK。</p>
 
-    <h4>📷 子機(2台目カメラ)</h4>
-    <p>別アングルを追加したいときに、もう1台のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。</p>
+    <h4>📷 子機(最大3台)</h4>
+    <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。</p>
 
     <h4>⏪ VARで見返す</h4>
-    <p>「15秒前VAR」で直前の映像を巻き戻せます。あとはシークバーや戻る/進むボタンで好きな瞬間まで動かして、再生ボタンで止めたり再開したり。速度も0.25x〜1xで変えられます。見終わったら「LIVEに戻る」でライブに戻りましょう。</p>
+    <p>接続している全カメラの映像を、常に直近15秒ぶん裏で録画しています。「15秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。</p>
 
     <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>
