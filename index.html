@@ -57,7 +57,12 @@
 
   <!-- 3. 親機（モニター＋カメラ）画面 -->
   <div id="monitorArea" class="card">
-    <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
+    <div class="status-row">
+      <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
+      <button id="btnPauseAll" class="icon-btn" aria-label="録画を一時停止">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>
+      </button>
+    </div>
     <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
     <p class="help-text">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
 
@@ -112,6 +117,9 @@
 
     <h4>⏪ VARで見返す</h4>
     <p>接続している全カメラの映像を、常に直近15秒ぶん裏で録画しています。「15秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。</p>
+
+    <h4>⏸ 一時停止</h4>
+    <p>状態表示の横にある一時停止ボタンを押すと、親機・子機すべてのカメラをまとめて止められます。休憩中などバッテリーや通信量を節約したいときに使ってください。もう一度押せばすぐに再開できます。</p>
 
     <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>

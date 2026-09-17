@@ -101,6 +101,19 @@ canvas {
 }
 .badge.bg-live { color: var(--accent-live); }
 .badge.bg-replay { color: var(--accent-replay); }
+.badge.bg-paused { color: var(--text-dim); }
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.status-row .icon-btn {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 10px;
+}
+.status-row .icon-btn svg { width: 15px; height: 15px; }
 .rec-dot {
   width: 7px;
   height: 7px;

@@ -29,6 +29,10 @@ function startMonitor() {
 function startCamera() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('cameraArea').style.display = 'block';
+  cameraLink.onPauseStateChanged = (isPaused) => {
+    const statusEl = document.getElementById('cameraStatus');
+    if (statusEl) statusEl.textContent = isPaused ? '一時停止中(親機の操作)' : '送信中';
+  };
   cameraLink.startAsCamera();
 }
 
@@ -45,7 +49,41 @@ function handleCamsChanged(sources) {
       recorder.registerCamera(src.id, src.label, () => src.videoEl);
     }
   });
+  syncRecorderPauseState(sources);
   renderCamSelector(sources);
+}
+
+// 「切断済み」または「全体を一時停止中」のカメラは録画も止める。
+// (切断後も静止画を録画し続けると、直近の本当の映像が上書きされてしまうため)
+function syncRecorderPauseState(sources) {
+  sources.forEach((src) => {
+    if (!src.connected || cameraLink.isPaused) {
+      recorder.pauseCamera(src.id);
+    } else {
+      recorder.resumeCamera(src.id);
+    }
+  });
+}
+
+// LIVE中の状態バッジを、一時停止中かどうかに合わせて描き直す(リプレイ中は触らない)
+function updateStatusBadge() {
+  if (player.isReplay) return;
+  const badge = document.getElementById('statusBadge');
+  if (cameraLink.isPaused) {
+    badge.innerHTML = '⏸ 一時停止中';
+    badge.className = 'badge bg-paused';
+  } else {
+    badge.innerHTML = '<span class="rec-dot"></span>LIVE 撮影中';
+    badge.className = 'badge bg-live';
+  }
+}
+
+function updatePauseButtonIcon(paused) {
+  const btn = document.getElementById('btnPauseAll');
+  btn.innerHTML = paused
+    ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>';
+  btn.setAttribute('aria-label', paused ? '録画を再開' : '録画を一時停止');
 }
 
 // カメラ切り替えボタンを、接続中カメラの数(最大4つ)に合わせて描き直す
@@ -105,7 +143,14 @@ document.getElementById('btnRewind').addEventListener('click', () => {
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
   player.goLive();
+  updateStatusBadge();
   renderCamSelector(cameraLink.getAllSources());
+});
+document.getElementById('btnPauseAll').addEventListener('click', () => {
+  const paused = cameraLink.togglePauseAll();
+  syncRecorderPauseState(cameraLink.getAllSources());
+  updateStatusBadge();
+  updatePauseButtonIcon(paused);
 });
 document.getElementById('btnStepBack').addEventListener('click', () => player.stepFrame(-1));
 document.getElementById('btnPlayPause').addEventListener('click', () => player.togglePlayPause());

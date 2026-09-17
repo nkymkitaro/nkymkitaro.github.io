@@ -11,8 +11,12 @@ export class CameraLink {
     this.peer = null;
     this.myId = '';
     this.activeSource = 'local';
-    this.remoteCams = []; // { id, label, videoEl, connected, call }
+    this.remoteCams = []; // { id, label, videoEl, connected, call, dataConn }
     this.onCamsChanged = null; // (sources) => void
+    this.onPauseStateChanged = null; // 子機側: (isPaused) => void
+
+    this.isPaused = false; // 親機側: 全カメラを一時停止中かどうか
+    this.ownStream = null; // 子機側: 自分がカメラから取得した映像(一時停止トグル用)
 
     this._nextChildNumber = 1;
     this.localMonitorVideo = document.getElementById('localMonitorVideo');
@@ -83,8 +87,16 @@ export class CameraLink {
     videoEl.style.display = 'none';
     document.body.appendChild(videoEl);
 
-    const camEntry = { id: camId, label, videoEl, connected: true, call };
+    // 映像(call)とは別に、一時停止/再開などの合図を送るための専用回線を張っておく
+    const dataConn = this.peer.connect(call.peer);
+    dataConn.on('error', (e) => console.error(e));
+
+    const camEntry = { id: camId, label, videoEl, connected: true, call, dataConn };
     this.remoteCams.push(camEntry);
+
+    if (this.isPaused) {
+      dataConn.on('open', () => dataConn.send('PAUSE')); // 一時停止中に繋いできた子機にも合わせる
+    }
 
     const markDisconnected = () => {
       if (!camEntry.connected) return;
@@ -123,6 +135,12 @@ export class CameraLink {
           showToast('満員のため接続できませんでした(最大3台まで)');
           const statusEl = document.getElementById('cameraStatus');
           if (statusEl) statusEl.textContent = '未接続';
+        } else if (data === 'PAUSE' || data === 'RESUME') {
+          const enabled = data === 'RESUME';
+          if (this.ownStream) {
+            this.ownStream.getVideoTracks().forEach((t) => { t.enabled = enabled; });
+          }
+          if (this.onPauseStateChanged) this.onPauseStateChanged(!enabled);
         }
       });
     });
@@ -136,6 +154,7 @@ export class CameraLink {
         video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
+      this.ownStream = stream;
       statusEl.textContent = '接続しています...';
       this.peer.call('kendo-var-room-' + targetId, stream);
       statusEl.textContent = '送信中';
@@ -144,6 +163,26 @@ export class CameraLink {
       statusEl.textContent = '未接続';
       showToast('接続できませんでした。もう一度お試しください。');
     }
+  }
+
+  // 親機自身のカメラ + 全ての子機のカメラを、まとめて一時停止/再開する。
+  // (子機のカメラハードウェア自体は止めず、映像を黒画面にすることで
+  //  通信量・エンコード負荷を下げる。休憩中などに使う想定)
+  togglePauseAll() {
+    this.isPaused = !this.isPaused;
+    this._setLocalTrackEnabled(!this.isPaused);
+    const message = this.isPaused ? 'PAUSE' : 'RESUME';
+    this.remoteCams.forEach((c) => {
+      if (c.connected && c.dataConn && c.dataConn.open) {
+        c.dataConn.send(message);
+      }
+    });
+    return this.isPaused;
+  }
+
+  _setLocalTrackEnabled(enabled) {
+    const stream = this.localMonitorVideo.srcObject;
+    if (stream) stream.getVideoTracks().forEach((t) => { t.enabled = enabled; });
   }
 
   // ライブ表示するカメラを切り替える。切断済みのカメラへはライブ切り替えできない。
