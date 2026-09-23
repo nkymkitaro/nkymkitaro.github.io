@@ -5,6 +5,7 @@
 import { showToast } from './toast.js';
 
 const MAX_REMOTE_CAMS = 3; // 親機1台 + 子機最大3台 = 合計4台まで
+const MAX_STALE_DISCONNECTED = 2; // 切断済みでも直後はレビューできるよう少しだけ残しておく数
 
 export class CameraLink {
   constructor() {
@@ -14,6 +15,7 @@ export class CameraLink {
     this.remoteCams = []; // { id, label, videoEl, connected, call, dataConn }
     this.onCamsChanged = null; // (sources) => void
     this.onPauseStateChanged = null; // 子機側: (isPaused) => void
+    this.onCamRemoved = null; // (camId) => void: 切断済みカメラを完全に破棄した時に呼ばれる(録画バッファの解放用)
 
     this.isPaused = false; // 親機側: 全カメラを一時停止中かどうか
     this.ownStream = null; // 子機側: 自分がカメラから取得した映像(一時停止トグル用)
@@ -68,7 +70,10 @@ export class CameraLink {
   }
 
   _handleIncomingCall(call) {
-    if (this.remoteCams.length >= MAX_REMOTE_CAMS) {
+    // 満員判定は「現在接続中」の子機だけで数える。切断済みの子機はスロットを
+    // 塞いだままにしない(でないと切れたはずの子機のせいで新しい子機が入れなくなる)。
+    const connectedCount = this.remoteCams.filter((c) => c.connected).length;
+    if (connectedCount >= MAX_REMOTE_CAMS) {
       // 満員。繋いできた子機にその旨を伝えてから切る。
       const rejectConn = this.peer.connect(call.peer);
       rejectConn.on('open', () => rejectConn.send('FULL'));
@@ -77,6 +82,7 @@ export class CameraLink {
       return;
     }
 
+    this._pruneStaleDisconnected();
     call.answer();
     const camId = 'remote-' + call.peer;
     const label = '子機' + this._nextChildNumber++;
@@ -101,6 +107,11 @@ export class CameraLink {
     const markDisconnected = () => {
       if (!camEntry.connected) return;
       camEntry.connected = false;
+      if (this.activeSource === camEntry.id) {
+        // ライブ表示中に切断された場合、固まった最後のコマを映し続けないよう親機に戻す
+        this.activeSource = 'local';
+        showToast(`${camEntry.label}が切断されたため、親機の映像に戻しました`);
+      }
       this._notifyCamsChanged();
     };
     call.on('close', markDisconnected);
@@ -124,6 +135,28 @@ export class CameraLink {
         });
       }
     });
+  }
+
+  // 切断済みの子機が溜まりすぎないように、古いものから片付ける。
+  // (直近に切れた分は少しだけ残して、VARで見返せる余地を残す)
+  _pruneStaleDisconnected() {
+    const disconnected = this.remoteCams.filter((c) => !c.connected);
+    const excess = disconnected.length - MAX_STALE_DISCONNECTED;
+    if (excess <= 0) return;
+    disconnected.slice(0, excess).forEach((c) => this._removeCam(c));
+  }
+
+  // 切断済みの子機を完全に破棄する(DOM要素・回線・録画バッファをすべて解放)
+  _removeCam(camEntry) {
+    this.remoteCams = this.remoteCams.filter((c) => c !== camEntry);
+    if (camEntry.videoEl && camEntry.videoEl.parentNode) {
+      camEntry.videoEl.parentNode.removeChild(camEntry.videoEl);
+    }
+    if (camEntry.dataConn) {
+      try { camEntry.dataConn.close(); } catch (err) { console.error(err); }
+    }
+    if (this.onCamRemoved) this.onCamRemoved(camEntry.id);
+    this._notifyCamsChanged();
   }
 
   // 子機として起動: 映像を送るだけの軽量ピア

@@ -177,11 +177,14 @@ canvas {
 .action-btn svg { width: 18px; height: 18px; }
 
 .player-toolbar {
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   gap: 14px;
   margin-top: 14px;
+}
+.player-toolbar.show {
+  display: flex;
 }
 .icon-btn {
   flex: 0 0 auto;

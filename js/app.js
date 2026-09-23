@@ -18,6 +18,7 @@ function startMonitor() {
 
   recorder.start(); // カメラが増えるたびに登録していく。まだ0台でも動かして問題ない
   cameraLink.onCamsChanged = handleCamsChanged;
+  cameraLink.onCamRemoved = (camId) => recorder.unregisterCamera(camId);
 
   cameraLink.startAsMonitor((video) => {
     player.canvas.width = video.videoWidth || 480;
@@ -133,16 +134,20 @@ document.getElementById('btnStartMonitor').addEventListener('click', startMonito
 document.getElementById('btnStartCamera').addEventListener('click', startCamera);
 document.getElementById('btnConnectToMonitor').addEventListener('click', connectToMonitor);
 
+const playerToolbar = document.getElementById('playerToolbar');
+
 document.getElementById('btnRewind').addEventListener('click', () => {
   const ok = player.rewind(15, cameraLink.activeSource);
   if (!ok) {
     showToast('録画データがまだありません');
     return;
   }
+  playerToolbar.classList.add('show'); // コマ送り/再生ボタンはVAR中だけ表示する
   renderCamSelector(cameraLink.getAllSources());
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
   player.goLive();
+  playerToolbar.classList.remove('show');
   updateStatusBadge();
   renderCamSelector(cameraLink.getAllSources());
 });

@@ -41,6 +41,11 @@ export class MultiCamRecorder {
     if (cam) cam.paused = false;
   }
 
+  // 完全に切断されて二度と使わないカメラのバッファを解放する
+  unregisterCamera(id) {
+    this.cams.delete(id);
+  }
+
   start() {
     if (this.timer) return;
     const intervalMs = 1000 / this.fps;
