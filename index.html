@@ -49,7 +49,8 @@
     <h3 style="margin-top:0;">📷 子機カメラ</h3>
     <p style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
     <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
-    <br><br>
+    <p class="help-text" style="text-align:center;">できれば親機と同じWi-Fiに繋いでから入力してください。接続が安定し、モバイル通信量も節約できます。</p>
+    <br>
     <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">接続する</button>
     <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
     <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
@@ -87,15 +88,11 @@
     </div>
 
     <div class="player-toolbar">
-      <button id="btnStepBack" class="icon-btn" aria-label="1コマ戻る">
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="2.2" height="14"/><path d="M19 5v14l-9-7z"/></svg>
-      </button>
+      <button id="btnStepBack" class="speed-btn step-btn" aria-label="1コマ戻る">◀ 1コマ</button>
       <button id="btnPlayPause" class="icon-btn icon-btn-primary" aria-label="再生">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <button id="btnStepForward" class="icon-btn" aria-label="1コマ進む">
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="16.8" y="5" width="2.2" height="14"/><path d="M5 5v14l9-7z"/></svg>
-      </button>
+      <button id="btnStepForward" class="speed-btn step-btn" aria-label="1コマ進む">1コマ ▶</button>
       <button id="btnSpeed" class="speed-btn" aria-label="再生速度切り替え">0.5x</button>
     </div>
 
@@ -113,7 +110,7 @@
     <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときはそのままでOK。</p>
 
     <h4>📷 子機(最大3台)</h4>
-    <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。</p>
+    <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。できれば親機と同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。</p>
 
     <h4>⏪ VARで見返す</h4>
     <p>接続している全カメラの映像を、常に直近15秒ぶん裏で録画しています。「15秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。</p>
