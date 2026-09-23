@@ -28,6 +28,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Kosugi&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="css/style.css">
+
+  <!-- アクセス解析(GoatCounter: Cookie不使用・プライバシー配慮の軽量カウンター) -->
+  <script data-goatcounter="https://kendo-var.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
 
@@ -50,6 +53,7 @@
     <p style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
     <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
     <p class="help-text" style="text-align:center;">できれば親機と同じWi-Fiに繋いでから入力してください。接続が安定し、モバイル通信量も節約できます。</p>
+    <p class="help-text" style="text-align:center;">接続中は画面が自動でオフにならないようになります。ただし手動で画面をロックするとカメラが止まってしまうので、そのままにしておいてください。</p>
     <br>
     <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">接続する</button>
     <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
@@ -69,6 +73,7 @@
     </div>
     <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
     <p class="help-text">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
+    <p class="help-text">この画面を開いている間、画面は自動でオフになりません。手動でロックするとカメラが止まるので、そのままにしておいてください。</p>
 
     <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
 
@@ -141,6 +146,9 @@
 
     <h4>⏸ 一時停止</h4>
     <p>状態表示の横にある一時停止ボタンを押すと、親機・子機すべてのカメラをまとめて止められます。休憩中などバッテリーや通信量を節約したいときに使ってください。もう一度押せばすぐに再開できます。</p>
+
+    <h4>🔆 画面が消えない件について</h4>
+    <p>親機・子機とも、撮影中は画面が自動でオフにならないようにしています(画面が消えるとカメラも止まってしまうため)。バッテリーの消費は増えるので、できれば電源に繋いでおいてください。なお、電源ボタンなどで手動でロックした場合はこの仕組みでは防げず、カメラが止まります。対応していない端末では、事前に端末の設定で画面の自動ロック時間を長めにしておくことをおすすめします。</p>
 
     <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>

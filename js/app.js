@@ -7,6 +7,7 @@ import { CameraLink } from './camera-link.js';
 import { MultiCamRecorder } from './multi-cam-recorder.js';
 import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
+import { enableWakeLock } from './wake-lock.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -29,6 +30,7 @@ const varSettings = {
 function startMonitor() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('monitorArea').style.display = 'block';
+  enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
 
   recorder.start(); // カメラが増えるたびに登録していく。まだ0台でも動かして問題ない
   cameraLink.onCamsChanged = handleCamsChanged;
@@ -44,6 +46,7 @@ function startMonitor() {
 function startCamera() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('cameraArea').style.display = 'block';
+  enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
   cameraLink.onPauseStateChanged = (isPaused) => {
     const statusEl = document.getElementById('cameraStatus');
     if (statusEl) statusEl.textContent = isPaused ? '一時停止中(親機の操作)' : '送信中';
