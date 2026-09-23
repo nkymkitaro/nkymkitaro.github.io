@@ -63,6 +63,9 @@
       <button id="btnPauseAll" class="icon-btn" aria-label="録画を一時停止">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>
       </button>
+      <button id="btnSettings" class="icon-btn" aria-label="VAR設定">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35c-0.59,0.24-1.13,0.57-1.62,0.94L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+      </button>
     </div>
     <div>接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
     <p class="help-text">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
@@ -79,7 +82,7 @@
     <div class="controls-row primary-actions">
       <button id="btnRewind" class="btn-replay action-btn">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5V1L4 7l7 6V9c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H3c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
-        15秒前VAR
+        <span id="btnRewindLabel">15秒前VAR</span>
       </button>
       <button id="btnGoLive" class="btn-live action-btn">
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
@@ -99,6 +102,27 @@
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
   </div>
 
+  <!-- VAR設定(親機のギアボタン + ボトムシート) -->
+  <div id="settingsOverlay" class="help-overlay"></div>
+  <div id="settingsSheet" class="help-sheet">
+    <div class="help-sheet-handle"></div>
+    <h3>VAR設定</h3>
+
+    <h4>巻き戻し秒数</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">「N秒前VAR」ボタンで、何秒前まで一気に戻るか。</p>
+    <div class="cam-selector" id="rewindSecSelector"></div>
+
+    <h4>裏録画バッファ秒数</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">常時裏で持っておく録画の長さ。長くするほど、より前まで見返せます。</p>
+    <div class="cam-selector" id="bufferSecSelector"></div>
+
+    <h4>映像品質</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">上げるほど鮮明になりますが、端末のメモリ使用量が増えます。台数が多いときは控えめがおすすめです。</p>
+    <div class="cam-selector" id="qualitySelector"></div>
+
+    <button id="btnCloseSettings" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
+  </div>
+
   <!-- 使い方ヘルプ(常時表示のFAB + ボトムシート) -->
   <button id="btnHelp" class="help-fab" aria-label="使い方を見る">?</button>
   <div id="helpOverlay" class="help-overlay"></div>
@@ -113,7 +137,7 @@
     <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。できれば親機と同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。</p>
 
     <h4>⏪ VARで見返す</h4>
-    <p>接続している全カメラの映像を、常に直近15秒ぶん裏で録画しています。「15秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。</p>
+    <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>
 
     <h4>⏸ 一時停止</h4>
     <p>状態表示の横にある一時停止ボタンを押すと、親機・子機すべてのカメラをまとめて止められます。休憩中などバッテリーや通信量を節約したいときに使ってください。もう一度押せばすぐに再開できます。</p>

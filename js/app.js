@@ -12,6 +12,20 @@ const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
+// --- VAR設定(親機からいつでも調整できる) ---
+const REWIND_OPTIONS = [10, 15, 20, 30]; // 秒
+const BUFFER_OPTIONS = [10, 15, 20, 30]; // 秒
+const QUALITY_OPTIONS = [
+  { key: 'low', label: '低', width: 240, quality: 0.5 },
+  { key: 'standard', label: '標準', width: 320, quality: 0.6 },
+  { key: 'high', label: '高', width: 480, quality: 0.7 },
+];
+const varSettings = {
+  rewindSeconds: 15,
+  bufferSeconds: 15,
+  qualityKey: 'standard',
+};
+
 function startMonitor() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('monitorArea').style.display = 'block';
@@ -129,6 +143,76 @@ function closeHelp() {
   helpOverlay.classList.remove('open');
 }
 
+// --- VAR設定(ボトムシート) ---
+const settingsSheet = document.getElementById('settingsSheet');
+const settingsOverlay = document.getElementById('settingsOverlay');
+
+function openSettings() {
+  settingsSheet.classList.add('open');
+  settingsOverlay.classList.add('open');
+}
+
+function closeSettings() {
+  settingsSheet.classList.remove('open');
+  settingsOverlay.classList.remove('open');
+}
+
+function updateRewindLabel() {
+  document.getElementById('btnRewindLabel').textContent = `${varSettings.rewindSeconds}秒前VAR`;
+}
+
+// 「N秒」のような選択肢ボタン群を描き直す共通処理(巻き戻し秒数・バッファ秒数で使い回す)
+function renderSecondsSelector(containerId, options, currentValue, onSelect) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  options.forEach((sec) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${sec}秒`;
+    if (sec === currentValue) btn.classList.add('btn-active');
+    btn.addEventListener('click', () => onSelect(sec));
+    container.appendChild(btn);
+  });
+}
+
+function renderQualitySelector() {
+  const container = document.getElementById('qualitySelector');
+  container.innerHTML = '';
+  QUALITY_OPTIONS.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.textContent = opt.label;
+    if (opt.key === varSettings.qualityKey) btn.classList.add('btn-active');
+    btn.addEventListener('click', () => selectQuality(opt.key));
+    container.appendChild(btn);
+  });
+}
+
+function selectRewindSeconds(sec) {
+  varSettings.rewindSeconds = sec;
+  updateRewindLabel();
+  renderSecondsSelector('rewindSecSelector', REWIND_OPTIONS, varSettings.rewindSeconds, selectRewindSeconds);
+}
+
+function selectBufferSeconds(sec) {
+  varSettings.bufferSeconds = sec;
+  recorder.setDurationSec(sec);
+  renderSecondsSelector('bufferSecSelector', BUFFER_OPTIONS, varSettings.bufferSeconds, selectBufferSeconds);
+}
+
+function selectQuality(key) {
+  varSettings.qualityKey = key;
+  const opt = QUALITY_OPTIONS.find((o) => o.key === key);
+  recorder.setQuality(opt.width, opt.quality);
+  renderQualitySelector();
+}
+
+function renderAllSettingsSelectors() {
+  renderSecondsSelector('rewindSecSelector', REWIND_OPTIONS, varSettings.rewindSeconds, selectRewindSeconds);
+  renderSecondsSelector('bufferSecSelector', BUFFER_OPTIONS, varSettings.bufferSeconds, selectBufferSeconds);
+  renderQualitySelector();
+}
+renderAllSettingsSelectors();
+updateRewindLabel();
+
 // --- イベント配線 ---
 document.getElementById('btnStartMonitor').addEventListener('click', startMonitor);
 document.getElementById('btnStartCamera').addEventListener('click', startCamera);
@@ -137,7 +221,7 @@ document.getElementById('btnConnectToMonitor').addEventListener('click', connect
 const playerToolbar = document.getElementById('playerToolbar');
 
 document.getElementById('btnRewind').addEventListener('click', () => {
-  const ok = player.rewind(15, cameraLink.activeSource);
+  const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource);
   if (!ok) {
     showToast('録画データがまだありません');
     return;
@@ -166,6 +250,14 @@ document.getElementById('seekBar').addEventListener('input', (e) => player.onSee
 document.getElementById('btnHelp').addEventListener('click', openHelp);
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);
+
+document.getElementById('btnSettings').addEventListener('click', openSettings);
+document.getElementById('btnCloseSettings').addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', closeSettings);
+
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') closeHelp();
+  if (e.key === 'Escape') {
+    closeHelp();
+    closeSettings();
+  }
 });

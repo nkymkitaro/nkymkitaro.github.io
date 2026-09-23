@@ -46,6 +46,20 @@ export class MultiCamRecorder {
     this.cams.delete(id);
   }
 
+  // 裏録画バッファの長さ(秒)を変更する。短くした場合は超過分をすぐ切り詰める。
+  setDurationSec(durationSec) {
+    this.maxFrames = this.fps * durationSec;
+    for (const cam of this.cams.values()) {
+      while (cam.frames.length > this.maxFrames) cam.frames.shift();
+    }
+  }
+
+  // 録画する映像の幅(px)とJPEG品質を変更する。次の撮影サイクルから反映される。
+  setQuality(width, quality) {
+    this.width = width;
+    this.quality = quality;
+  }
+
   start() {
     if (this.timer) return;
     const intervalMs = 1000 / this.fps;
