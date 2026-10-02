@@ -104,6 +104,13 @@
       <button id="btnSpeed" class="speed-btn" aria-label="再生速度切り替え">0.5x</button>
     </div>
 
+    <div class="save-row" id="saveRow">
+      <button id="btnSaveClip" class="action-btn save-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v6H5v-6H3v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2zM13 12.67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+        クリップを保存
+      </button>
+    </div>
+
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
   </div>
 
@@ -125,6 +132,10 @@
     <p class="help-text" style="margin:0 0 8px 0;">上げるほど鮮明になりますが、端末のメモリ使用量が増えます。台数が多いときは控えめがおすすめです。</p>
     <div class="cam-selector" id="qualitySelector"></div>
 
+    <h4>保存するカメラ</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">「クリップを保存」を押したとき、どのカメラの映像を残すか。全カメラを選ぶとファイルが増えますが、あとで見返す角度を選べます。</p>
+    <div class="cam-selector" id="saveScopeSelector"></div>
+
     <button id="btnCloseSettings" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
   </div>
 
@@ -143,6 +154,9 @@
 
     <h4>⏪ VARで見返す</h4>
     <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>
+
+    <h4>💾 クリップを保存</h4>
+    <p>気になった場面は、VARで見返している間に表示される「クリップを保存」でその場で端末に残せます。対応していれば共有シートがそのまま開くので、LINEなどにすぐ送ることもできます。保存するのは見返していた区間の映像で、ファイル名には日時とカメラ名が自動で入ります。保存するカメラ(選択中のみ/全カメラ)は⚙設定から選べます。</p>
 
     <h4>⏸ 一時停止</h4>
     <p>状態表示の横にある一時停止ボタンを押すと、親機・子機すべてのカメラをまとめて止められます。休憩中などバッテリーや通信量を節約したいときに使ってください。もう一度押せばすぐに再開できます。</p>

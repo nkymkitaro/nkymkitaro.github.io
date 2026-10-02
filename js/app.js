@@ -8,6 +8,7 @@ import { MultiCamRecorder } from './multi-cam-recorder.js';
 import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 import { enableWakeLock } from './wake-lock.js';
+import { saveClip } from './clip-saver.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -21,10 +22,15 @@ const QUALITY_OPTIONS = [
   { key: 'standard', label: '標準', width: 320, quality: 0.6 },
   { key: 'high', label: '高', width: 480, quality: 0.7 },
 ];
+const SAVE_SCOPE_OPTIONS = [
+  { key: 'selected', label: '選択中のみ' },
+  { key: 'all', label: '全カメラ' },
+];
 const varSettings = {
   rewindSeconds: 15,
   bufferSeconds: 15,
   qualityKey: 'standard',
+  saveScopeKey: 'selected',
 };
 
 function startMonitor() {
@@ -208,10 +214,28 @@ function selectQuality(key) {
   renderQualitySelector();
 }
 
+function renderSaveScopeSelector() {
+  const container = document.getElementById('saveScopeSelector');
+  container.innerHTML = '';
+  SAVE_SCOPE_OPTIONS.forEach((opt) => {
+    const btn = document.createElement('button');
+    btn.textContent = opt.label;
+    if (opt.key === varSettings.saveScopeKey) btn.classList.add('btn-active');
+    btn.addEventListener('click', () => selectSaveScope(opt.key));
+    container.appendChild(btn);
+  });
+}
+
+function selectSaveScope(key) {
+  varSettings.saveScopeKey = key;
+  renderSaveScopeSelector();
+}
+
 function renderAllSettingsSelectors() {
   renderSecondsSelector('rewindSecSelector', REWIND_OPTIONS, varSettings.rewindSeconds, selectRewindSeconds);
   renderSecondsSelector('bufferSecSelector', BUFFER_OPTIONS, varSettings.bufferSeconds, selectBufferSeconds);
   renderQualitySelector();
+  renderSaveScopeSelector();
 }
 renderAllSettingsSelectors();
 updateRewindLabel();
@@ -222,6 +246,7 @@ document.getElementById('btnStartCamera').addEventListener('click', startCamera)
 document.getElementById('btnConnectToMonitor').addEventListener('click', connectToMonitor);
 
 const playerToolbar = document.getElementById('playerToolbar');
+const saveRow = document.getElementById('saveRow');
 
 document.getElementById('btnRewind').addEventListener('click', () => {
   const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource);
@@ -229,14 +254,33 @@ document.getElementById('btnRewind').addEventListener('click', () => {
     showToast('録画データがまだありません');
     return;
   }
-  playerToolbar.classList.add('show'); // コマ送り/再生ボタンはVAR中だけ表示する
+  playerToolbar.classList.add('show'); // コマ送り/再生/保存ボタンはVAR中だけ表示する
+  saveRow.classList.add('show');
   renderCamSelector(cameraLink.getAllSources());
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
   player.goLive();
   playerToolbar.classList.remove('show');
+  saveRow.classList.remove('show');
   updateStatusBadge();
   renderCamSelector(cameraLink.getAllSources());
+});
+
+// VAR設定の「保存するカメラ」に応じて、保存するクリップの対象を組み立てる
+function buildSaveTargets() {
+  const sources = cameraLink.getAllSources();
+  if (varSettings.saveScopeKey === 'all') {
+    return sources
+      .filter((src) => recorder.getFrames(src.id).length > 0)
+      .map((src) => ({ id: src.id, label: src.label, frames: recorder.getFrames(src.id) }));
+  }
+  const src = sources.find((s) => s.id === player.currentCamId);
+  const label = src ? src.label : 'カメラ';
+  return [{ id: player.currentCamId, label, frames: recorder.getFrames(player.currentCamId) }];
+}
+
+document.getElementById('btnSaveClip').addEventListener('click', () => {
+  saveClip(buildSaveTargets(), recorder.fps);
 });
 document.getElementById('btnPauseAll').addEventListener('click', () => {
   const paused = cameraLink.togglePauseAll();

@@ -186,6 +186,16 @@ canvas {
 .player-toolbar.show {
   display: flex;
 }
+.save-row {
+  display: none;
+  margin-top: 10px;
+}
+.save-row.show {
+  display: flex;
+}
+.save-btn {
+  width: 100%;
+}
 .icon-btn {
   flex: 0 0 auto;
   width: 48px;
