@@ -364,3 +364,20 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 .help-sheet h4 { margin: 16px 0 4px 0; font-size: 0.92rem; }
 .help-sheet h4:first-of-type { margin-top: 0; }
 .help-sheet p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.65; }
+
+/* 外部リンク(公式LINEなど)を通常のボタンと同じ見た目で出す */
+.link-btn {
+  display: block;
+  margin: 10px 3px 0;
+  padding: 12px 14px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text);
+  background: var(--glass);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
+}
+.link-btn:active { opacity: 0.6; transform: scale(0.97); }
