@@ -85,7 +85,7 @@ async function blobToDrawable(blob) {
 }
 
 // framesの並びをcanvasに描き直しながら、MediaRecorderでそのまま動画にエンコードする。
-// (録画バッファの長さぶん、実時間と同じだけ時間がかかる)
+// (録画バッファの長さぶん、実時間と同じだけ時間がかかる。動画の長さは実際に撮った長さと一致させる)
 async function encodeFramesToVideo(frames, fps) {
   if (!window.MediaRecorder || frames.length === 0) return null;
 
@@ -123,13 +123,44 @@ async function encodeFramesToVideo(frames, fps) {
     return null;
   }
 
-  const frameDurationMs = 1000 / fps;
-  for (const frame of frames) {
-    const drawable = await blobToDrawable(frame.blob);
-    ctx.drawImage(drawable, 0, 0, width, height);
-    if (drawable.close) drawable.close();
-    await new Promise((r) => setTimeout(r, frameDurationMs));
+  // 各コマを「撮影された時刻(frame.ts)」どおりのタイミングで描く。
+  // MediaRecorderは実時間で記録するので、「1コマ描いてから1/fps秒待つ」方式だと
+  // デコードにかかった時間のぶんだけ動画が引き伸ばされ、スローで長い動画になってしまう。
+  // そこで開始時刻からの絶対時刻で待ち、処理が追いつかないときはコマを飛ばして長さを保つ。
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const ts0 = frames[0].ts;
+  const startedAt = performance.now();
+  const dueAt = (i) => startedAt + (frames[i].ts - ts0);
+  let pending = blobToDrawable(frames[0].blob);
+  let dropped = 0;
+
+  for (let i = 0; i < frames.length; i++) {
+    let drawable;
+    try {
+      drawable = await pending;
+    } catch (err) {
+      drawable = null;
+    }
+    // 待っている間に次のコマを先にデコードしておく
+    pending = i + 1 < frames.length ? blobToDrawable(frames[i + 1].blob) : null;
+    if (pending) pending.catch(() => {});
+
+    const wait = dueAt(i) - performance.now();
+    if (wait > 0) {
+      await sleep(wait);
+    } else if (i + 1 < frames.length && performance.now() >= dueAt(i + 1)) {
+      // 次のコマの時刻も過ぎている = 遅れている。このコマは飛ばす
+      if (drawable && drawable.close) drawable.close();
+      dropped++;
+      continue;
+    }
+    if (drawable) {
+      ctx.drawImage(drawable, 0, 0, width, height);
+      if (drawable.close) drawable.close();
+    }
   }
+  await sleep(1000 / fps); // 最後のコマも1コマぶん映してから止める
+  if (dropped > 0) console.info(`クリップ書き出し: 処理が追いつかず${dropped}コマ飛ばしました`);
 
   recorder.stop();
   await done;
