@@ -9,6 +9,8 @@ import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 import { enableWakeLock } from './wake-lock.js';
 import { saveClip } from './clip-saver.js';
+import { tapFeedback } from './haptics.js';
+import { initInstallPrompt } from './install-prompt.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -47,6 +49,41 @@ function startMonitor() {
   cameraLink.startAsMonitor(() => {
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
   });
+
+  setInterval(renderRecStatus, 500);
+  renderRecStatus();
+}
+
+// 「今押したら何秒前まで戻れるか」と、各カメラが録画できているかを表示する。
+// 起動直後や子機が切れたときに、押す前に分かるようにするため。
+function renderRecStatus() {
+  const el = document.getElementById('recStatus');
+  if (!el) return;
+  const sources = cameraLink.getAllSources();
+  const rewind = varSettings.rewindSeconds;
+
+  let summary;
+  if (cameraLink.isPaused) {
+    summary = '一時停止中のため、録画していません';
+  } else {
+    const recorded = Math.floor(recorder.getFrames(cameraLink.activeSource).length / recorder.fps);
+    summary = recorded >= rewind
+      ? `${rewind}秒前まで戻れます`
+      : `録画中です。あと${rewind - recorded}秒で${rewind}秒前まで戻れます`;
+  }
+
+  let camsHtml = '';
+  if (sources.length > 1) {
+    camsHtml = '<div class="rec-cams">' + sources.map((src) => {
+      let state;
+      if (!src.connected) state = '<span class="rec-cam-off">切断</span>';
+      else if (cameraLink.isPaused) state = '<span class="rec-cam-off">停止中</span>';
+      else state = '<span class="rec-cam-on"><span class="rec-dot"></span>録画中</span>';
+      return `<span class="rec-cam">${src.label} ${state}</span>`;
+    }).join('') + '</div>';
+  }
+  const html = `<div class="rec-summary">${summary}</div>${camsHtml}`;
+  if (el.innerHTML !== html) el.innerHTML = html;
 }
 
 function startCamera() {
@@ -245,6 +282,7 @@ function renderAllSettingsSelectors() {
 }
 renderAllSettingsSelectors();
 updateRewindLabel();
+initInstallPrompt();
 
 // --- イベント配線 ---
 document.getElementById('btnStartMonitor').addEventListener('click', startMonitor);
@@ -280,6 +318,7 @@ document.getElementById('btnRewind').addEventListener('click', () => {
     showToast('録画データがまだありません');
     return;
   }
+  tapFeedback();
   hideBackToReplay();
   setReplayUI(true);
 });
@@ -302,6 +341,7 @@ btnBackToReplay.addEventListener('click', () => {
     showToast('リプレイの映像が残っていません');
     return;
   }
+  tapFeedback();
   setReplayUI(true);
 });
 

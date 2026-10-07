@@ -6,6 +6,7 @@
 // - コーデック: Chrome/Firefoxはwebm、古いSafariはmp4しか録画できないため、
 //   実際に使えた形式(MediaRecorder.mimeType)に合わせて拡張子を決める
 import { showToast } from './toast.js';
+import { tapFeedback } from './haptics.js';
 
 const DB_NAME = 'kendo-var-clips';
 const STORE_NAME = 'clips';
@@ -237,6 +238,7 @@ export async function saveClip(targets, fps) {
     return;
   }
 
+  tapFeedback([30, 60, 30]); // 書き出しが終わったことを手に伝える(2回振動)
   await shareOrDownload(files);
   showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件のクリップを保存しました`);
 }

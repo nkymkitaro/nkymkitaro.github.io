@@ -414,18 +414,57 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 /* 操作中はタイトルより映像と操作を優先する */
 body.mode-monitor h1 { display: none; }
 
+/* 録画の状態(何秒前まで戻れるか・各カメラが録画できているか)。リプレイ中は不要なので隠す */
+.rec-status { margin-top: 6px; font-size: 0.8rem; color: var(--text-dim); line-height: 1.5; }
+.rec-cams { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 12px; margin-top: 2px; }
+.rec-cam { white-space: nowrap; }
+.rec-cam-on { color: var(--accent-live); display: inline-flex; align-items: center; gap: 4px; }
+.rec-cam-off { color: var(--text-dim); }
+#monitorArea.replaying .rec-status { display: none; }
+
+/* 「ホーム画面に追加」ボタン: 追加できる端末(主にAndroid)でだけ出す */
+.install-btn { display: none; width: calc(100% - 6px); cursor: pointer; }
+.install-btn.show { display: block; }
+
+/* 親機では、ヘルプは状態表示横の「?」から開く(右下に浮かぶボタンは操作ボタンと重なるため出さない) */
+body.mode-monitor .help-fab { display: none; }
+body.mode-monitor .help-inline { display: flex; }
+
 @media (orientation: portrait) {
   #monitorArea:not(.replaying) .rotate-hint { display: block; }
-  /* 縦長の映像でも「N秒前VAR」がスクロールせずに見えるよう、映像の高さに上限を付ける */
-  body.mode-monitor #displayCanvas { max-height: 45vh; max-height: 45dvh; }
-  body.mode-monitor .action-btn { min-height: 56px; }
+  /* 縦向き: 画面の高さちょうどに収め、よく押すボタンは一番下(片手で持ったとき親指が届く位置)に置く。
+     映像は残りの高さをすべて使う(リプレイ中は操作が増えるぶん小さくなる) */
+  body.mode-monitor {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0; /* Android Chromeの100vhはアドレスバーの分だけ大きく、はみ出す原因になる */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.mode-monitor #monitorArea {
+    display: flex !important; /* JSがstyle.display='block'を入れるため */
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow-y: auto;
+  }
+  body.mode-monitor .stage-video {
+    flex: 1 1 auto;
+    min-height: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body.mode-monitor #displayCanvas { width: 100%; height: 100%; }
+  body.mode-monitor .primary-actions { order: 10; margin-top: 10px; }
+  body.mode-monitor .action-btn { min-height: 64px; }
 }
 
 /* 横向きの親機でだけ使う、状態表示横のヘルプボタン(縦向きでは右下の「?」を使う) */
 .help-inline { display: none; font-size: 1.1rem; font-weight: 700; }
 
-/* 縦向き: 右下の「?」ボタンが一番下の操作ボタンに重ならないよう、下に余白を取る */
-body.mode-monitor { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 72px); }
 
 /* =========================================================
    横向き(スマホを横にしたとき)
@@ -454,9 +493,6 @@ body.mode-monitor { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) 
   body.mode-camera.camera-previewing h1 { display: none; }
 
   /* --- 親機 --- */
-  body.mode-monitor .help-fab { display: none; }
-  body.mode-monitor .help-inline { display: flex; }
-
   body.mode-monitor #monitorArea {
     display: grid !important; /* JSがstyle.display='block'を入れるため */
     flex: 1;
@@ -502,6 +538,8 @@ body.mode-monitor { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) 
   body.mode-monitor .monitor-head .status-row .icon-btn { margin: 0; }
   body.mode-monitor .id-line { text-align: left; margin-top: 4px; font-size: 0.85rem; color: var(--text-dim); }
   body.mode-monitor #myIdDisplay { font-size: 1.1rem !important; }
+  body.mode-monitor .rec-status { text-align: left; margin-top: 8px; }
+  body.mode-monitor .rec-cams { justify-content: flex-start; }
 
   body.mode-monitor #camSelector { grid-area: cams; margin: 0 !important; gap: 10px; }
   body.mode-monitor .cam-selector button { min-width: 64px; margin: 0; }
