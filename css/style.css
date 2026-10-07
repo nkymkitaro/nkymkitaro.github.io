@@ -1,4 +1,5 @@
 /*
+  フォント: Murecho(500 / 800 / 900 のみ読み込み)。600・700 を指定すると 800 で表示されるため、800 にそろえている。
   デザイン方針:
   色は「意味を持つ場所」だけに使う。
   赤 = LIVE(撮影中)、アンバー = VAR REPLAY(再生中)。それ以外は白黒のグレースケールで統一する。
@@ -25,7 +26,8 @@
   user-select: none;
 }
 body {
-  font-family: "Meiryo", "Kosugi", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Murecho", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-weight: 500;
   background: var(--bg);
   color: var(--text);
   text-align: center;
@@ -37,7 +39,7 @@ body {
 }
 h1 {
   font-size: 2rem;
-  font-weight: 700;
+  font-weight: 900;
   letter-spacing: -0.5px;
   margin: 10px 0 20px 0;
   color: var(--text);
@@ -55,7 +57,7 @@ input, button {
   font-size: 0.95rem;
   border-radius: var(--radius-md);
   margin: 3px;
-  font-weight: 600;
+  font-weight: 800;
   font-family: inherit;
   touch-action: manipulation;
   transition: background-color 0.2s var(--ease), opacity 0.15s var(--ease), transform 0.15s var(--ease);
@@ -106,7 +108,7 @@ body.camera-previewing .camera-preview { display: block; }
   padding: 5px 12px;
   border-radius: 20px;
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 800;
   letter-spacing: 0.3px;
   margin-bottom: 10px;
   background: var(--glass);
@@ -169,7 +171,7 @@ body.camera-previewing .camera-preview { display: block; }
 /* --- 再生コントロール（プレイヤーツールバー） --- */
 .time-readout {
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 800;
   color: var(--text-dim);
   letter-spacing: 0.3px;
   margin-top: 8px;
@@ -300,7 +302,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   border-radius: 14px;
   padding: 12px 18px;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 800;
   line-height: 1.5;
   color: var(--text);
   text-align: center;
@@ -319,7 +321,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 .help-text {
   color: var(--text-dim);
   font-size: 0.78rem;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.5;
   margin: 4px 4px 0 4px;
   text-align: left;
@@ -335,7 +337,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   border-radius: 50%;
   background: var(--glass-strong);
   font-size: 1.2rem;
-  font-weight: 700;
+  font-weight: 800;
   z-index: 60;
   box-shadow: 0 2px 12px rgba(0,0,0,0.5);
 }
@@ -385,7 +387,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   margin: 10px 3px 0;
   padding: 12px 14px;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 800;
   text-align: center;
   text-decoration: none;
   color: var(--text);
@@ -463,7 +465,7 @@ body.mode-monitor .help-inline { display: flex; }
 }
 
 /* 横向きの親機でだけ使う、状態表示横のヘルプボタン(縦向きでは右下の「?」を使う) */
-.help-inline { display: none; font-size: 1.1rem; font-weight: 700; }
+.help-inline { display: none; font-size: 1.1rem; font-weight: 800; }
 
 
 /* =========================================================

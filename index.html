@@ -21,11 +21,11 @@
   <!-- WebRTC通信用ライブラリ (PeerJS) -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
-  <!-- フォント: MeiryoはMicrosoft商用フォントでWeb配布不可のため、その代替として
-       作られたKosugiを読み込む。Windows等ローカルにMeiryoがあればそちらが優先される。 -->
+  <!-- フォント: Murecho(力強い太字ゴシック)。端末ごとの見た目をそろえるため、Webフォントで読み込む。
+       重さは本文500・ボタンや見出し800・タイトル900の3つだけに絞り、読み込みを軽くする -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Kosugi&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="css/style.css">
 
@@ -58,7 +58,7 @@
       <p class="help-text" style="text-align:center;">接続中は画面が自動でオフにならないようになります。ただし手動で画面をロックするとカメラが止まってしまうので、そのままにしておいてください。</p>
       <p class="help-text" style="text-align:center;">横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
       <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px; margin-top: 16px;">接続する</button>
-      <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
+      <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:800;">未接続</div>
     </div>
     <video id="localVideo" class="camera-preview" autoplay playsinline muted></video>
   </div>
