@@ -26,6 +26,10 @@
   --dur-slow: 0.26s;  /* ボトムシートなど、大きな面の出入り(これより長い動きは作らない) */
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);       /* キレよく減速して止まる */
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* わずかに行き過ぎてから収まる */
+  --press-scale: 0.94; /* 押した瞬間にボタンが沈む大きさ */
+  /* VARに入るときの動き(2-4「ためと解放」)。実機で触って決めるため、値はここだけで変える */
+  --var-hold: 0.1s;   /* 押してから巻き戻り始めるまで、映像を止めておく時間(ため) */
+  --var-sweep: 0.2s;  /* 最新の映像から目的の場面まで巻き戻る時間 */
 }
 * {
   box-sizing: border-box;
@@ -80,7 +84,21 @@ button {
   border: 1px solid var(--hairline);
   cursor: pointer;
 }
-button:active { opacity: 0.6; transform: scale(0.97); }
+button:not(.press):active { opacity: 0.6; transform: scale(0.97); }
+
+/* 押した手応え(2-4): 触れた瞬間に沈み(--dur-fast)、離すとわずかに行き過ぎて戻る(--dur-base・弾み)。
+   付け外しは js/press-feedback.js。動きの途中でも次の操作は受け付ける */
+.press {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    background-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+.press.is-pressed {
+  transform: scale(var(--press-scale));
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
 
 /* 意味のある2色だけ: LIVE(赤) / REPLAY(アンバー) */
 .btn-live { background: var(--accent-live); border-color: var(--accent-live); }
@@ -685,9 +703,23 @@ body.mode-monitor .help-inline { display: flex; }
   .state-band-sub { font-size: 0.85rem; }
 }
 
+/* VARに入るときの「ため」(2-4): 映像を止めている間だけ、わずかに縮める。戻りは弾みで */
+#displayCanvas { transition: transform var(--dur-base) var(--ease-spring); }
+.stage-video.var-hold #displayCanvas {
+  transform: scale(0.97);
+  transition-duration: var(--dur-fast);
+  transition-timing-function: var(--ease-out);
+}
+
+/* コマ送り・シークで1コマ動いたとき、つまみが弾む(2-4) */
+input[type="range"]::-webkit-slider-thumb { transition: transform var(--dur-base) var(--ease-spring); }
+input[type="range"]::-moz-range-thumb { transition: transform var(--dur-base) var(--ease-spring); }
+input[type="range"].bump::-webkit-slider-thumb { transform: scale(1.3); transition-duration: var(--dur-fast); }
+input[type="range"].bump::-moz-range-thumb { transform: scale(1.3); transition-duration: var(--dur-fast); }
+
 /* 端末で「動きを減らす」が設定されている場合は、動きを最小限にする(デザインポリシー 2-4) */
 @media (prefers-reduced-motion: reduce) {
-  :root { --dur-fast: 0s; --dur-base: 0s; --dur-slow: 0s; }
+  :root { --dur-fast: 0s; --dur-base: 0s; --dur-slow: 0s; --var-hold: 0s; --var-sweep: 0s; }
   *, *::before, *::after {
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;

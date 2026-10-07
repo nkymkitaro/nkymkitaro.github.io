@@ -9,9 +9,10 @@ import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 import { enableWakeLock } from './wake-lock.js';
 import { saveClip } from './clip-saver.js';
-import { tapFeedback } from './haptics.js';
+import { attachPress } from './press-feedback.js';
+import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
-import { setBandState, showSubBand, hideSubBand } from './state-band.js';
+import { setBandState, showSubBand, hideSubBand, subBandText } from './state-band.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -280,6 +281,11 @@ renderAllSettingsSelectors();
 updateRewindLabel();
 initInstallPrompt();
 
+// 押した手応え(デザインポリシー 2-4)。主要な操作とコマ送りは、対応端末なら押した瞬間に短く振動させる
+[['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30], ['btnBackToReplay', 30],
+ ['btnStepBack', 12], ['btnStepForward', 12], ['btnPlayPause', 12], ['btnSpeed', 0]]
+  .forEach(([id, vibrate]) => attachPress(document.getElementById(id), { vibrate }));
+
 // --- イベント配線 ---
 document.getElementById('btnStartMonitor').addEventListener('click', startMonitor);
 document.getElementById('btnStartCamera').addEventListener('click', startCamera);
@@ -309,12 +315,15 @@ function hideBackToReplay() {
 }
 
 document.getElementById('btnRewind').addEventListener('click', () => {
-  const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource);
+  // 一瞬止めて(ため)から、キュッと巻き戻してリプレイに入る。値は css/style.css の --var-hold / --var-sweep
+  const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource, {
+    holdMs: motionMs('--var-hold'),
+    sweepMs: motionMs('--var-sweep'),
+  });
   if (!ok) {
     showToast('録画データがまだありません');
     return;
   }
-  tapFeedback();
   hideBackToReplay();
   setReplayUI(true);
 });
@@ -337,7 +346,6 @@ btnBackToReplay.addEventListener('click', () => {
     showToast('リプレイの映像が残っていません');
     return;
   }
-  tapFeedback();
   setReplayUI(true);
 });
 
@@ -359,6 +367,7 @@ function buildSaveTargets() {
   return [{ id: player.currentCamId, label, frames: recorder.getFrames(player.currentCamId) }];
 }
 
+const SAVED_NOTICE_MS = 1800; // 「保存しました」を出しておく時間
 // 保存中はサブ帯で「保存中」を出す。手が震えて二度押ししても、二重に書き出さない
 let savingClip = false;
 document.getElementById('btnSaveClip').addEventListener('click', async () => {
@@ -366,9 +375,14 @@ document.getElementById('btnSaveClip').addEventListener('click', async () => {
   savingClip = true;
   showSubBand('保存中');
   try {
-    await saveClip(buildSaveTargets(), recorder.fps, { onEncoded: hideSubBand });
+    await saveClip(buildSaveTargets(), recorder.fps, {
+      // 書き出しが終わった時点で「保存しました」を短く出す(共有画面が開く前に知らせる)
+      onEncoded: (count) => {
+        showSubBand(count > 1 ? `${count}件を保存しました` : '保存しました', { autoHideMs: SAVED_NOTICE_MS });
+      },
+    });
   } finally {
-    hideSubBand();
+    if (subBandText() === '保存中') hideSubBand(); // 失敗・データなしのときは「保存中」だけ消す
     savingClip = false;
   }
 });

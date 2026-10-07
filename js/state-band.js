@@ -37,14 +37,24 @@ export function setBandState(state) {
   playEnter(band);
 }
 
-export function showSubBand(text) {
+let subTimer = null;
+
+// サブ帯を出す。autoHideMs を渡すと、その時間だけ出して自動で消す(保存完了の知らせなど)
+export function showSubBand(text, { autoHideMs = 0 } = {}) {
   if (!el()) return;
+  clearTimeout(subTimer);
   sub.textContent = text;
   sub.hidden = false;
   playEnter(sub);
+  if (autoHideMs > 0) subTimer = setTimeout(hideSubBand, autoHideMs);
 }
 
 export function hideSubBand() {
   if (!el()) return;
+  clearTimeout(subTimer);
   sub.hidden = true;
+}
+
+export function subBandText() {
+  return el() && !sub.hidden ? sub.textContent : '';
 }

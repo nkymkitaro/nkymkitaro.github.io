@@ -214,7 +214,7 @@ async function shareOrDownload(files) {
 // targets: [{ id, label, frames }] のリスト。
 // 「選択中のみ」なら1件、「全カメラ」なら接続中カメラの数ぶん渡す想定。
 // 書き出し中の表示(状態の帯の「保存中」)は呼び出し側が受け持つ。
-// onEncoded: 書き出しが終わり、共有・ダウンロードに移る直前に呼ばれる(「保存中」を消すため)
+// onEncoded(件数): 書き出しが終わり、共有・ダウンロードに移る直前に呼ばれる(完了を知らせるため)
 export async function saveClip(targets, fps, { onEncoded } = {}) {
   const usable = (targets || []).filter((t) => t && t.frames && t.frames.length > 0);
   if (usable.length === 0) {
@@ -239,7 +239,10 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
   }
 
   tapFeedback([30, 60, 30]); // 書き出しが終わったことを手に伝える(2回振動)
-  if (onEncoded) onEncoded();
+  if (onEncoded) {
+    onEncoded(files.length); // 完了の知らせ(状態の帯)は呼び出し側が出す
+  } else {
+    showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件のクリップを保存しました`);
+  }
   await shareOrDownload(files);
-  showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件のクリップを保存しました`);
 }
