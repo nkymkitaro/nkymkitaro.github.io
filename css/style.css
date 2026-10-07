@@ -396,6 +396,31 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
 
+/* --- 親機: 今使える操作・必要な情報だけを出す --- */
+/* LIVE中は「LIVEに戻る」とシークバーは使えないので隠す */
+#monitorArea:not(.replaying) #btnGoLive,
+#monitorArea:not(.replaying) .seek-row { display: none; }
+/* 誤って「LIVEに戻る」を押した直後だけ出す取り消しボタン */
+.undo-btn { display: none; }
+.undo-btn.show { display: flex; }
+/* 子機がつながったら、またはリプレイ中は、接続IDの説明はもう要らない */
+#monitorArea.has-children #idHelp,
+#monitorArea.replaying #idHelp { display: none; }
+/* 縦向きのLIVE中だけ、横向きにすると見やすいことを案内する */
+.rotate-hint { display: none; }
+/* リプレイ中は映像をタップすると再生・一時停止 */
+#displayCanvas { touch-action: manipulation; }
+#monitorArea.replaying #displayCanvas { cursor: pointer; }
+/* 操作中はタイトルより映像と操作を優先する */
+body.mode-monitor h1 { display: none; }
+
+@media (orientation: portrait) {
+  #monitorArea:not(.replaying) .rotate-hint { display: block; }
+  /* 縦長の映像でも「N秒前VAR」がスクロールせずに見えるよう、映像の高さに上限を付ける */
+  body.mode-monitor #displayCanvas { max-height: 45vh; max-height: 45dvh; }
+  body.mode-monitor .action-btn { min-height: 56px; }
+}
+
 /* 横向きの親機でだけ使う、状態表示横のヘルプボタン(縦向きでは右下の「?」を使う) */
 .help-inline { display: none; font-size: 1.1rem; font-weight: 700; }
 
@@ -519,6 +544,9 @@ body.mode-monitor { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) 
     padding: 8px;
     font-size: 0.95rem;
   }
+  /* LIVE中は「N秒前VAR」だけになるので、空いた分だけ大きくして押しやすくする */
+  body.mode-monitor #monitorArea:not(.replaying) #btnRewind { min-height: 96px; font-size: 1.1rem; }
+  body.mode-monitor #monitorArea:not(.replaying) .undo-btn.show { min-height: 96px; }
   body.mode-monitor .save-row { grid-area: save; margin: 0; }
   body.mode-monitor .save-btn { margin: 0; min-height: 52px; }
 

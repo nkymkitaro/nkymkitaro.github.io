@@ -115,6 +115,11 @@ function updatePauseButtonIcon(paused) {
 function renderCamSelector(sources) {
   const container = document.getElementById('camSelector');
   container.innerHTML = '';
+  // カメラが1台だけのときは切り替える先がないので出さない。
+  // 子機がつながったら、接続IDの説明文も役目を終えるので隠す(CSSの .has-children)
+  const multi = sources.length > 1;
+  container.style.display = multi ? '' : 'none';
+  document.getElementById('monitorArea').classList.toggle('has-children', multi);
   const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
 
   sources.forEach((src) => {
@@ -249,6 +254,25 @@ document.getElementById('btnConnectToMonitor').addEventListener('click', connect
 const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
 const monitorArea = document.getElementById('monitorArea');
+const btnBackToReplay = document.getElementById('btnBackToReplay');
+const BACK_TO_REPLAY_MS = 6000; // 「リプレイに戻る」を出しておく時間
+let backToReplayPoint = null;
+let backToReplayTimer = null;
+
+// リプレイ中だけ見せる操作(コマ送り・再生・保存・LIVEに戻る)の表示を切り替える
+function setReplayUI(isReplay) {
+  playerToolbar.classList.toggle('show', isReplay);
+  saveRow.classList.toggle('show', isReplay);
+  monitorArea.classList.toggle('replaying', isReplay); // LIVEに戻る・シークバーの表示や横向きの配置もこのクラスで切り替える
+  if (!isReplay) updateStatusBadge();
+  renderCamSelector(cameraLink.getAllSources());
+}
+
+function hideBackToReplay() {
+  clearTimeout(backToReplayTimer);
+  backToReplayPoint = null;
+  btnBackToReplay.classList.remove('show');
+}
 
 document.getElementById('btnRewind').addEventListener('click', () => {
   const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource);
@@ -256,18 +280,34 @@ document.getElementById('btnRewind').addEventListener('click', () => {
     showToast('録画データがまだありません');
     return;
   }
-  playerToolbar.classList.add('show'); // コマ送り/再生/保存ボタンはVAR中だけ表示する
-  saveRow.classList.add('show');
-  monitorArea.classList.add('replaying'); // 横向き時はリプレイ中だけ映像の下に操作列を出す
-  renderCamSelector(cameraLink.getAllSources());
+  hideBackToReplay();
+  setReplayUI(true);
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
+  // 押し間違いに備えて、見ていた場面を少しの間だけ控えておく
+  const point = player.getResumePoint();
   player.goLive();
-  playerToolbar.classList.remove('show');
-  saveRow.classList.remove('show');
-  monitorArea.classList.remove('replaying');
-  updateStatusBadge();
-  renderCamSelector(cameraLink.getAllSources());
+  setReplayUI(false);
+  if (point) {
+    hideBackToReplay();
+    backToReplayPoint = point;
+    btnBackToReplay.classList.add('show');
+    backToReplayTimer = setTimeout(hideBackToReplay, BACK_TO_REPLAY_MS);
+  }
+});
+btnBackToReplay.addEventListener('click', () => {
+  const point = backToReplayPoint;
+  hideBackToReplay();
+  if (!player.resumeAt(point)) {
+    showToast('リプレイの映像が残っていません');
+    return;
+  }
+  setReplayUI(true);
+});
+
+// リプレイ中は映像そのものをタップしても再生・一時停止できる(画面で一番大きい「ボタン」)
+document.getElementById('displayCanvas').addEventListener('click', () => {
+  if (player.isReplay) player.togglePlayPause();
 });
 
 // VAR設定の「保存するカメラ」に応じて、保存するクリップの対象を組み立てる

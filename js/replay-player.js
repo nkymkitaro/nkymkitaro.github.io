@@ -76,12 +76,39 @@ export class ReplayPlayer {
     const rewindCount = Math.min(Math.round(seconds * this.recorder.fps), frames.length - 1);
     this.frameIndex = frames.length - 1 - rewindCount;
 
+    this._enterReplayState();
+    this._startPlaybackLoop();
+    return true;
+  }
+
+  _enterReplayState() {
     this.statusBadge.innerHTML = `🎬&nbsp;VAR REPLAY (${this.playbackSpeed}x)`;
     this.statusBadge.className = 'badge bg-replay';
     this.seekBar.disabled = false;
-
     this._renderCurrentFrame();
-    this._startPlaybackLoop();
+  }
+
+  // 今見ている場面(カメラと撮影時刻)。誤ってLIVEに戻ったときに元の場面へ戻すために使う
+  getResumePoint() {
+    if (!this.isReplay) return null;
+    const frame = this.recorder.getFrames(this.currentCamId)[this.frameIndex];
+    return frame ? { camId: this.currentCamId, ts: frame.ts } : null;
+  }
+
+  // getResumePoint()で控えた場面に、一時停止した状態で戻る。
+  // その間に録画バッファから押し出された場合は、残っている一番古いコマから表示する。
+  resumeAt(point) {
+    if (!point) return false;
+    const frames = this.recorder.getFrames(point.camId);
+    if (frames.length === 0) return false;
+    let index = frames.findIndex((f) => f.ts >= point.ts);
+    if (index < 0) index = frames.length - 1;
+
+    this.isReplay = true;
+    this.currentCamId = point.camId;
+    this.frameIndex = index;
+    this.pause();
+    this._enterReplayState();
     return true;
   }
 

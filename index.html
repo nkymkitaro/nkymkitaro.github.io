@@ -12,11 +12,11 @@
   <meta name="apple-mobile-web-app-title" content="剣道VAR">
   <meta name="theme-color" content="#000000">
 
-  <!-- インライン Web App Manifest (Android Chrome用) -->
-  <link rel="manifest" href='data:application/manifest+json,{"name":"剣道VAR","short_name":"剣道VAR","start_url":".","display":"standalone","background_color":"#000000","theme_color":"#000000","orientation":"any","icons":[{"src":"data:image/svg+xml,<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"><rect width=\"100\" height=\"100\" rx=\"20\" fill=\"%23ff3b30\"/><text x=\"50\" y=\"65\" font-size=\"50\" text-anchor=\"middle\" fill=\"white\">⚔️</text></svg>","sizes":"192x192 512x512","type":"image/svg+xml"}]}'>
+  <!-- Web App Manifest(ホーム画面に追加したとき、アドレスバーなしで開くため) -->
+  <link rel="manifest" href="manifest.webmanifest">
 
   <!-- アプリアイコン (iOS用) -->
-  <link rel="apple-touch-icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="%23ff3b30"/><text x="50" y="65" font-size="50" text-anchor="middle" fill="white">⚔️</text></svg>'>
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
   <!-- WebRTC通信用ライブラリ (PeerJS) -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -76,8 +76,8 @@
       <button id="btnHelpInline" class="icon-btn help-inline" aria-label="使い方を見る">?</button>
     </div>
     <div class="id-line">接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
-    <p class="help-text">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
-    <p class="help-text">この画面を開いている間、画面は自動でオフになりません。手動でロックするとカメラが止まるので、そのままにしておいてください。</p>
+    <p class="help-text" id="idHelp">子機(最大3台)を追加する場合、この番号を各端末で入力してください。1台だけなら気にしなくて大丈夫です。</p>
+    <p class="help-text rotate-hint">横向きにすると、映像を大きく表示できます。</p>
     </div>
 
     <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
@@ -100,6 +100,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
         LIVEに戻る
       </button>
+      <button id="btnBackToReplay" class="action-btn undo-btn">リプレイに戻る</button>
     </div>
 
     <div class="player-toolbar" id="playerToolbar">
@@ -160,7 +161,7 @@
     <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。できれば親機と同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。</p>
 
     <h4>⏪ VARで見返す</h4>
-    <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>
+    <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。リプレイ中は、映像をタップしても再生・一時停止できます。誤って「LIVEに戻る」を押した場合は、数秒間表示される「リプレイに戻る」で元の場面に戻れます。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>
 
     <h4>💾 クリップを保存</h4>
     <p>気になった場面は、VARで見返している間に表示される「クリップを保存」でその場で端末に残せます。対応していれば共有シートがそのまま開くので、LINEなどにすぐ送ることもできます。保存するのは見返していた区間の映像で、ファイル名には日時とカメラ名が自動で入ります。保存するカメラ(選択中のみ/全カメラ)は⚙設定から選べます。</p>
@@ -170,6 +171,9 @@
 
     <h4>🔆 画面が消えない件について</h4>
     <p>親機・子機とも、撮影中は画面が自動でオフにならないようにしています(画面が消えるとカメラも止まってしまうため)。バッテリーの消費は増えるので、できれば電源に繋いでおいてください。なお、電源ボタンなどで手動でロックした場合はこの仕組みでは防げず、カメラが止まります。対応していない端末では、事前に端末の設定で画面の自動ロック時間を長めにしておくことをおすすめします。</p>
+
+    <h4>📱 ホーム画面に追加</h4>
+    <p>ホーム画面に追加すると、アドレスバーのない画面で広く使えます。Androidの場合はChromeのメニュー(︙)から「ホーム画面に追加」または「アプリをインストール」を、iPhoneの場合はSafariの共有ボタンから「ホーム画面に追加」を選んでください。</p>
 
     <h4>ご意見・お問い合わせ</h4>
     <p>不具合のご報告やご意見は、公式LINEにて受け付けております。</p>
