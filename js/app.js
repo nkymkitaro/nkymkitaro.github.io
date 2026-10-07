@@ -248,6 +248,7 @@ document.getElementById('btnConnectToMonitor').addEventListener('click', connect
 
 const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
+const monitorArea = document.getElementById('monitorArea');
 
 document.getElementById('btnRewind').addEventListener('click', () => {
   const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource);
@@ -257,12 +258,14 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   }
   playerToolbar.classList.add('show'); // コマ送り/再生/保存ボタンはVAR中だけ表示する
   saveRow.classList.add('show');
+  monitorArea.classList.add('replaying'); // 横向き時はリプレイ中だけ映像の下に操作列を出す
   renderCamSelector(cameraLink.getAllSources());
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
   player.goLive();
   playerToolbar.classList.remove('show');
   saveRow.classList.remove('show');
+  monitorArea.classList.remove('replaying');
   updateStatusBadge();
   renderCamSelector(cameraLink.getAllSources());
 });
@@ -296,6 +299,7 @@ document.getElementById('btnSpeed').addEventListener('click', () => player.cycle
 document.getElementById('seekBar').addEventListener('input', (e) => player.onSeekInput(e.target.value));
 
 document.getElementById('btnHelp').addEventListener('click', openHelp);
+document.getElementById('btnHelpInline').addEventListener('click', openHelp); // 横向き時の親機用
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);
 

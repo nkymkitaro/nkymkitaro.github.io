@@ -119,14 +119,14 @@ body.camera-previewing .camera-preview { display: block; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 .status-row .icon-btn {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   margin-bottom: 10px;
 }
-.status-row .icon-btn svg { width: 15px; height: 15px; }
+.status-row .icon-btn svg { width: 18px; height: 18px; }
 .rec-dot {
   width: 7px;
   height: 7px;
@@ -158,6 +158,7 @@ body.camera-previewing .camera-preview { display: block; }
 .cam-selector button {
   flex: 1 1 auto;
   min-width: 72px;
+  min-height: 48px;
   padding: 10px 4px;
   font-size: 0.82rem;
 }
@@ -233,8 +234,8 @@ body.camera-previewing .camera-preview { display: block; }
 .speed-btn {
   width: auto;
   min-width: 56px;
-  height: 40px;
-  border-radius: 20px;
+  height: 48px;
+  border-radius: 24px;
   font-size: 0.9rem;
   padding: 0 14px;
   background: var(--glass);
@@ -242,8 +243,8 @@ body.camera-previewing .camera-preview { display: block; }
 }
 .step-btn {
   min-width: 0;
-  padding: 0 10px;
-  font-size: 0.8rem;
+  padding: 0 14px;
+  font-size: 0.85rem;
   white-space: nowrap;
 }
 
@@ -251,35 +252,35 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 28px;
+  height: 44px;
   padding: 0;
-  margin: 10px 0 0 0;
+  margin: 6px 0 0 0;
   background: transparent;
 }
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 6px;
   background: var(--glass-strong);
-  border-radius: 2px;
+  border-radius: 3px;
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--text);
-  margin-top: -6px;
+  margin-top: -11px;
   border: none;
   box-shadow: 0 1px 4px rgba(0,0,0,0.4);
 }
 input[type="range"]::-moz-range-track {
-  height: 4px;
+  height: 6px;
   background: var(--glass-strong);
-  border-radius: 2px;
+  border-radius: 3px;
 }
 input[type="range"]::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--text);
   border: none;
@@ -395,9 +396,19 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
 
+/* 横向きの親機でだけ使う、状態表示横のヘルプボタン(縦向きでは右下の「?」を使う) */
+.help-inline { display: none; font-size: 1.1rem; font-weight: 700; }
+
+/* 縦向き: 右下の「?」ボタンが一番下の操作ボタンに重ならないよう、下に余白を取る */
+body.mode-monitor { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) + 72px); }
+
 /* =========================================================
    横向き(スマホを横にしたとき)
-   撮影・VARの画面は、映像を左に最大限大きく、操作を右の列と映像の下にまとめる。
+   撮影・VARの画面は、映像を左に最大限大きく、操作は右の列の下側と映像の下にまとめる。
+   - よく押すボタン(N秒前VAR・LIVEに戻る・保存・カメラ切り替え)は、親指が届きやすい下側に置く
+   - 稽古・試合の直後で手が震えていても押せるよう、押せる部分は高さ48px以上、主要ボタンは56px、
+     隣り合うボタンの間は10px以上あける
+   - 一時停止・設定・ヘルプはたまにしか使わないので上側に置く(誤って押しにくい位置でもある)
    設定画面・接続前の画面・ヘルプは縦向きのレイアウトのまま読めればよい。
    (max-heightで絞っているのは、PCやタブレットの横長画面まで変えないため)
    ========================================================= */
@@ -406,6 +417,8 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   body.mode-camera.camera-previewing {
     height: 100vh;
     height: 100dvh;
+    /* Android Chromeの100vhはアドレスバーを除いた高さより大きく、上が見切れる原因になる */
+    min-height: 0;
     padding-top: max(8px, env(safe-area-inset-top));
     padding-bottom: max(8px, env(safe-area-inset-bottom));
     display: flex;
@@ -416,32 +429,57 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   body.mode-camera.camera-previewing h1 { display: none; }
 
   /* --- 親機 --- */
+  body.mode-monitor .help-fab { display: none; }
+  body.mode-monitor .help-inline { display: flex; }
+
   body.mode-monitor #monitorArea {
     display: grid !important; /* JSがstyle.display='block'を入れるため */
     flex: 1;
     min-height: 0;
     width: 100%;
     max-width: none;
-    padding: 10px;
+    padding: 8px;
     overflow-y: auto;
-    grid-template-columns: minmax(0, 1fr) clamp(220px, 30%, 260px);
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    /* 映像はたいてい高さで大きさが決まるので、右の列を広めに取っても映像は小さくならない */
+    grid-template-columns: auto minmax(0, 1fr) minmax(330px, 40%);
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      "video   head"
-      "video   actions"
-      "video   save"
-      "seek    ."
-      "toolbar .";
-    column-gap: 12px;
+      "video   video head"
+      "video   video ."
+      "video   video cams"
+      "video   video save"
+      "video   video actions";
+    gap: 10px 12px;
   }
+  /* リプレイ中だけ、映像の下にコマ送り・再生・速度とシークバーを1行で並べる */
+  body.mode-monitor #monitorArea.replaying {
+    grid-template-areas:
+      "video   video head"
+      "video   video ."
+      "video   video cams"
+      "video   video save"
+      "toolbar seek  actions";
+  }
+
   body.mode-monitor .monitor-head { grid-area: head; }
-  body.mode-monitor .monitor-head .status-row { gap: 4px; flex-wrap: wrap; }
-  body.mode-monitor .monitor-head .status-row .icon-btn { width: 30px; height: 30px; }
-  body.mode-monitor .monitor-head .badge { white-space: nowrap; font-size: 0.7rem; padding: 5px 9px; }
   body.mode-monitor .monitor-head .help-text { display: none; } /* 同じ説明はヘルプにもある */
-  body.mode-monitor #myIdDisplay { font-size: 1.3rem !important; }
-  body.mode-monitor .monitor-head .cam-selector { margin-bottom: 0; }
-  body.mode-monitor .cam-selector button { min-width: 64px; padding: 7px 4px; }
+  body.mode-monitor .monitor-head .status-row {
+    justify-content: flex-start;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  body.mode-monitor .monitor-head .badge {
+    margin: 0 auto 0 0; /* 状態表示は左、操作ボタンは右に寄せる */
+    white-space: nowrap;
+    font-size: 0.7rem;
+    padding: 5px 9px;
+  }
+  body.mode-monitor .monitor-head .status-row .icon-btn { margin: 0; }
+  body.mode-monitor .id-line { text-align: left; margin-top: 4px; font-size: 0.85rem; color: var(--text-dim); }
+  body.mode-monitor #myIdDisplay { font-size: 1.1rem !important; }
+
+  body.mode-monitor #camSelector { grid-area: cams; margin: 0 !important; gap: 10px; }
+  body.mode-monitor .cam-selector button { min-width: 64px; margin: 0; }
 
   body.mode-monitor .stage-video {
     grid-area: video;
@@ -452,29 +490,37 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   }
   body.mode-monitor #displayCanvas { width: 100%; height: 100%; }
 
-  body.mode-monitor .seek-row {
+  /* LIVE中のシークバーは使えないので隠す(状態表示にLIVEと出ている) */
+  body.mode-monitor .seek-row { display: none; }
+  body.mode-monitor #monitorArea.replaying .seek-row {
     grid-area: seek;
     display: flex;
     align-items: center;
     gap: 10px;
   }
   body.mode-monitor #seekBar { flex: 1; margin: 0; }
-  body.mode-monitor .time-readout { margin: 0; min-width: 72px; text-align: right; }
+  body.mode-monitor .time-readout { margin: 0; min-width: 64px; text-align: right; }
+
+  body.mode-monitor .player-toolbar { grid-area: toolbar; margin: 0; gap: 10px; justify-content: flex-start; }
+  body.mode-monitor .player-toolbar { flex-wrap: wrap; }
+  body.mode-monitor .player-toolbar button { margin: 0; flex-shrink: 0; }
+  body.mode-monitor .player-toolbar .icon-btn-primary { width: 52px; height: 52px; }
+  body.mode-monitor .player-toolbar .icon-btn-primary svg { width: 22px; height: 22px; }
 
   body.mode-monitor .primary-actions {
     grid-area: actions;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
+    margin: 0;
+    gap: 10px;
+    flex-wrap: nowrap;
   }
-  body.mode-monitor .action-btn { margin: 0; padding: 9px; font-size: 0.9rem; }
-
-  body.mode-monitor .save-row { grid-area: save; align-self: start; margin-top: 6px; }
-
-  body.mode-monitor .player-toolbar { grid-area: toolbar; margin-top: 2px; gap: 10px; }
-  body.mode-monitor .player-toolbar .icon-btn-primary { width: 46px; height: 46px; }
-  body.mode-monitor .player-toolbar .icon-btn-primary svg { width: 20px; height: 20px; }
-  body.mode-monitor .player-toolbar .speed-btn { height: 36px; }
+  body.mode-monitor .action-btn {
+    margin: 0;
+    min-height: 56px;
+    padding: 8px;
+    font-size: 0.95rem;
+  }
+  body.mode-monitor .save-row { grid-area: save; margin: 0; }
+  body.mode-monitor .save-btn { margin: 0; min-height: 52px; }
 
   /* --- 子機(接続後、プレビューが出ている間) --- */
   body.mode-camera.camera-previewing #cameraArea {
@@ -484,7 +530,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
     width: 100%;
     max-width: none;
     padding: 10px;
-    grid-template-columns: minmax(0, 1fr) clamp(180px, 28%, 240px);
+    grid-template-columns: minmax(0, 1fr) clamp(200px, 30%, 260px);
     grid-template-rows: minmax(0, 1fr);
     column-gap: 12px;
   }
@@ -505,11 +551,28 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    padding-bottom: 56px; /* 右下の「?」ボタンに重ならないように */
   }
   body.mode-camera.camera-previewing .camera-side .help-text,
   body.mode-camera.camera-previewing .camera-guide { display: none; }
-  body.mode-camera.camera-previewing #btnConnectToMonitor { width: 100% !important; }
+  body.mode-camera.camera-previewing #btnConnectToMonitor { width: 100% !important; min-height: 52px; }
 
   /* --- ヘルプ・VAR設定のボトムシート: 横向きだと低いので少し高く使う --- */
   .help-sheet { max-height: 85vh; max-height: 85dvh; }
+}
+
+/* 横幅の狭いスマホ(iPhone SEなど)の横向きリプレイ: コマ送り列とシークバーを2段に分ける */
+@media (orientation: landscape) and (max-height: 540px) and (max-width: 760px) {
+  /* 映像の下のコマ送り列(約300px)が1行に収まるよう、右の列を少し詰める */
+  body.mode-monitor #monitorArea { grid-template-columns: auto minmax(0, 1fr) minmax(300px, 40%); }
+  body.mode-monitor .monitor-head .status-row { gap: 8px; }
+  body.mode-monitor .monitor-head .badge { font-size: 0.65rem; padding: 5px 8px; }
+  body.mode-monitor #monitorArea.replaying {
+    grid-template-areas:
+      "video   video   head"
+      "video   video   ."
+      "video   video   cams"
+      "seek    seek    save"
+      "toolbar toolbar actions";
+  }
 }
