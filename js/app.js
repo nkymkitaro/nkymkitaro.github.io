@@ -11,6 +11,7 @@ import { enableWakeLock } from './wake-lock.js';
 import { saveClip } from './clip-saver.js';
 import { tapFeedback } from './haptics.js';
 import { initInstallPrompt } from './install-prompt.js';
+import { setBandState, showSubBand, hideSubBand } from './state-band.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -52,6 +53,7 @@ function startMonitor() {
 
   setInterval(renderRecStatus, 500);
   renderRecStatus();
+  updateStateBand(); // 起動時に「LIVE」の帯を出す
 }
 
 // 「今押したら何秒前まで戻れるか」と、各カメラが録画できているかを表示する。
@@ -127,17 +129,11 @@ function syncRecorderPauseState(sources) {
   });
 }
 
-// LIVE中の状態バッジを、一時停止中かどうかに合わせて描き直す(リプレイ中は触らない)
-function updateStatusBadge() {
-  if (player.isReplay) return;
-  const badge = document.getElementById('statusBadge');
-  if (cameraLink.isPaused) {
-    badge.innerHTML = '⏸ 一時停止中';
-    badge.className = 'badge bg-paused';
-  } else {
-    badge.innerHTML = '<span class="rec-dot"></span>LIVE 撮影中';
-    badge.className = 'badge bg-live';
-  }
+// 状態の帯を、今の状態(リプレイ中 / 一時停止中 / LIVE)に合わせる
+function updateStateBand() {
+  if (player.isReplay) setBandState('replay');
+  else if (cameraLink.isPaused) setBandState('paused');
+  else setBandState('live');
 }
 
 function updatePauseButtonIcon(paused) {
@@ -302,7 +298,7 @@ function setReplayUI(isReplay) {
   playerToolbar.classList.toggle('show', isReplay);
   saveRow.classList.toggle('show', isReplay);
   monitorArea.classList.toggle('replaying', isReplay); // LIVEに戻る・シークバーの表示や横向きの配置もこのクラスで切り替える
-  if (!isReplay) updateStatusBadge();
+  updateStateBand();
   renderCamSelector(cameraLink.getAllSources());
 }
 
@@ -363,13 +359,23 @@ function buildSaveTargets() {
   return [{ id: player.currentCamId, label, frames: recorder.getFrames(player.currentCamId) }];
 }
 
-document.getElementById('btnSaveClip').addEventListener('click', () => {
-  saveClip(buildSaveTargets(), recorder.fps);
+// 保存中はサブ帯で「保存中」を出す。手が震えて二度押ししても、二重に書き出さない
+let savingClip = false;
+document.getElementById('btnSaveClip').addEventListener('click', async () => {
+  if (savingClip) return;
+  savingClip = true;
+  showSubBand('保存中');
+  try {
+    await saveClip(buildSaveTargets(), recorder.fps, { onEncoded: hideSubBand });
+  } finally {
+    hideSubBand();
+    savingClip = false;
+  }
 });
 document.getElementById('btnPauseAll').addEventListener('click', () => {
   const paused = cameraLink.togglePauseAll();
   syncRecorderPauseState(cameraLink.getAllSources());
-  updateStatusBadge();
+  updateStateBand();
   updatePauseButtonIcon(paused);
 });
 document.getElementById('btnStepBack').addEventListener('click', () => player.stepFrame(-1));

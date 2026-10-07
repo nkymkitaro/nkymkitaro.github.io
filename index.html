@@ -67,7 +67,6 @@
   <div id="monitorArea" class="card">
     <div class="monitor-head">
     <div class="status-row">
-      <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
       <button id="btnPauseAll" class="icon-btn" aria-label="録画を一時停止">
         <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>
       </button>
@@ -86,6 +85,11 @@
 
     <div class="stage-video">
       <canvas id="displayCanvas" width="480" height="360"></canvas>
+      <!-- 状態の帯: 今の状態を映像の左上に大きく出す(js/state-band.js) -->
+      <div class="state-bands" aria-live="polite">
+        <div class="state-band" id="stateBand" data-state="live"><span class="state-band-text">LIVE</span></div>
+        <div class="state-band state-band-sub" id="stateSubBand" hidden></div>
+      </div>
     </div>
 
     <div class="seek-row">

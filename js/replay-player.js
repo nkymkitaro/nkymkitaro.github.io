@@ -36,7 +36,6 @@ export class ReplayPlayer {
     this.timeReadout = document.getElementById('timeReadout');
     this.playPauseBtn = document.getElementById('btnPlayPause');
     this.speedBtn = document.getElementById('btnSpeed');
-    this.statusBadge = document.getElementById('statusBadge');
   }
 
   // canvasの内部サイズを映像の縦横比に合わせる。
@@ -81,9 +80,8 @@ export class ReplayPlayer {
     return true;
   }
 
+  // 状態の帯(LIVE / VAR REPLAY)の切り替えは app.js が受け持つ
   _enterReplayState() {
-    this.statusBadge.innerHTML = `🎬&nbsp;VAR REPLAY (${this.playbackSpeed}x)`;
-    this.statusBadge.className = 'badge bg-replay';
     this.seekBar.disabled = false;
     this._renderCurrentFrame();
   }
@@ -176,8 +174,6 @@ export class ReplayPlayer {
     this.isPlaying = false;
     clearInterval(this.replayTimer);
     this.replayTimer = null;
-    this.statusBadge.innerHTML = '<span class="rec-dot"></span>LIVE 撮影中';
-    this.statusBadge.className = 'badge bg-live';
     this.seekBar.disabled = true;
     this.seekBar.max = 0;
     this.seekBar.value = 0;
@@ -187,10 +183,7 @@ export class ReplayPlayer {
 
   setSpeed(speed) {
     this.playbackSpeed = speed;
-    if (this.isReplay) {
-      this.statusBadge.innerHTML = `🎬&nbsp;VAR REPLAY (${this.playbackSpeed}x)`;
-      if (this.isPlaying) this._startPlaybackLoop();
-    }
+    if (this.isReplay && this.isPlaying) this._startPlaybackLoop();
     this._updateSpeedButton();
   }
 

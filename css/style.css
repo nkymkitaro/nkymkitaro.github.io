@@ -19,6 +19,13 @@
   --radius-md: 12px;
   --gap: 10px;
   --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  /* 動きの共通設定(デザインポリシー 2-2・2-4・10章)。動きの速さ・弾み方はここだけで決め、どの画面もこれを使う */
+  --dur-fast: 0.1s;   /* 押した瞬間の反応など、いちばん短い動き */
+  --dur-base: 0.18s;  /* 状態の帯の出入り、ボタンの戻りなど */
+  --dur-slow: 0.26s;  /* ボトムシートなど、大きな面の出入り(これより長い動きは作らない) */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);       /* キレよく減速して止まる */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* わずかに行き過ぎてから収まる */
 }
 * {
   box-sizing: border-box;
@@ -60,7 +67,7 @@ input, button {
   font-weight: 800;
   font-family: inherit;
   touch-action: manipulation;
-  transition: background-color 0.2s var(--ease), opacity 0.15s var(--ease), transform 0.15s var(--ease);
+  transition: background-color var(--dur-base) var(--ease-out), opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 input {
   background: var(--surface-2);
@@ -101,22 +108,6 @@ canvas {
   object-fit: contain;
 }
 body.camera-previewing .camera-preview { display: block; }
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  letter-spacing: 0.3px;
-  margin-bottom: 10px;
-  background: var(--glass);
-  border: 1px solid var(--hairline);
-}
-.badge.bg-live { color: var(--accent-live); }
-.badge.bg-replay { color: var(--accent-replay); }
-.badge.bg-paused { color: var(--text-dim); }
 .status-row {
   display: flex;
   align-items: center;
@@ -136,12 +127,6 @@ body.camera-previewing .camera-preview { display: block; }
   background: currentColor;
   flex: 0 0 auto;
 }
-.badge.bg-live .rec-dot { animation: pulse 1.4s ease-in-out infinite; }
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.35; transform: scale(0.8); }
-}
-
 #cameraArea, #monitorArea { display: none; }
 .controls-row {
   display: flex;
@@ -176,7 +161,7 @@ body.camera-previewing .camera-preview { display: block; }
   letter-spacing: 0.3px;
   margin-top: 8px;
   font-variant-numeric: tabular-nums;
-  transition: color 0.2s var(--ease);
+  transition: color var(--dur-base) var(--ease-out);
 }
 .time-readout.is-replay { color: var(--accent-replay); }
 
@@ -310,7 +295,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   z-index: 80;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring);
 }
 .toast.show {
   opacity: 1;
@@ -348,7 +333,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   z-index: 55;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.25s var(--ease);
+  transition: opacity var(--dur-base) var(--ease-out);
 }
 .help-overlay.open { opacity: 1; pointer-events: auto; }
 .help-sheet {
@@ -365,7 +350,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   z-index: 58;
   text-align: left;
   transform: translateY(100%);
-  transition: transform 0.28s var(--ease);
+  transition: transform var(--dur-slow) var(--ease-out);
   box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
 }
 .help-sheet.open { transform: translateY(0); }
@@ -394,7 +379,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   background: var(--glass);
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
+  transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
 
@@ -527,15 +512,9 @@ body.mode-monitor .help-inline { display: flex; }
   body.mode-monitor .monitor-head { grid-area: head; }
   body.mode-monitor .monitor-head .help-text { display: none; } /* 同じ説明はヘルプにもある */
   body.mode-monitor .monitor-head .status-row {
-    justify-content: flex-start;
+    justify-content: flex-end; /* たまにしか使わない操作は右上に寄せる */
     gap: 10px;
     flex-wrap: wrap;
-  }
-  body.mode-monitor .monitor-head .badge {
-    margin: 0 auto 0 0; /* 状態表示は左、操作ボタンは右に寄せる */
-    white-space: nowrap;
-    font-size: 0.7rem;
-    padding: 5px 9px;
   }
   body.mode-monitor .monitor-head .status-row .icon-btn { margin: 0; }
   body.mode-monitor .id-line { text-align: left; margin-top: 4px; font-size: 0.85rem; color: var(--text-dim); }
@@ -634,7 +613,6 @@ body.mode-monitor .help-inline { display: flex; }
   /* 映像の下のコマ送り列(約300px)が1行に収まるよう、右の列を少し詰める */
   body.mode-monitor #monitorArea { grid-template-columns: auto minmax(0, 1fr) minmax(300px, 40%); }
   body.mode-monitor .monitor-head .status-row { gap: 8px; }
-  body.mode-monitor .monitor-head .badge { font-size: 0.65rem; padding: 5px 8px; }
   body.mode-monitor #monitorArea.replaying {
     grid-template-areas:
       "video   video   head"
@@ -642,5 +620,77 @@ body.mode-monitor .help-inline { display: flex; }
       "video   video   cams"
       "seek    seek    save"
       "toolbar toolbar actions";
+  }
+}
+
+/* =========================================================
+   状態の帯(デザインポリシー 2-1・2-2・10章の共通部品)
+   今の状態(LIVE / VAR REPLAY / 一時停止中)を、映像の左上に大きく太い文字で出す。
+   少し離れた所からでも読めるよう、文字は Murecho 900、帯は不透明にして映像の明るさに負けないようにする。
+   出入りは勢いよく入って、わずかに行き過ぎてから収まる(--dur-base と --ease-spring)。
+   保存中などの一時的な状態は、主の帯の下に小さい帯を重ねる。
+   ========================================================= */
+.stage-video { overflow: hidden; border-radius: var(--radius-md); }
+.state-bands {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  pointer-events: none; /* 映像のタップ(再生・一時停止)を邪魔しない */
+}
+.state-band {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 26px 7px 14px;
+  font-weight: 900;
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  /* 右端を斜めに切る */
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+/* 色は状態を表す2色だけ。文字とのコントラスト比: LIVE 白/赤 3.5:1、VAR REPLAY 黒/アンバー 9:1(大きな文字の基準 3:1 以上) */
+.state-band[data-state="live"] { background: var(--accent-live); color: #fff; }
+.state-band[data-state="replay"] { background: var(--accent-replay); color: #1a1200; }
+.state-band[data-state="paused"] { background: var(--surface-2); color: var(--text); }
+.state-band[data-state="live"]::before {
+  content: '';
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.state-band-sub {
+  font-size: 0.95rem;
+  padding: 6px 20px 6px 14px;
+  background: var(--text);
+  color: #000;
+}
+.state-band-sub[hidden] { display: none; }
+.state-band.band-enter { animation: band-in var(--dur-base) var(--ease-spring) both; }
+@keyframes band-in {
+  from { transform: translateX(-105%); }
+  to { transform: translateX(0); }
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  .state-bands { top: 8px; }
+  .state-band { font-size: 1.2rem; padding: 6px 22px 6px 12px; }
+  .state-band-sub { font-size: 0.85rem; }
+}
+
+/* 端末で「動きを減らす」が設定されている場合は、動きを最小限にする(デザインポリシー 2-4) */
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0s; --dur-base: 0s; --dur-slow: 0s; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }
