@@ -84,6 +84,23 @@ async function blobToDrawable(blob) {
   });
 }
 
+// クリップの途中で子機が回転した場合など、コマの縦横比が動画の枠と違うときは
+// 引き伸ばさずに黒帯を付けて収める
+function drawContained(ctx, img, boxW, boxH) {
+  const w = img.width || img.videoWidth;
+  const h = img.height || img.videoHeight;
+  if (w === boxW && h === boxH) {
+    ctx.drawImage(img, 0, 0, boxW, boxH);
+    return;
+  }
+  const scale = Math.min(boxW / w, boxH / h);
+  const dw = Math.round(w * scale);
+  const dh = Math.round(h * scale);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, boxW, boxH);
+  ctx.drawImage(img, Math.round((boxW - dw) / 2), Math.round((boxH - dh) / 2), dw, dh);
+}
+
 // framesの並びをcanvasに描き直しながら、MediaRecorderでそのまま動画にエンコードする。
 // (録画バッファの長さぶん、実時間と同じだけ時間がかかる。動画の長さは実際に撮った長さと一致させる)
 async function encodeFramesToVideo(frames, fps) {
@@ -155,7 +172,7 @@ async function encodeFramesToVideo(frames, fps) {
       continue;
     }
     if (drawable) {
-      ctx.drawImage(drawable, 0, 0, width, height);
+      drawContained(ctx, drawable, width, height);
       if (drawable.close) drawable.close();
     }
   }

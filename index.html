@@ -49,19 +49,22 @@
 
   <!-- 2. 子機（カメラ専用）画面 -->
   <div id="cameraArea" class="card">
-    <h3 style="margin-top:0;">📷 子機カメラ</h3>
-    <p style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
-    <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
-    <p class="help-text" style="text-align:center;">できれば親機と同じWi-Fiに繋いでから入力してください。接続が安定し、モバイル通信量も節約できます。</p>
-    <p class="help-text" style="text-align:center;">接続中は画面が自動でオフにならないようになります。ただし手動で画面をロックするとカメラが止まってしまうので、そのままにしておいてください。</p>
-    <br>
-    <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px;">接続する</button>
-    <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
-    <video id="localVideo" autoplay playsinline muted style="display:none;"></video>
+    <div class="camera-side">
+      <h3 style="margin-top:0;">📷 子機カメラ</h3>
+      <p class="camera-guide" style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
+      <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
+      <p class="help-text" style="text-align:center;">できれば親機と同じWi-Fiに繋いでから入力してください。接続が安定し、モバイル通信量も節約できます。</p>
+      <p class="help-text" style="text-align:center;">接続中は画面が自動でオフにならないようになります。ただし手動で画面をロックするとカメラが止まってしまうので、そのままにしておいてください。</p>
+      <p class="help-text" style="text-align:center;">横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
+      <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px; margin-top: 16px;">接続する</button>
+      <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:600;">未接続</div>
+    </div>
+    <video id="localVideo" class="camera-preview" autoplay playsinline muted></video>
   </div>
 
   <!-- 3. 親機（モニター＋カメラ）画面 -->
   <div id="monitorArea" class="card">
+    <div class="monitor-head">
     <div class="status-row">
       <div class="badge bg-live" id="statusBadge"><span class="rec-dot"></span>LIVE 撮影中</div>
       <button id="btnPauseAll" class="icon-btn" aria-label="録画を一時停止">
@@ -76,13 +79,16 @@
     <p class="help-text">この画面を開いている間、画面は自動でオフになりません。手動でロックするとカメラが止まるので、そのままにしておいてください。</p>
 
     <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
+    </div>
 
-    <div style="position:relative; width:100%;">
+    <div class="stage-video">
       <canvas id="displayCanvas" width="480" height="360"></canvas>
     </div>
 
-    <input type="range" id="seekBar" min="0" max="0" value="0" step="1" disabled>
-    <div class="time-readout" id="timeReadout">LIVE</div>
+    <div class="seek-row">
+      <input type="range" id="seekBar" min="0" max="0" value="0" step="1" disabled>
+      <div class="time-readout" id="timeReadout">LIVE</div>
+    </div>
 
     <div class="controls-row primary-actions">
       <button id="btnRewind" class="btn-replay action-btn">

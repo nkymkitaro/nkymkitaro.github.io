@@ -85,7 +85,20 @@ canvas {
   background: #000;
   border-radius: var(--radius-md);
   display: block;
+  object-fit: contain; /* 枠と映像の縦横比が違っても引き伸ばさない */
 }
+.stage-video { position: relative; width: 100%; }
+
+/* 子機: 接続を始めたら自分のカメラ映像をプレビューとして映す */
+.camera-preview {
+  display: none;
+  width: 100%;
+  margin-top: 14px;
+  background: #000;
+  border-radius: var(--radius-md);
+  object-fit: contain;
+}
+body.camera-previewing .camera-preview { display: block; }
 .badge {
   display: inline-flex;
   align-items: center;
@@ -314,7 +327,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 /* --- 使い方ヘルプ(FAB + ボトムシート) --- */
 .help-fab {
   position: fixed;
-  right: 18px;
+  right: max(18px, env(safe-area-inset-right));
   bottom: max(18px, env(safe-area-inset-bottom));
   width: 48px;
   height: 48px;
@@ -381,3 +394,122 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   transition: opacity 0.15s var(--ease), transform 0.15s var(--ease);
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
+
+/* =========================================================
+   横向き(スマホを横にしたとき)
+   撮影・VARの画面は、映像を左に最大限大きく、操作を右の列と映像の下にまとめる。
+   設定画面・接続前の画面・ヘルプは縦向きのレイアウトのまま読めればよい。
+   (max-heightで絞っているのは、PCやタブレットの横長画面まで変えないため)
+   ========================================================= */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor,
+  body.mode-camera.camera-previewing {
+    height: 100vh;
+    height: 100dvh;
+    padding-top: max(8px, env(safe-area-inset-top));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  body.mode-monitor h1,
+  body.mode-camera.camera-previewing h1 { display: none; }
+
+  /* --- 親機 --- */
+  body.mode-monitor #monitorArea {
+    display: grid !important; /* JSがstyle.display='block'を入れるため */
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: none;
+    padding: 10px;
+    overflow-y: auto;
+    grid-template-columns: minmax(0, 1fr) clamp(220px, 30%, 260px);
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "video   head"
+      "video   actions"
+      "video   save"
+      "seek    ."
+      "toolbar .";
+    column-gap: 12px;
+  }
+  body.mode-monitor .monitor-head { grid-area: head; }
+  body.mode-monitor .monitor-head .status-row { gap: 4px; flex-wrap: wrap; }
+  body.mode-monitor .monitor-head .status-row .icon-btn { width: 30px; height: 30px; }
+  body.mode-monitor .monitor-head .badge { white-space: nowrap; font-size: 0.7rem; padding: 5px 9px; }
+  body.mode-monitor .monitor-head .help-text { display: none; } /* 同じ説明はヘルプにもある */
+  body.mode-monitor #myIdDisplay { font-size: 1.3rem !important; }
+  body.mode-monitor .monitor-head .cam-selector { margin-bottom: 0; }
+  body.mode-monitor .cam-selector button { min-width: 64px; padding: 7px 4px; }
+
+  body.mode-monitor .stage-video {
+    grid-area: video;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body.mode-monitor #displayCanvas { width: 100%; height: 100%; }
+
+  body.mode-monitor .seek-row {
+    grid-area: seek;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  body.mode-monitor #seekBar { flex: 1; margin: 0; }
+  body.mode-monitor .time-readout { margin: 0; min-width: 72px; text-align: right; }
+
+  body.mode-monitor .primary-actions {
+    grid-area: actions;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  body.mode-monitor .action-btn { margin: 0; padding: 9px; font-size: 0.9rem; }
+
+  body.mode-monitor .save-row { grid-area: save; align-self: start; margin-top: 6px; }
+
+  body.mode-monitor .player-toolbar { grid-area: toolbar; margin-top: 2px; gap: 10px; }
+  body.mode-monitor .player-toolbar .icon-btn-primary { width: 46px; height: 46px; }
+  body.mode-monitor .player-toolbar .icon-btn-primary svg { width: 20px; height: 20px; }
+  body.mode-monitor .player-toolbar .speed-btn { height: 36px; }
+
+  /* --- 子機(接続後、プレビューが出ている間) --- */
+  body.mode-camera.camera-previewing #cameraArea {
+    display: grid !important;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: none;
+    padding: 10px;
+    grid-template-columns: minmax(0, 1fr) clamp(180px, 28%, 240px);
+    grid-template-rows: minmax(0, 1fr);
+    column-gap: 12px;
+  }
+  body.mode-camera.camera-previewing .camera-preview {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+  }
+  body.mode-camera.camera-previewing .camera-side {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  body.mode-camera.camera-previewing .camera-side .help-text,
+  body.mode-camera.camera-previewing .camera-guide { display: none; }
+  body.mode-camera.camera-previewing #btnConnectToMonitor { width: 100% !important; }
+
+  /* --- ヘルプ・VAR設定のボトムシート: 横向きだと低いので少し高く使う --- */
+  .help-sheet { max-height: 85vh; max-height: 85dvh; }
+}

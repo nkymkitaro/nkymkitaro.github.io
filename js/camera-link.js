@@ -188,6 +188,12 @@ export class CameraLink {
         audio: false,
       });
       this.ownStream = stream;
+      // 構図を合わせられるよう、自分のカメラ映像をプレビューとして映す
+      const preview = document.getElementById('localVideo');
+      if (preview) {
+        preview.srcObject = stream;
+        document.body.classList.add('camera-previewing');
+      }
       statusEl.textContent = '接続しています...';
       this.peer.call('kendo-var-room-' + targetId, stream);
       statusEl.textContent = '送信中';

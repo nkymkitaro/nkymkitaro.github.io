@@ -39,6 +39,17 @@ export class ReplayPlayer {
     this.statusBadge = document.getElementById('statusBadge');
   }
 
+  // canvasの内部サイズを映像の縦横比に合わせる。
+  // (横向きで撮った子機・縦向きの親機など、カメラごとに縦横比が違っても引き伸ばさないため。
+  //  表示上の大きさはCSSの object-fit: contain で画面に収める)
+  _fitCanvasTo(width, height) {
+    if (!width || !height) return;
+    if (this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+    }
+  }
+
   // ライブ中は録画バッファとは別に、選択中カメラの映像をそのまま描画し続ける
   startLiveLoop(getActiveVideoEl) {
     if (this._liveLoopStarted) return;
@@ -47,6 +58,7 @@ export class ReplayPlayer {
       if (!this.isReplay) {
         const video = getActiveVideoEl();
         if (video && video.readyState >= video.HAVE_CURRENT_DATA) {
+          this._fitCanvasTo(video.videoWidth, video.videoHeight);
           this.ctx.drawImage(video, 0, 0, this.canvas.width, this.canvas.height);
         }
       }
@@ -203,6 +215,7 @@ export class ReplayPlayer {
         if (drawable.close) drawable.close();
         return; // 描画中に追い越されたら破棄(古いコマが遅れて出るのを防ぐ)
       }
+      this._fitCanvasTo(drawable.width, drawable.height);
       this.ctx.drawImage(drawable, 0, 0, this.canvas.width, this.canvas.height);
       if (drawable.close) drawable.close();
     } catch (err) {

@@ -36,15 +36,15 @@ const varSettings = {
 function startMonitor() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('monitorArea').style.display = 'block';
+  document.body.classList.add('mode-monitor'); // 横向き時のレイアウト切り替え用
   enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
 
   recorder.start(); // カメラが増えるたびに登録していく。まだ0台でも動かして問題ない
   cameraLink.onCamsChanged = handleCamsChanged;
   cameraLink.onCamRemoved = (camId) => recorder.unregisterCamera(camId);
 
-  cameraLink.startAsMonitor((video) => {
-    player.canvas.width = video.videoWidth || 480;
-    player.canvas.height = video.videoHeight || 360;
+  // 表示サイズは映像の縦横比に合わせてReplayPlayer側で自動調整する
+  cameraLink.startAsMonitor(() => {
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
   });
 }
@@ -52,6 +52,7 @@ function startMonitor() {
 function startCamera() {
   document.getElementById('setupArea').style.display = 'none';
   document.getElementById('cameraArea').style.display = 'block';
+  document.body.classList.add('mode-camera'); // 横向き時のレイアウト切り替え用
   enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
   cameraLink.onPauseStateChanged = (isPaused) => {
     const statusEl = document.getElementById('cameraStatus');
