@@ -5,6 +5,7 @@
 import { showToast } from './toast.js';
 
 const MAX_REMOTE_CAMS = 3; // 親機1台 + 子機最大3台 = 合計4台まで
+const LOCAL_CAMERA_NUMBER = 1; // 親機自身のカメラは「カメラ1」。参加してきた子機は「カメラ2」から(ゲームのプレイヤー番号のように)
 const MAX_STALE_DISCONNECTED = 2; // 切断済みでも直後はレビューできるよう少しだけ残しておく数
 const JOIN_TIMEOUT_MS = 10000; // 子機が参加を試みてから、あきらめるまでの時間
 const RECONNECT_INTERVAL_MS = 3000; // 子機の通信が切れたとき、繋ぎ直しを試す間隔
@@ -26,7 +27,6 @@ export class CameraLink {
     this.isPaused = false; // 親機側: 全カメラを一時停止中かどうか
     this.ownStream = null; // 子機側: 自分がカメラから取得した映像(一時停止トグル用)
 
-    this._nextChildNumber = 1;
     this.localMonitorVideo = document.getElementById('localMonitorVideo');
   }
 
@@ -36,7 +36,7 @@ export class CameraLink {
 
   getAllSources() {
     return [
-      { id: 'local', label: '親機', videoEl: this.localMonitorVideo, connected: true },
+      { id: 'local', label: `カメラ${LOCAL_CAMERA_NUMBER}`, videoEl: this.localMonitorVideo, connected: true },
       ...this.remoteCams.map((c) => ({ id: c.id, label: c.label, videoEl: c.videoEl, connected: c.connected })),
     ];
   }
@@ -108,7 +108,7 @@ export class CameraLink {
     }
 
     this._pruneStaleDisconnected();
-    const number = this._nextChildNumber++;
+    const number = this._freeCameraNumber();
     const videoEl = document.createElement('video');
     videoEl.autoplay = true;
     videoEl.playsInline = true;
@@ -116,9 +116,18 @@ export class CameraLink {
     videoEl.style.display = 'none';
     document.body.appendChild(videoEl);
 
-    const camEntry = { id: camId, label: '子機' + number, number, videoEl, connected: true, call: null, dataConn: null };
+    const camEntry = { id: camId, label: `カメラ${number}`, number, videoEl, connected: true, call: null, dataConn: null };
     this.remoteCams.push(camEntry);
     this._attachCall(camEntry, call);
+  }
+
+  // 新しく参加してきたカメラの番号。使われていない中でいちばん小さい番号にする
+  // (切断済みで残っているカメラの番号とも重ならないようにして、同じ名前が2つ並ばないようにする)
+  _freeCameraNumber() {
+    const used = new Set(this.remoteCams.map((c) => c.number));
+    let n = LOCAL_CAMERA_NUMBER + 1;
+    while (used.has(n)) n++;
+    return n;
   }
 
   // 子機1台ぶんの着信(映像)と、合図用の回線を、camEntryに結びつける。
@@ -135,7 +144,7 @@ export class CameraLink {
     camEntry.dataConn = dataConn;
     dataConn.on('error', (e) => console.error(e));
     dataConn.on('open', () => {
-      // 子機側が「参加できた」と分かるよう、まず受け入れたことと自分の番号を返す
+      // 子機側が「参加できた」と分かるよう、まず受け入れたことと、カメラの番号(カメラ2なら2)を返す
       dataConn.send({ type: 'JOINED', number: camEntry.number });
       if (this.isPaused) dataConn.send('PAUSE'); // 一時停止中に繋いできた子機にも合わせる
     });
@@ -147,7 +156,7 @@ export class CameraLink {
       if (this.activeSource === camEntry.id) {
         // ライブ表示中に切断された場合、固まった最後のコマを映し続けないよう親機に戻す
         this.activeSource = 'local';
-        showToast(`${camEntry.label}が切断されたため、親機の映像に戻しました`);
+        showToast(`${camEntry.label}が切断されたため、カメラ${LOCAL_CAMERA_NUMBER}の映像に戻しました`);
       }
       this._notifyCamsChanged();
     };

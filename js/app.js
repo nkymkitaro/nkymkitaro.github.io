@@ -104,7 +104,7 @@ const camBand = createStateBand({
 });
 const cameraStatusEl = document.getElementById('cameraStatus');
 let codeInput = null;
-let cameraNumber = 0; // 親機から教えてもらった、何台目のカメラか(例: カメラ2)
+let cameraNumber = 0; // 親機から教えてもらった、カメラの番号(カメラ2なら2。親機自身がカメラ1)
 let cameraPaused = false;
 
 // 参加できなかった理由。番号は消さず、短く知らせる
@@ -161,7 +161,7 @@ window.addEventListener('resize', fitSendFrame);
 // 送信中の帯: 一時停止中ならそう出し、そうでなければ「送信中」とカメラの番号を出す
 function updateCameraBand() {
   camBand.setState(cameraPaused ? 'paused' : 'sending');
-  camBand.showSub(`カメラ${cameraNumber + 1}`); // 親機のカメラを1台目として数える
+  camBand.showSub(`カメラ${cameraNumber}`);
 }
 
 // 4桁そろったら自動でつなぐ。失敗したら番号を消さずに理由を出し、入れ直せばまたつなぐ
