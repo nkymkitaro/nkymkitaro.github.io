@@ -14,7 +14,8 @@ import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
-import { initStartScreen } from './start-screen.js';
+import { initStartScreen, rememberRole } from './start-screen.js';
+import { initPrepPage, openPrep } from './prep-page.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -112,10 +113,13 @@ const JOIN_FAILURE_MESSAGES = {
   camera: 'カメラを使えませんでした。カメラの利用を許可してください',
   'not-found': 'この番号は見つかりませんでした。番号をご確認ください',
   full: '満員のため参加できませんでした',
+  // 番号は通ったのに、映像の経路を作れなかった。ネットワークを変えない限りつながらないので、対処まで伝える
+  unreachable: 'この端末からは直接つながりませんでした。はじめた端末と同じWi‑Fiか、はじめた端末のテザリングにつないでください',
   closed: '接続できませんでした。もう一度お試しください',
   timeout: '接続できませんでした。もう一度お試しください',
   network: '通信できませんでした。電波をご確認ください',
 };
+const LONG_TOAST_MS = 7000; // 対処まで書いた長めの知らせは、読み終えられるよう長く出す
 
 function startCamera() {
   leaveSetupScreen();
@@ -128,6 +132,11 @@ function startCamera() {
   cameraLink.onConnectionLost = () => {
     camBand.setState('lost');
     camBand.showSub('再接続しています…');
+  };
+  // 繋ぎ直しを打ち切った(直接つながらない状態が続いた)。自動では試さなくなるので、その旨と対処を出す
+  cameraLink.onReconnectGaveUp = () => {
+    camBand.showSub('再接続できませんでした');
+    showToast(JOIN_FAILURE_MESSAGES.unreachable, { duration: LONG_TOAST_MS });
   };
   cameraLink.onReconnected = (number) => {
     if (number) cameraNumber = number;
@@ -176,7 +185,10 @@ async function connectToMonitor(targetId) {
   cameraStatusEl.textContent = '';
   codeInput.setBusy(false);
   if (!result.ok) {
-    if (result.reason !== 'cancelled') showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout);
+    if (result.reason !== 'cancelled') {
+      const long = result.reason === 'unreachable';
+      showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout, long ? { duration: LONG_TOAST_MS } : undefined);
+    }
     return;
   }
   // つながった: 入力の部品を片付けて、カメラの映像を画面いっぱいに出す
@@ -381,6 +393,8 @@ initInstallPrompt();
 
 // --- イベント配線 ---
 initStartScreen({ monitor: startMonitor, camera: startCamera });
+// 初めて開いたときに「はじめる前に」を出す。「1台だけで使う」を選んだ人には、スタート画面の「はじめる」に「前回」の印を付けておく
+initPrepPage({ onFirstRunSolo: () => rememberRole('monitor') });
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
 
 const playerToolbar = document.getElementById('playerToolbar');
@@ -491,6 +505,11 @@ document.getElementById('btnSpeed').addEventListener('click', () => player.cycle
 document.getElementById('seekBar').addEventListener('input', (e) => player.onSeekInput(e.target.value));
 
 document.getElementById('btnHelp').addEventListener('click', openHelp);
+// ヘルプの一番上の「はじめる前に」から、準備ページをいつでも開ける
+document.getElementById('btnOpenPrep').addEventListener('click', () => {
+  closeHelp();
+  openPrep();
+});
 document.getElementById('btnHelpInline').addEventListener('click', openHelp); // 横向き時の親機用
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);

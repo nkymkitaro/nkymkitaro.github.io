@@ -13,6 +13,7 @@
   --glass-strong: rgba(255,255,255,0.16);
   --text: #ffffff;
   --text-dim: #8e8e93;
+  --text-soft: #b8b8b8; /* 補足の文字。暗い背景の上で、--text-dim より読みやすい(コントラスト比 9:1 以上) */
   --accent-live: #ff3b30;
   --accent-replay: #ff9f0a;
   --radius-lg: 16px;
@@ -289,7 +290,8 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   top: max(14px, env(safe-area-inset-top));
   left: 50%;
   transform: translateX(-50%) translateY(-16px);
-  max-width: 86vw;
+  width: max-content;
+  max-width: min(86vw, 30em);
   background: var(--surface-2);
   border: 1px solid var(--hairline);
   border-radius: 14px;
@@ -299,6 +301,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   line-height: 1.5;
   color: var(--text);
   text-align: center;
+  text-wrap: balance;
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
   z-index: 80;
   opacity: 0;
@@ -762,7 +765,7 @@ body.mode-camera #cameraArea { display: flex; flex: 1; min-height: 0; flex-direc
   user-select: text;
 }
 .join-status { min-height: 1.6em; margin-top: 16px; font-weight: 800; font-size: 1rem; color: var(--text); }
-.join-note { margin: auto 0 0; padding: 20px 0 8px; font-size: 0.85rem; color: var(--text-dim); }
+.join-note { margin: auto 0 0; padding: 20px 12px 64px; max-width: 26em; font-size: 0.9rem; font-weight: 800; line-height: 1.6; color: var(--text); } /* つなぐ前に必ず必要なので、控えめにしすぎない */
 
 .send-view { display: none; }
 body.camera-sending { padding: 0; }
@@ -827,7 +830,194 @@ body.camera-sending .send-frame { animation: video-expand var(--dur-base) var(--
   .join-guide { margin: 4px 0 10px; }
   .code-box { width: 56px; height: 64px; font-size: 2rem; }
   .join-status { margin-top: 8px; }
-  .join-note { padding: 10px 0 4px; }
+  .join-note { padding: 10px 56px 4px 0; }
+}
+
+/* =========================================================
+   はじめる前に(準備ページ)
+   2台以上で使うとき、全部のスマホを同じWi-Fiにそろえてもらうためのページ。
+   初めて開いたときに1回だけ出し(html.needs-prep)、ヘルプからいつでも開ける(.show)。
+   押した時の反応・動きの値は共通部品(.press と :root の動きの設定)を使う。
+   縦向きは1列、横向きは左(見出し・図・テザリング)と右(ステップ・ボタン)に分ける。
+   ========================================================= */
+.nowrap { white-space: nowrap; }
+.prep-area {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 70; /* ヘルプのシート(58)・「?」(60)より上、トースト(80)より下 */
+  background: var(--bg);
+  overflow-y: auto;
+  text-align: left;
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+.prep-area.show,
+html.needs-prep .prep-area { display: flex; flex-direction: column; }
+.prep-inner {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.prep-head { display: flex; flex-direction: column; gap: 6px; }
+.prep-brand { font-size: 0.875rem; font-weight: 800; color: var(--text-dim); letter-spacing: 0.04em; }
+.prep-title { margin: 0; font-size: 2.5rem; line-height: 1.15; font-weight: 900; outline: none; }
+.prep-sub { margin: 0; font-size: 0.95rem; line-height: 1.6; font-weight: 500; color: var(--text-soft); }
+
+.prep-figure {
+  margin: 0;
+  min-height: 132px;
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: var(--text);
+}
+.prep-phone { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.prep-phone figcaption { font-size: 0.8125rem; font-weight: 800; white-space: nowrap; }
+
+.prep-steps { display: flex; flex-direction: column; gap: 10px; }
+.prep-step {
+  width: 100%;
+  min-height: 84px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px 12px 0;
+  border: 2px solid var(--surface-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  overflow: hidden;
+  text-align: left;
+  font-family: inherit;
+}
+.prep-step.press {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+.prep-step.press.is-pressed { transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out); }
+.prep-step[aria-pressed="true"] { border-color: var(--text); background: var(--surface-2); }
+/* 番号札: 白地に黒の数字。右端を斜めに切る(状態の帯と同じ形) */
+.prep-num {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 6px;
+  box-sizing: border-box;
+  background: var(--text);
+  color: #000;
+  font-size: 1.875rem;
+  font-weight: 900;
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 0 100%);
+}
+.prep-step-text { flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.prep-step-title { font-size: 1.125rem; line-height: 1.35; font-weight: 800; color: var(--text); }
+.prep-step-detail { font-size: 0.8125rem; line-height: 1.55; font-weight: 500; color: var(--text-soft); }
+.prep-check {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--text-dim);
+  border-radius: 50%;
+  color: #000;
+  transition: background-color var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out);
+}
+.prep-check svg { opacity: 0; transform: scale(0.4); transition: transform var(--dur-base) var(--ease-spring), opacity var(--dur-fast) var(--ease-out); }
+.prep-step[aria-pressed="true"] .prep-check { background: var(--text); border-color: var(--text); }
+.prep-step[aria-pressed="true"] .prep-check svg { opacity: 1; transform: scale(1); }
+
+.prep-tether {
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prep-tether-title { font-size: 0.9375rem; font-weight: 800; }
+.prep-tether p { margin: 0; font-size: 0.8125rem; line-height: 1.6; font-weight: 500; color: var(--text-soft); }
+
+.prep-actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.prep-ok, .prep-solo { width: 100%; margin: 0; font-family: inherit; }
+.prep-ok {
+  height: 60px;
+  border: none;
+  border-radius: 14px;
+  background: var(--text);
+  color: #000;
+  font-size: 1.25rem;
+  font-weight: 900;
+}
+.prep-solo {
+  height: 48px;
+  border: none;
+  background: transparent;
+  color: #d4d4d4;
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+/* ヘルプの一番上から、このページを開く */
+.help-sheet .prep-link { margin: 0 0 14px; }
+
+@media (orientation: landscape) and (max-height: 540px) {
+  .prep-area { padding-top: max(10px, env(safe-area-inset-top)); padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  .prep-inner {
+    max-width: 900px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    grid-template-areas:
+      "head   steps"
+      "figure steps"
+      "tether actions";
+    gap: 10px 24px;
+    align-content: start;
+  }
+  .prep-head { grid-area: head; gap: 2px; }
+  .prep-figure { grid-area: figure; min-height: 0; padding: 8px 0; gap: 8px; }
+  .prep-phone figcaption { font-size: 0.75rem; }
+  .prep-figure svg:not(.prep-arrow) { width: 36px; height: 56px; }
+  .prep-arrow { width: 56px; height: 28px; }
+  .prep-steps { grid-area: steps; align-self: start; gap: 8px; }
+  .prep-tether { grid-area: tether; align-self: end; padding: 10px 14px; gap: 4px; }
+  .prep-actions { grid-area: actions; margin-top: 0; align-self: end; gap: 4px; }
+  .prep-title { font-size: 1.75rem; }
+  .prep-step { min-height: 64px; gap: 12px; padding: 8px 12px 8px 0; }
+  .prep-num { width: 48px; height: 48px; font-size: 1.625rem; }
+  .prep-step-title { font-size: 1rem; line-height: 1.3; }
+  .prep-step-detail { font-size: 0.75rem; line-height: 1.4; }
+  .prep-ok { height: 52px; }
+  .prep-solo { height: 40px; }
+}
+.prep-step-title { text-wrap: balance; }
+/* 縦長でも背の低い端末(iPhone SE など)は、余白を詰めて1画面に収める */
+@media (orientation: portrait) and (max-height: 700px) {
+  .prep-area { padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .prep-inner { gap: 12px; }
+  .prep-title { font-size: 2.125rem; }
+  .prep-figure { min-height: 88px; padding: 0 10px; gap: 12px; }
+  .prep-figure svg:not(.prep-arrow) { width: 42px; height: 66px; }
+  .prep-arrow { width: 64px; height: 32px; }
+  .prep-steps { gap: 8px; }
+  .prep-step { min-height: 76px; padding-top: 10px; padding-bottom: 10px; }
+  .prep-tether { padding: 10px 16px; gap: 4px; }
+  .prep-ok { height: 54px; }
+  .prep-solo { height: 44px; }
 }
 
 /* =========================================================

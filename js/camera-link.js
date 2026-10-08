@@ -10,6 +10,7 @@ const MAX_STALE_DISCONNECTED = 2; // 切断済みでも直後はレビューで�
 const JOIN_TIMEOUT_MS = 10000; // 子機が参加を試みてから、あきらめるまでの時間
 const RECONNECT_INTERVAL_MS = 3000; // 子機の通信が切れたとき、繋ぎ直しを試す間隔
 const RECONNECT_ATTEMPT_MS = 8000; // 繋ぎ直し1回ぶんの待ち時間
+const RECONNECT_UNREACHABLE_LIMIT = 2; // 繋ぎ直しで、直接つながらない状態が何回続いたら打ち切るか
 const RECONNECT_GRACE_MS = 3000; // 回線が不安定になってから、切れたと見なすまでの待ち時間
 
 export class CameraLink {
@@ -22,6 +23,7 @@ export class CameraLink {
     this.onPauseStateChanged = null; // 子機側: (isPaused) => void
     this.onConnectionLost = null; // 子機側: 参加後に通信が切れた
     this.onReconnected = null; // 子機側: 繋ぎ直せた (number) => void
+    this.onReconnectGaveUp = null; // 子機側: 繋ぎ直しを打ち切った (reason) => void
     this.onCamRemoved = null; // (camId) => void: 切断済みカメラを完全に破棄した時に呼ばれる(録画バッファの解放用)
 
     this.isPaused = false; // 親機側: 全カメラを一時停止中かどうか
@@ -260,14 +262,35 @@ export class CameraLink {
     }
   }
 
+  // 通信サーバーとの接続が切れていたら、つなぎ直す(Wi-Fiを切り替えたあとに番号を入れ直したときなど)。
+  // 作り直した場合は、新しいピアで「開いた」を待つ
+  _ensurePeerOpen() {
+    if (!this.peer || this.peer.destroyed) {
+      this.startAsCamera();
+    } else if (this.peer.disconnected) {
+      this._peerReady = new Promise((resolve) => this.peer.on('open', () => resolve()));
+      try { this.peer.reconnect(); } catch (err) { console.error(err); }
+    }
+  }
+
   // 親機に映像を送り始め、「参加できた」の合図が返るまで待つ。
-  // 結果: { ok: true, number } か { ok: false, reason: 'camera' | 'not-found' | 'full' | 'closed' | 'timeout' | 'network' }
+  // 結果: { ok: true, number } か
+  //   { ok: false, reason: 'camera' | 'not-found' | 'full' | 'unreachable' | 'closed' | 'timeout' | 'network' }
+  // unreachable: 番号の照会は通ったのに、映像の経路(WebRTCのICE)を作れなかった。
+  //   同じネットワークにいない、または会場のWi-Fiが端末どうしの通信を遮断しているときに起きる。
   _callMonitor(timeoutMs) {
+    this._ensurePeerOpen();
     return new Promise((resolve) => {
       let settled = false;
       let call = null;
       let closeTimer = null;
-      const timer = setTimeout(() => finish({ ok: false, reason: this._peerIsOpen ? 'timeout' : 'network' }), timeoutMs);
+      // 経路づくりの進み具合。「探し始めたが、一度もつながらなかった」なら、直接つながらない場合と見なす
+      const ice = { checking: false, connected: false };
+      const unreachable = () => ice.checking && !ice.connected;
+      const timer = setTimeout(() => {
+        if (!this._peerIsOpen) finish({ ok: false, reason: 'network' });
+        else finish({ ok: false, reason: unreachable() ? 'unreachable' : 'timeout' });
+      }, timeoutMs);
       const finish = (result) => {
         if (settled) return;
         settled = true;
@@ -286,11 +309,26 @@ export class CameraLink {
         this._peerIsOpen = true;
         if (settled) return;
         call = this.peer.call('kendo-var-room-' + this.targetId, this.ownStream);
+        if (!call) {
+          // 通信サーバーとの接続が切れていて、呼びかけられなかった
+          finish({ ok: false, reason: 'network' });
+          return;
+        }
         this.cameraCall = call;
-        // 参加できる前に回線が閉じられたら、満員で断られた可能性が高い。
-        // 理由を伝える合図(FULL)が少し遅れて届くことがあるので、少しだけ待つ
+        const pc = call.peerConnection;
+        if (pc) {
+          pc.addEventListener('iceconnectionstatechange', () => {
+            const state = pc.iceConnectionState;
+            if (state === 'checking') ice.checking = true;
+            if (state === 'connected' || state === 'completed') ice.connected = true;
+          });
+        }
+        // 参加できる前に回線が閉じられたとき。理由を伝える合図(FULL)が少し遅れて届くことがあるので、少しだけ待つ。
+        // 経路づくりが失敗して閉じられた場合(PeerJSはICEが失敗すると回線を閉じる)は、直接つながらなかったと見なす
         call.on('close', () => {
-          if (!settled) closeTimer = setTimeout(() => finish({ ok: false, reason: 'closed' }), 1200);
+          if (!settled) {
+            closeTimer = setTimeout(() => finish({ ok: false, reason: unreachable() ? 'unreachable' : 'closed' }), 1200);
+          }
         });
       });
     });
@@ -338,11 +376,14 @@ export class CameraLink {
     return result;
   }
 
-  // 切れたあと、親機が見つかるまで一定間隔で繋ぎ直しを試す(「接続を切る」を押すまで続ける)
+  // 切れたあと、親機が見つかるまで一定間隔で繋ぎ直しを試す(「接続を切る」を押すまで続ける)。
+  // ただし、直接つながらない状態(unreachable)が続くときは、ネットワークを変えない限りつながらないので打ち切る。
+  // 一瞬の電波の乱れで早まって諦めないよう、2回続けて直接つながらなかったときだけ止める
   async _startReconnecting() {
     if (this._reconnecting || this._userLeft) return;
     this._reconnecting = true;
     if (this.onConnectionLost) this.onConnectionLost();
+    let unreachableCount = 0;
     while (!this._userLeft) {
       await new Promise((r) => setTimeout(r, RECONNECT_INTERVAL_MS));
       if (this._userLeft) break;
@@ -352,6 +393,12 @@ export class CameraLink {
         this._reconnecting = false;
         this.ownStream.getVideoTracks().forEach((t) => { t.enabled = true; });
         if (this.onReconnected) this.onReconnected(result.number);
+        return;
+      }
+      unreachableCount = result.reason === 'unreachable' ? unreachableCount + 1 : 0;
+      if (unreachableCount >= RECONNECT_UNREACHABLE_LIMIT) {
+        this._reconnecting = false;
+        if (this.onReconnectGaveUp) this.onReconnectGaveUp('unreachable');
         return;
       }
     }

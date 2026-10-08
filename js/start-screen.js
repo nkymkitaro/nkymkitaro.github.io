@@ -44,16 +44,28 @@ function expandFrom(panel, next) {
   }, duration);
 }
 
+// 前回選んだほうの印を付け直す
+function applyLastMarks() {
+  const last = loadLastRole();
+  document.querySelectorAll('.start-panel').forEach((panel) => {
+    const mark = panel.querySelector('.start-last');
+    if (mark) mark.hidden = panel.dataset.role !== last;
+  });
+}
+
+// 選んだものを覚える(「はじめる前に」で「1台だけで使う」を選んだときにも使う)
+export function rememberRole(role) {
+  saveLastRole(role);
+  applyLastMarks();
+}
+
 // handlers: { monitor: () => void, camera: () => void }
 export function initStartScreen(handlers) {
   const panels = Array.from(document.querySelectorAll('.start-panel'));
-  const last = loadLastRole();
   let leaving = false; // 手が震えて二度押ししても、画面の切り替えは1回だけ
 
   panels.forEach((panel) => {
     const role = panel.dataset.role;
-    const mark = panel.querySelector('.start-last');
-    if (mark) mark.hidden = role !== last;
     attachPress(panel, { vibrate: 30 });
     panel.addEventListener('click', () => {
       if (leaving) return;
@@ -62,4 +74,5 @@ export function initStartScreen(handlers) {
       expandFrom(panel, handlers[role]);
     });
   });
+  applyLastMarks();
 }
