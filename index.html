@@ -32,35 +32,56 @@
   <!-- アクセス解析(GoatCounter: Cookie不使用・プライバシー配慮の軽量カウンター) -->
   <script data-goatcounter="https://kendo-var.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 </head>
-<body>
+<body class="mode-setup">
 
   <h1>剣道VAR</h1>
 
   <div id="toast" class="toast"></div>
 
-  <!-- 1. 役割選択画面 -->
-  <div id="setupArea" class="card">
-    <h3 style="margin-top:0;">どちらで使いますか？</h3>
-    <button id="btnStartMonitor" class="btn-hero" style="width: 100%; padding: 16px; font-size: 1rem;">📺 親機として使う</button>
-    <p class="help-text">会場に置いて、映像を見ながら操作する端末です。1台だけで使うときはこちらを選んでください。</p>
-    <button id="btnStartCamera" style="width: 100%; padding: 16px; font-size: 1rem; margin-top:14px;">📷 子機として参加する</button>
-    <p class="help-text">他のスマホを、別アングルのカメラとして最大3台まで追加できます。</p>
-    <button class="link-btn install-btn" type="button">ホーム画面に追加</button>
+  <!-- 1. スタート画面: 2枚のパネルで選ぶ。説明文は付けない(ポリシー 2-3・11章) -->
+  <div id="setupArea">
+    <div class="start-panels">
+      <button id="btnStartMonitor" class="start-panel start-panel-main" type="button" data-role="monitor">
+        <span class="start-last" hidden>前回</span>
+        <span class="start-panel-label">はじめる</span>
+      </button>
+      <button id="btnStartCamera" class="start-panel start-panel-sub" type="button" data-role="camera">
+        <span class="start-last" hidden>前回</span>
+        <span class="start-panel-label">カメラで参加</span>
+      </button>
+    </div>
+    <button class="install-btn start-install" type="button">ホーム画面に追加</button>
   </div>
 
-  <!-- 2. 子機（カメラ専用）画面 -->
-  <div id="cameraArea" class="card">
-    <div class="camera-side">
-      <h3 style="margin-top:0;">📷 子機カメラ</h3>
-      <p class="camera-guide" style="color:var(--text-dim);">親機に表示されている4桁の番号を入力してください。</p>
-      <input type="number" id="targetIdInput" placeholder="例: 1234" style="width: 140px; text-align:center; font-size:1.3rem;">
-      <p class="help-text" style="text-align:center;">できれば親機と同じWi-Fiに繋いでから入力してください。接続が安定し、モバイル通信量も節約できます。</p>
-      <p class="help-text" style="text-align:center;">接続中は画面が自動でオフにならないようになります。ただし手動で画面をロックするとカメラが止まってしまうので、そのままにしておいてください。</p>
-      <p class="help-text" style="text-align:center;">横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
-      <button id="btnConnectToMonitor" class="btn-hero" style="width: 85%; padding: 14px; margin-top: 16px;">接続する</button>
-      <div id="cameraStatus" style="margin-top:15px; color:var(--text-dim); font-weight:800;">未接続</div>
+  <!-- 2. カメラで参加する画面。「参加する前」と「送信中」で丸ごと切り替える(ポリシー 1章・9章) -->
+  <div id="cameraArea">
+    <!-- ① 参加する前 -->
+    <div class="join-view" id="joinView">
+      <h2 class="join-title">カメラで参加</h2>
+      <p class="join-guide">親機の画面に出ている番号を入れてください</p>
+      <div class="code-input" id="codeInput">
+        <div class="code-boxes" aria-hidden="true">
+          <div class="code-box"></div><div class="code-box"></div><div class="code-box"></div><div class="code-box"></div>
+        </div>
+        <input type="text" id="targetIdInput" class="code-field" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="親機の4桁の番号">
+      </div>
+      <div class="join-status" id="cameraStatus" aria-live="polite"></div>
+      <p class="join-note">同じWi-Fiにつなぐと安定します</p>
     </div>
-    <video id="localVideo" class="camera-preview" autoplay playsinline muted></video>
+
+    <!-- ② 送信中: カメラの映像を画面いっぱいに出す -->
+    <div class="send-view" id="sendView">
+      <!-- 映像の枠。親機に届くのと同じ範囲を切らずに出す(大きさは js/app.js が映像の縦横比に合わせる) -->
+      <div class="send-frame" id="sendFrame">
+        <video id="localVideo" class="send-video" autoplay playsinline muted></video>
+        <div class="state-bands" aria-live="polite">
+          <div class="state-band" id="camStateBand" data-state="sending"><span class="state-band-text">送信中</span></div>
+          <div class="state-band state-band-sub" id="camSubBand" hidden></div>
+        </div>
+      </div>
+      <button id="btnDisconnect" class="disconnect-btn" type="button">接続を切る</button>
+      <p class="send-note">画面をロックすると送信が止まります</p>
+    </div>
   </div>
 
   <!-- 3. 親機（モニター＋カメラ）画面 -->
@@ -164,7 +185,7 @@
     <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときはそのままでOK。</p>
 
     <h4>📷 子機(最大3台)</h4>
-    <p>別アングルを追加したいときに、他のスマホで選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。できれば親機と同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。</p>
+    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。親機のIDを入力すれば、その映像がそのまま届きます。同じIDに最大3台まで同時に参加できます。できれば親機と同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
 
     <h4>⏪ VARで見返す</h4>
     <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。リプレイ中は、映像をタップしても再生・一時停止できます。誤って「LIVEに戻る」を押した場合は、数秒間表示される「リプレイに戻る」で元の場面に戻れます。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>

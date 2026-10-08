@@ -116,16 +116,6 @@ canvas {
 }
 .stage-video { position: relative; width: 100%; }
 
-/* 子機: 接続を始めたら自分のカメラ映像をプレビューとして映す */
-.camera-preview {
-  display: none;
-  width: 100%;
-  margin-top: 14px;
-  background: #000;
-  border-radius: var(--radius-md);
-  object-fit: contain;
-}
-body.camera-previewing .camera-preview { display: block; }
 .status-row {
   display: flex;
   align-items: center;
@@ -145,7 +135,7 @@ body.camera-previewing .camera-preview { display: block; }
   background: currentColor;
   flex: 0 0 auto;
 }
-#cameraArea, #monitorArea { display: none; }
+#monitorArea { display: none; }
 .controls-row {
   display: flex;
   justify-content: center;
@@ -478,12 +468,11 @@ body.mode-monitor .help-inline { display: flex; }
    - 稽古・試合の直後で手が震えていても押せるよう、押せる部分は高さ48px以上、主要ボタンは56px、
      隣り合うボタンの間は10px以上あける
    - 一時停止・設定・ヘルプはたまにしか使わないので上側に置く(誤って押しにくい位置でもある)
-   設定画面・接続前の画面・ヘルプは縦向きのレイアウトのまま読めればよい。
+   設定画面・ヘルプは縦向きのレイアウトのまま読めればよい。スタート画面と子機の画面は、下の専用ブロックで横向きに合わせている。
    (max-heightで絞っているのは、PCやタブレットの横長画面まで変えないため)
    ========================================================= */
 @media (orientation: landscape) and (max-height: 540px) {
-  body.mode-monitor,
-  body.mode-camera.camera-previewing {
+  body.mode-monitor {
     height: 100vh;
     height: 100dvh;
     /* Android Chromeの100vhはアドレスバーを除いた高さより大きく、上が見切れる原因になる */
@@ -494,8 +483,7 @@ body.mode-monitor .help-inline { display: flex; }
     flex-direction: column;
     overflow: hidden;
   }
-  body.mode-monitor h1,
-  body.mode-camera.camera-previewing h1 { display: none; }
+  body.mode-monitor h1 { display: none; }
 
   /* --- 親機 --- */
   body.mode-monitor #monitorArea {
@@ -587,41 +575,6 @@ body.mode-monitor .help-inline { display: flex; }
   body.mode-monitor .save-row { grid-area: save; margin: 0; }
   body.mode-monitor .save-btn { margin: 0; min-height: 52px; }
 
-  /* --- 子機(接続後、プレビューが出ている間) --- */
-  body.mode-camera.camera-previewing #cameraArea {
-    display: grid !important;
-    flex: 1;
-    min-height: 0;
-    width: 100%;
-    max-width: none;
-    padding: 10px;
-    grid-template-columns: minmax(0, 1fr) clamp(200px, 30%, 260px);
-    grid-template-rows: minmax(0, 1fr);
-    column-gap: 12px;
-  }
-  body.mode-camera.camera-previewing .camera-preview {
-    grid-column: 1;
-    grid-row: 1;
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    margin: 0;
-  }
-  body.mode-camera.camera-previewing .camera-side {
-    grid-column: 2;
-    grid-row: 1;
-    min-height: 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    padding-bottom: 56px; /* 右下の「?」ボタンに重ならないように */
-  }
-  body.mode-camera.camera-previewing .camera-side .help-text,
-  body.mode-camera.camera-previewing .camera-guide { display: none; }
-  body.mode-camera.camera-previewing #btnConnectToMonitor { width: 100% !important; min-height: 52px; }
-
   /* --- ヘルプ・VAR設定のボトムシート: 横向きだと低いので少し高く使う --- */
   .help-sheet { max-height: 85vh; max-height: 85dvh; }
 }
@@ -639,6 +592,242 @@ body.mode-monitor .help-inline { display: flex; }
       "seek    seek    save"
       "toolbar toolbar actions";
   }
+}
+
+/* =========================================================
+   スタート画面(はじめる / カメラで参加)
+   説明文は付けず、2枚の大きなパネルで選ぶ。パネル全体が押せる範囲。
+   縦向きは上下(「はじめる」を大きく)、横向きは左右(「はじめる」を広く)に並べる。
+   ほとんどの人は1台で「はじめる」ので主役にし、「カメラで参加」は一段下げる。
+   ========================================================= */
+body.mode-setup {
+  height: 100vh;
+  height: 100dvh; /* Android Chromeの100vhはアドレスバーの分だけ大きく、はみ出す原因になる */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
+#setupArea {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 56px; /* 右下の「?」ボタンがパネルに重ならないように。「ホーム画面に追加」もこの帯に置く */
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+.start-panels {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.start-panel {
+  position: relative;
+  margin: 0;
+  padding: 20px 22px;
+  display: flex;
+  align-items: flex-end;     /* 親指が届く下側に文字を寄せる */
+  justify-content: flex-start;
+  text-align: left;
+  font-weight: 900;
+  font-size: clamp(2.2rem, 11vw, 3.4rem);
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  border-radius: 20px;
+  border: 1px solid var(--hairline);
+  min-height: 96px;
+}
+.start-panel-main { flex: 6 1 0; background: var(--text); color: #000; border-color: var(--text); }
+.start-panel-sub { flex: 4 1 0; background: var(--surface-2); color: var(--text); }
+.start-panel-label { display: block; }
+/* 前回選んだほうの印(自動で進めることはしない) */
+.start-last {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1.2;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+.start-last[hidden] { display: none; }
+/* 「ホーム画面に追加」は主役ではないので、小さな文字のリンクにする */
+#setupArea .start-install {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  width: fit-content; /* 中央寄せ(押したときの縮みと位置指定のtransformがぶつからないよう、transformは使わない) */
+  margin: 0 auto;
+  min-height: 48px;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+/* 選んだパネルが画面いっぱいに広がってから次の画面へ(js/start-screen.js)。位置と色は JS が写す */
+.start-expander {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition-property: top, left, width, height, border-radius;
+  transition-duration: var(--dur-base);
+  transition-timing-function: var(--ease-out);
+}
+.start-expander.fade-out {
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+@media (orientation: landscape) {
+  body.mode-setup h1 { margin: 0 0 8px; font-size: 1.5rem; }
+  #setupArea { max-width: 960px; }
+  .start-panels { flex-direction: row; }
+  .start-panel { font-size: clamp(1.5rem, 5vw, 3rem); } /* 狭い横向きでも「カメラで参加」が1行に収まる大きさ */
+}
+
+/* =========================================================
+   カメラで参加する画面
+   ① 参加する前: 4桁の番号を1桁ずつの大きな枠で入れる。そろったら自動でつなぐ(ボタンは置かない)。
+   ② 送信中: タイトルや入力欄は消し、カメラの映像を画面いっぱいに出す。
+   ========================================================= */
+body.mode-camera {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#cameraArea { display: none; }
+body.mode-camera #cameraArea { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+.join-view {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  padding: 4vh 0 0;
+}
+.join-title { margin: 0; font-size: 1.8rem; font-weight: 900; }
+.join-guide { margin: 10px 0 24px; color: var(--text-dim); font-size: 0.95rem; line-height: 1.6; }
+.code-input { position: relative; }
+.code-boxes { display: flex; gap: 10px; justify-content: center; }
+.code-box {
+  width: clamp(56px, 19vw, 76px);
+  height: clamp(72px, 24vw, 96px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(2rem, 9vw, 2.8rem);
+  font-weight: 900;
+  background: var(--surface-2);
+  border: 2px solid var(--hairline);
+  border-radius: var(--radius-md);
+}
+.code-box.active { border-color: var(--text); }          /* 次に入れる枠 */
+.code-input.busy .code-box { border-color: var(--text); } /* つないでいる間 */
+.code-box.pop { animation: digit-pop var(--dur-base) var(--ease-spring) both; }
+@keyframes digit-pop {
+  from { transform: scale(1.16); }
+  to { transform: scale(1); }
+}
+/* 本物の入力欄は枠の上に透明で重ねる。どの枠を押しても数字キーボードが開く */
+.code-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  border: none;
+  font-size: 16px; /* 16px未満だとiPhoneが入力時に画面を拡大してしまう */
+  caret-color: transparent;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.join-status { min-height: 1.6em; margin-top: 16px; font-weight: 800; font-size: 1rem; color: var(--text); }
+.join-note { margin: auto 0 0; padding: 20px 0 8px; font-size: 0.85rem; color: var(--text-dim); }
+
+.send-view { display: none; }
+body.camera-sending { padding: 0; }
+body.camera-sending h1,
+body.camera-sending .join-view { display: none; }
+body.camera-sending .send-view {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 5;
+}
+.send-frame {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.send-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+/* ①→②: 映像が枠から画面いっぱいに広がる(--dur-base。動きを減らす設定では一瞬で切り替わる) */
+body.camera-sending .send-frame { animation: video-expand var(--dur-base) var(--ease-out) both; }
+@keyframes video-expand {
+  from { clip-path: inset(22% 14% round 20px); }
+  to { clip-path: inset(0 0 0 0 round 0); }
+}
+.send-view .state-band-sub { background: var(--surface-2); color: var(--text); }
+/* 接続を切る: 小さく端に置く。主要な操作は無いので、触れても困らない角に寄せ、親指の届く下側からは離す */
+.disconnect-btn {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: max(10px, env(safe-area-inset-right));
+  z-index: 3;
+  min-height: 48px;
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  background: rgba(0,0,0,0.6);
+  color: var(--text);
+}
+.send-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 28px max(72px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(72px, env(safe-area-inset-left));
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.5;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
+  pointer-events: none;
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-camera:not(.camera-sending) h1 { margin: 0 0 6px; font-size: 1.4rem; }
+  .join-view { padding-top: 0; }
+  .join-title { font-size: 1.3rem; }
+  .join-guide { margin: 4px 0 10px; }
+  .code-box { width: 56px; height: 64px; font-size: 2rem; }
+  .join-status { margin-top: 8px; }
+  .join-note { padding: 10px 0 4px; }
 }
 
 /* =========================================================
@@ -674,10 +863,13 @@ body.mode-monitor .help-inline { display: flex; }
   clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
   box-shadow: 0 2px 10px rgba(0,0,0,0.45);
 }
-/* 色は状態を表す2色だけ。文字とのコントラスト比: LIVE 白/赤 3.5:1、VAR REPLAY 黒/アンバー 9:1(大きな文字の基準 3:1 以上) */
+/* 色は状態を表す2色だけ(子機の帯を除く)。文字とのコントラスト比: LIVE 白/赤 3.5:1、VAR REPLAY 黒/アンバー 9:1(大きな文字の基準 3:1 以上) */
 .state-band[data-state="live"] { background: var(--accent-live); color: #fff; }
 .state-band[data-state="replay"] { background: var(--accent-replay); color: #1a1200; }
 .state-band[data-state="paused"] { background: var(--surface-2); color: var(--text); }
+/* 子機の帯はグレースケールだけ(赤・アンバーは親機の状態用。ポリシー 2-1) */
+.state-band[data-state="sending"] { background: var(--text); color: #000; }
+.state-band[data-state="lost"] { background: var(--surface-2); color: var(--text); }
 .state-band[data-state="live"]::before {
   content: '';
   width: 0.45em;

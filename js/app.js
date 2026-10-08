@@ -12,7 +12,9 @@ import { saveClip } from './clip-saver.js';
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
-import { setBandState, showSubBand, hideSubBand, subBandText } from './state-band.js';
+import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
+import { createCodeInput } from './code-input.js';
+import { initStartScreen } from './start-screen.js';
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -37,8 +39,13 @@ const varSettings = {
   saveScopeKey: 'selected',
 };
 
-function startMonitor() {
+function leaveSetupScreen() {
   document.getElementById('setupArea').style.display = 'none';
+  document.body.classList.remove('mode-setup');
+}
+
+function startMonitor() {
+  leaveSetupScreen();
   document.getElementById('monitorArea').style.display = 'block';
   document.body.classList.add('mode-monitor'); // 横向き時のレイアウト切り替え用
   enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
@@ -89,22 +96,108 @@ function renderRecStatus() {
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 
+// --- カメラで参加する画面(子機)。「参加する前」と「送信中」を丸ごと切り替える ---
+const camBand = createStateBand({
+  bandId: 'camStateBand',
+  subId: 'camSubBand',
+  labels: { sending: '送信中', paused: '一時停止中', lost: '接続が切れました' },
+});
+const cameraStatusEl = document.getElementById('cameraStatus');
+let codeInput = null;
+let cameraNumber = 0; // 親機から教えてもらった、何台目のカメラか(例: カメラ2)
+let cameraPaused = false;
+
+// 参加できなかった理由。番号は消さず、短く知らせる
+const JOIN_FAILURE_MESSAGES = {
+  camera: 'カメラを使えませんでした。カメラの利用を許可してください',
+  'not-found': 'この番号は見つかりませんでした。番号をご確認ください',
+  full: '満員のため参加できませんでした',
+  closed: '接続できませんでした。もう一度お試しください',
+  timeout: '接続できませんでした。もう一度お試しください',
+  network: '通信できませんでした。電波をご確認ください',
+};
+
 function startCamera() {
-  document.getElementById('setupArea').style.display = 'none';
-  document.getElementById('cameraArea').style.display = 'block';
-  document.body.classList.add('mode-camera'); // 横向き時のレイアウト切り替え用
-  enableWakeLock(); // 撮影中に画面が消えるとカメラも止まってしまうため
+  leaveSetupScreen();
+  document.body.classList.add('mode-camera'); // 画面の切り替え・横向きのレイアウト用
+  enableWakeLock({ quiet: true }); // 送信中の画面に「画面をロックすると送信が止まります」と常に出すので、成功の知らせは出さない
   cameraLink.onPauseStateChanged = (isPaused) => {
-    const statusEl = document.getElementById('cameraStatus');
-    if (statusEl) statusEl.textContent = isPaused ? '一時停止中(親機の操作)' : '送信中';
+    cameraPaused = isPaused;
+    if (document.body.classList.contains('camera-sending')) updateCameraBand();
+  };
+  cameraLink.onConnectionLost = () => {
+    camBand.setState('lost');
+    camBand.showSub('再接続しています…');
+  };
+  cameraLink.onReconnected = (number) => {
+    if (number) cameraNumber = number;
+    updateCameraBand();
   };
   cameraLink.startAsCamera();
+
+  codeInput = createCodeInput({ root: document.getElementById('codeInput'), onComplete: connectToMonitor });
+  codeInput.focus(); // 端末によっては、押した直後でないとキーボードが開かない。開かなければ枠を押せばよい
 }
 
-function connectToMonitor() {
-  const targetId = document.getElementById('targetIdInput').value.trim();
-  if (!targetId) return showToast('IDを入力してください');
-  cameraLink.connectToMonitor(targetId);
+// 映像の枠を、カメラ映像の縦横比に合わせて画面いっぱいに広げる。
+// 帯を「映像の外枠の角」に置くため(ポリシー 2-1)、映像が画面より細い・低いときも、枠は映像ぴったりにする
+const sendView = document.getElementById('sendView');
+const sendFrame = document.getElementById('sendFrame');
+const sendVideo = document.getElementById('localVideo');
+function fitSendFrame() {
+  const vw = sendVideo.videoWidth;
+  const vh = sendVideo.videoHeight;
+  if (!vw || !vh) return;
+  const scale = Math.min(sendView.clientWidth / vw, sendView.clientHeight / vh);
+  const w = Math.round(vw * scale);
+  const h = Math.round(vh * scale);
+  Object.assign(sendFrame.style, {
+    inset: 'auto', left: '50%', top: '50%', width: `${w}px`, height: `${h}px`, margin: `${-h / 2}px 0 0 ${-w / 2}px`,
+  });
+}
+['loadedmetadata', 'resize'].forEach((type) => sendVideo.addEventListener(type, fitSendFrame)); // 端末を回すと映像の向きも変わる
+window.addEventListener('resize', fitSendFrame);
+
+// 送信中の帯: 一時停止中ならそう出し、そうでなければ「送信中」とカメラの番号を出す
+function updateCameraBand() {
+  camBand.setState(cameraPaused ? 'paused' : 'sending');
+  camBand.showSub(`カメラ${cameraNumber + 1}`); // 親機のカメラを1台目として数える
+}
+
+// 4桁そろったら自動でつなぐ。失敗したら番号を消さずに理由を出し、入れ直せばまたつなぐ
+let joining = false;
+async function connectToMonitor(targetId) {
+  if (joining) return;
+  joining = true;
+  codeInput.setBusy(true);
+  cameraStatusEl.textContent = '接続中…';
+  const result = await cameraLink.connectToMonitor(targetId);
+  joining = false;
+  cameraStatusEl.textContent = '';
+  codeInput.setBusy(false);
+  if (!result.ok) {
+    if (result.reason !== 'cancelled') showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout);
+    return;
+  }
+  // つながった: 入力の部品を片付けて、カメラの映像を画面いっぱいに出す
+  cameraNumber = result.number || 0;
+  sendVideo.srcObject = cameraLink.ownStream;
+  sendVideo.play().catch(() => {}); // 自動再生がブロックされても、映像自体は流れている
+  document.activeElement && document.activeElement.blur();
+  document.body.classList.add('camera-sending');
+  updateCameraBand();
+}
+
+// 接続を切って、参加する前の画面に戻る
+function leaveCameraSending() {
+  cameraLink.disconnectFromMonitor();
+  document.body.classList.remove('camera-sending');
+  sendVideo.srcObject = null;
+  camBand.reset();
+  codeInput.clear();
+  cameraStatusEl.textContent = '';
+  cameraPaused = false;
+  showToast('接続を切りました');
 }
 
 // 接続中カメラの一覧が変わった(増えた/切断された)たびに呼ばれる
@@ -287,9 +380,8 @@ initInstallPrompt();
   .forEach(([id, vibrate]) => attachPress(document.getElementById(id), { vibrate }));
 
 // --- イベント配線 ---
-document.getElementById('btnStartMonitor').addEventListener('click', startMonitor);
-document.getElementById('btnStartCamera').addEventListener('click', startCamera);
-document.getElementById('btnConnectToMonitor').addEventListener('click', connectToMonitor);
+initStartScreen({ monitor: startMonitor, camera: startCamera });
+document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
 
 const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
