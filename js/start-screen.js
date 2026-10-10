@@ -28,6 +28,9 @@ function expandFrom(panel, next) {
   cover.classList.add('start-expander');
   cover.classList.remove('press', 'is-pressed');
   cover.style.cssText = `top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;height:${rect.height}px;border-radius:${style.borderRadius};`;
+  // 中身(文字と絵)は広げている間も動かさない。板だけが斜めの角を保ったまま広がり、最後に斜めが消える
+  const body = cover.querySelector('.start-panel-body');
+  if (body) Object.assign(body.style, { inset: 'auto', top: '0', left: '0', width: `${rect.width}px`, height: `${rect.height}px` });
   document.body.appendChild(cover);
   void cover.offsetWidth; // 一度レイアウトさせてから動かさないと、広がるアニメーションにならない
   cover.style.top = '0px';
@@ -36,6 +39,7 @@ function expandFrom(panel, next) {
   cover.style.height = '100vh';
   cover.style.height = '100dvh';
   cover.style.borderRadius = '0px';
+  cover.style.clipPath = 'polygon(0 0, 100% 0, 100% 100%, 0 100%)'; // 斜めの境目も、広がるにつれてなくす
 
   setTimeout(() => {
     next();

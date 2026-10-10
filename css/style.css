@@ -686,39 +686,88 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0; /* 境目の斜めの隙間は、下のパネルを重ねて作る(--start-gap) */
+  --start-slant: 56px; /* 境目の傾き(状態の帯の斜めカットとそろえた角度) */
+  --start-gap: 10px;   /* 斜めの境目に残す黒い隙間 */
 }
 .start-panel {
   position: relative;
+  display: block;
   margin: 0;
-  padding: 20px 22px;
-  display: flex;
-  align-items: flex-end;     /* 親指が届く下側に文字を寄せる */
-  justify-content: flex-start;
+  padding: 0;
+  overflow: hidden;
   text-align: left;
   font-weight: 900;
-  font-size: clamp(2.2rem, 11vw, 3.4rem);
   line-height: 1.1;
   letter-spacing: 0.01em;
-  border-radius: 20px;
-  border: 1px solid var(--hairline);
+  border: none;
   min-height: 96px;
 }
-.start-panel-main { flex: 6 1 0; background: var(--text); color: #000; border-color: var(--text); }
-.start-panel-sub { flex: 4 1 0; background: var(--surface-2); color: var(--text); }
-.start-panel-label { display: block; }
-/* 前回選んだほうの印(自動で進めることはしない) */
+/* 中身は、パネルの大きさを基準に(cqw/cqh)文字と絵の大きさを決める。小さい画面では絵を縮め、文字を優先する */
+.start-panel-body {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  display: block;
+}
+/* 「はじめる」: 下の辺を、右が高く左が低くなるよう斜めに切る。白地・黒文字 */
+.start-panel-main {
+  flex: 6 1 0;
+  background: var(--text);
+  color: #000;
+  border-radius: 18px 18px 0 0;
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--start-slant)), 0 100%);
+  --start-cut-y: var(--start-slant); /* 文字と絵は、斜めの辺の一番高い所より上に置く */
+  --start-label: clamp(2.25rem, min(17.5cqw, 17cqh), 4rem); /* 約64px */
+}
+/* 「カメラで参加」: 上の辺を、「はじめる」の斜めに合わせて切り、少し重ねる。グレー地・白文字 */
+.start-panel-sub {
+  flex: 4 1 0;
+  min-height: calc(var(--start-slant) + 96px);
+  margin-top: calc(var(--start-gap) - var(--start-slant));
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 0 0 18px 18px;
+  clip-path: polygon(0 var(--start-slant), 100% 0, 100% 100%, 0 100%);
+  --start-label: clamp(1.625rem, min(11cqw, 14cqh), 2.5rem); /* 約40px */
+}
+.start-panel-label {
+  position: absolute;
+  left: 24px;
+  bottom: calc(var(--start-cut-y, 0px) + 22px);
+  display: block;
+  font-size: var(--start-label);
+  white-space: nowrap;
+}
+.start-panel-sub .start-panel-label { bottom: 40px; }
+/* 役割の絵(準備ページの図と同じ線の絵)。パネルの余白に収まるよう、大きさは計算で決める */
+.start-art { position: absolute; display: block; aspect-ratio: 120 / 168; width: auto; }
+.start-panel-main .start-art {
+  right: var(--start-art-right, 26px);
+  top: 30px;
+  height: max(56px, min(168px, calc(100cqh - 30px - var(--start-cut-y, 0px) - 22px - var(--start-label) - 14px)));
+}
+.start-panel-sub .start-art {
+  right: 30px;
+  bottom: 34px;
+  aspect-ratio: 84 / 118;
+  /* 文字の右端より左へ出ない幅まで。「カメラで参加」は6文字ぶん */
+  width: clamp(40px, calc(100cqw - 24px - 6 * var(--start-label) - 30px - 12px), 84px);
+  height: auto;
+}
+/* 前回選んだほうの印(自動で進めることはしない)。パネルの左上に置き、絵と重ならないようにする */
 .start-last {
   position: absolute;
-  top: 14px;
-  right: 14px;
-  padding: 4px 10px;
-  font-size: 0.85rem;
+  top: 22px;
+  left: 22px;
+  padding: 4px 12px;
+  font-size: 0.8125rem;
   font-weight: 800;
   line-height: 1.2;
   border: 2px solid currentColor;
   border-radius: 999px;
 }
+.start-panel-sub .start-last { top: calc(var(--start-slant) + 14px); }
 .start-last[hidden] { display: none; }
 /* 「ホーム画面に追加」は主役ではないので、小さな文字のリンクにする */
 #setupArea .start-install {
@@ -745,7 +794,7 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   margin: 0;
   overflow: hidden;
   pointer-events: none;
-  transition-property: top, left, width, height, border-radius;
+  transition-property: top, left, width, height, border-radius, clip-path;
   transition-duration: var(--dur-base);
   transition-timing-function: var(--ease-out);
 }
@@ -756,8 +805,25 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
 @media (orientation: landscape) {
   body.mode-setup h1 { margin: 0 0 8px; font-size: 1.5rem; }
   #setupArea { max-width: 960px; }
-  .start-panels { flex-direction: row; }
-  .start-panel { font-size: clamp(1.5rem, 5vw, 3rem); } /* 狭い横向きでも「カメラで参加」が1行に収まる大きさ */
+  .start-panels { flex-direction: row; --start-slant: 48px; }
+  /* 横向きは左右に並べ、境目を縦方向の斜めにする(左パネルの右辺を傾ける) */
+  .start-panel-main {
+    border-radius: 18px 0 0 18px;
+    clip-path: polygon(0 0, 100% 0, calc(100% - var(--start-slant)) 100%, 0 100%);
+    --start-cut-y: 0px;
+    --start-art-right: calc(var(--start-slant) + 12px);
+    --start-label: clamp(1.75rem, min(12cqw, 17cqh), 3.5rem);
+  }
+  .start-panel-sub {
+    min-height: 0;
+    min-width: calc(var(--start-slant) + 96px);
+    margin-top: 0;
+    margin-left: calc(var(--start-gap) - var(--start-slant));
+    border-radius: 0 18px 18px 0;
+    clip-path: polygon(var(--start-slant) 0, 100% 0, 100% 100%, 0 100%);
+    --start-label: clamp(1.25rem, min(8cqw, 10cqh), 2rem); /* 狭い横向きでも「カメラで参加」が1行に収まる大きさ */
+  }
+  .start-panel-sub .start-last { top: 22px; left: calc(var(--start-slant) + 14px); }
 }
 
 /* =========================================================

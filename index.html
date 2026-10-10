@@ -114,12 +114,27 @@
   <div id="setupArea">
     <div class="start-panels">
       <button id="btnStartMonitor" class="start-panel start-panel-main" type="button" data-role="monitor">
-        <span class="start-last" hidden>前回</span>
-        <span class="start-panel-label">はじめる</span>
+        <span class="start-panel-body">
+          <span class="start-last" hidden>前回</span>
+          <!-- 画面に再生マーク(▶)のあるスマホ。黒の線 -->
+          <svg class="start-art" viewBox="0 0 120 168" fill="none" stroke="currentColor" stroke-width="7" aria-hidden="true">
+            <rect x="6" y="6" width="108" height="156" rx="18"></rect>
+            <path d="M46 60l34 24-34 24z" fill="currentColor" stroke-linejoin="round"></path>
+          </svg>
+          <span class="start-panel-label">はじめる</span>
+        </span>
       </button>
       <button id="btnStartCamera" class="start-panel start-panel-sub" type="button" data-role="camera">
-        <span class="start-last" hidden>前回</span>
-        <span class="start-panel-label">カメラで参加</span>
+        <span class="start-panel-body">
+          <span class="start-last" hidden>前回</span>
+          <!-- 画面にカメラのあるスマホ。白の線 -->
+          <svg class="start-art" viewBox="0 0 84 118" fill="none" stroke="currentColor" stroke-width="5" aria-hidden="true">
+            <rect x="4" y="4" width="76" height="110" rx="13"></rect>
+            <rect x="20" y="42" width="44" height="32" rx="7"></rect>
+            <circle cx="42" cy="58" r="8"></circle>
+          </svg>
+          <span class="start-panel-label">カメラで参加</span>
+        </span>
       </button>
     </div>
     <button class="install-btn start-install" type="button">ホーム画面に追加</button>
