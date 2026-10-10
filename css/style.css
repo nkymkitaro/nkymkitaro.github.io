@@ -754,17 +754,6 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   color: #333;
   white-space: nowrap;
 }
-/* 「はじめる」を囲む枠(押す先の目印)。パネルの斜めの辺に沿って、内側に太さ3pxで描く */
-.start-panel-main .start-panel-body::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: currentColor;
-  pointer-events: none;
-  clip-path: polygon(evenodd,
-    8px 8px, calc(100% - 8px) 8px, calc(100% - 8px) calc(100% - var(--start-slant) - 8px), 8px calc(100% - 8px),
-    11px 11px, calc(100% - 11px) 11px, calc(100% - 11px) calc(100% - var(--start-slant) - 11px), 11px calc(100% - 11px));
-}
 /* 役割の絵(準備ページの図と同じ線の絵)。パネルの余白に収まるよう、大きさは計算で決める */
 .start-art { position: absolute; display: block; aspect-ratio: 120 / 168; width: auto; }
 .start-panel-main .start-art {
@@ -850,11 +839,6 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
     --start-label: clamp(1.25rem, min(8cqw, 10cqh), 2rem); /* 狭い横向きでも「カメラで参加」が1行に収まる大きさ */
   }
   .start-panel-sub .start-last { top: 22px; left: calc(var(--start-slant) + 14px); }
-  .start-panel-main .start-panel-body::after {
-    clip-path: polygon(evenodd,
-      8px 8px, calc(100% - 8px) 8px, calc(100% - var(--start-slant) - 8px) calc(100% - 8px), 8px calc(100% - 8px),
-      11px 11px, calc(100% - 11px) 11px, calc(100% - var(--start-slant) - 11px) calc(100% - 11px), 11px calc(100% - 11px));
-  }
   .start-panel-hint { font-size: 0.875rem; }
 }
 
@@ -1121,12 +1105,22 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
   font-weight: 900;
 }
 .prep-solo {
+  position: relative;
   height: 48px;
   border: none;
   background: transparent;
   color: #d4d4d4;
   font-size: 0.9375rem;
   font-weight: 800;
+}
+/* 見た目の高さが48px未満になる画面でも、押せる範囲は上下に広げて48px以上にする(見た目の文字は変えない) */
+.prep-solo::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc((48px - 100%) / -2);
+  bottom: calc((48px - 100%) / -2);
 }
 /* ヘルプの一番上から、このページを開く */
 .help-sheet .prep-link { margin: 0 0 14px; }
