@@ -283,7 +283,31 @@
     <p>不具合のご報告やご意見は、公式LINEにて受け付けております。</p>
     <a id="btnLineContact" class="link-btn" href="https://lin.ee/VP2gCS6" target="_blank" rel="noopener">LINEで送る</a>
 
+    <h4>利用状況の計測について</h4>
+    <p>使い勝手をよくするため、Google アナリティクスで利用状況(どの機能が使われたか、接続できたか、お答えいただいた立場)を計測しています。映像や、個人を特定できる情報は送っていません。</p>
+    <a id="linkGooglePrivacy" class="link-btn" href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google のプライバシーポリシー</a>
+    <button id="btnOpenRole" class="link-btn" type="button">立場を答える・変える</button>
+
     <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
+  </div>
+
+  <!-- 立場の1問(使い方の改善のため。画面全体はふさがない小さなシート) -->
+  <div id="roleSheet" class="help-sheet role-sheet" role="dialog" aria-labelledby="roleTitle" aria-hidden="true">
+    <div class="help-sheet-handle"></div>
+    <div id="roleAsk">
+      <div class="role-head">
+        <div class="role-head-text">
+          <h3 id="roleTitle" class="role-title">あなたは？</h3>
+          <p class="role-sub">使い勝手の改善に使います</p>
+        </div>
+        <button id="btnRoleClose" class="role-close" type="button">閉じる</button>
+      </div>
+      <div id="roleOptions" class="role-options"></div>
+    </div>
+    <div id="roleThanks" class="role-thanks" hidden>
+      <div class="role-thanks-title">ありがとうございます</div>
+      <p id="roleThanksText" class="role-thanks-text"></p>
+    </div>
   </div>
 
   <script type="module" src="js/app.js"></script>

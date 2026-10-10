@@ -377,6 +377,63 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 .help-sheet h4:first-of-type { margin-top: 0; }
 .help-sheet p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.65; }
 
+/* --- 立場の1問(「あなたは？」)。ヘルプと同じ形のシートを、画面をふさがずに下から出す --- */
+.role-sheet {
+  z-index: 62; /* 右下の「?」(60)より上。背景は暗くせず、後ろの操作もそのまま使える */
+  max-height: none;
+  padding-top: 10px;
+  visibility: hidden;
+  transition: transform var(--dur-slow) var(--ease-out), visibility 0s linear var(--dur-slow);
+}
+.role-sheet.open { visibility: visible; transition: transform var(--dur-slow) var(--ease-out), visibility 0s; }
+.role-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.role-sheet .role-title { margin: 0 0 4px; font-size: 1.75rem; line-height: 1.2; font-weight: 900; }
+.role-sheet .role-sub { margin: 0; font-size: 0.8125rem; font-weight: 500; color: var(--text-soft); }
+.role-close {
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  margin: -4px -8px 0 0;
+  border: none;
+  background: transparent;
+  color: #d4d4d4;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+.role-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.role-option {
+  min-height: 60px;
+  margin: 0;
+  border: 2px solid var(--surface-2);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.0625rem;
+  font-weight: 900;
+}
+.role-option.press {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out);
+}
+.role-option.press.is-pressed { transition-duration: var(--dur-fast); transition-timing-function: var(--ease-out); }
+.role-option[aria-pressed="true"] { border-color: var(--text); background: var(--surface-2); }
+.role-thanks { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; }
+.role-thanks[hidden] { display: none; }
+.role-thanks-title { font-size: 1.625rem; font-weight: 900; }
+.role-sheet .role-thanks-text { margin: 0; font-size: 0.8125rem; font-weight: 500; color: var(--text-soft); }
+@media (orientation: landscape) and (max-height: 540px) {
+  .role-sheet { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .role-head { margin-bottom: 8px; }
+  .role-sheet .role-title { font-size: 1.375rem; margin-bottom: 2px; }
+  .role-options { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .role-option { min-height: 52px; }
+  .role-thanks { min-height: 120px; }
+}
+
 /* 外部リンク(公式LINEなど)を通常のボタンと同じ見た目で出す */
 .link-btn {
   display: block;
@@ -393,6 +450,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   transition: opacity var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out);
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
+#btnOpenRole { width: calc(100% - 6px); font-family: inherit; }
 
 /* --- 親機: 今使える操作・必要な情報だけを出す --- */
 /* LIVE中は「LIVEに戻る」とシークバーは使えないので隠す */

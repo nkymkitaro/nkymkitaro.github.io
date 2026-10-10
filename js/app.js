@@ -16,6 +16,12 @@ import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } 
 import { createCodeInput } from './code-input.js';
 import { initStartScreen, rememberRole } from './start-screen.js';
 import { initPrepPage, openPrep } from './prep-page.js';
+import { initAnalytics, track, getDisplayMode } from './analytics.js';
+import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
+
+// 利用状況の計測(analytics.js)。本番のドメイン以外では何も送らない。失敗してもアプリは普通に動く
+initAnalytics({ userRole: getSavedRole() });
+track('app_open', { display_mode: getDisplayMode() });
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -139,6 +145,7 @@ function startCamera() {
     showToast(JOIN_FAILURE_MESSAGES.unreachable, { duration: LONG_TOAST_MS });
   };
   cameraLink.onReconnected = (number) => {
+    track('camera_reconnect');
     if (number) cameraNumber = number;
     updateCameraBand();
   };
@@ -184,6 +191,11 @@ async function connectToMonitor(targetId) {
   joining = false;
   cameraStatusEl.textContent = '';
   codeInput.setBusy(false);
+  if (result.ok) {
+    track('camera_join_result', { result: 'success' });
+  } else if (result.reason !== 'cancelled') {
+    track('camera_join_result', { result: 'fail', reason: result.reason });
+  }
   if (!result.ok) {
     if (result.reason !== 'cancelled') {
       const long = result.reason === 'unreachable';
@@ -210,6 +222,7 @@ function leaveCameraSending() {
   cameraStatusEl.textContent = '';
   cameraPaused = false;
   showToast('接続を切りました');
+  maybeAskRole(); // 撮影の邪魔にならない、参加する前の画面に戻ったこのタイミングで、立場を聞く(条件は role-survey.js)
 }
 
 // 接続中カメラの一覧が変わった(増えた/切断された)たびに呼ばれる
@@ -392,9 +405,13 @@ initInstallPrompt();
   .forEach(([id, vibrate]) => attachPress(document.getElementById(id), { vibrate }));
 
 // --- イベント配線 ---
-initStartScreen({ monitor: startMonitor, camera: startCamera });
+initStartScreen({
+  monitor: () => { track('role_select', { role: 'start' }); startMonitor(); },
+  camera: () => { track('role_select', { role: 'camera' }); startCamera(); },
+});
 // 初めて開いたときに「はじめる前に」を出す。「1台だけで使う」を選んだ人には、スタート画面の「はじめる」に「前回」の印を付けておく
-initPrepPage({ onFirstRunSolo: () => rememberRole('monitor') });
+initPrepPage({ onFirstRunSolo: () => rememberRole('monitor'), onChoice: (choice) => track('prep_choice', { choice }) });
+initRoleSurvey();
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
 
 const playerToolbar = document.getElementById('playerToolbar');
@@ -430,6 +447,8 @@ document.getElementById('btnRewind').addEventListener('click', () => {
     showToast('録画データがまだありません');
     return;
   }
+  dismissRoleSurvey(); // 立場の問いが開いたまま次のVARに入ったら、閉じる
+  track('var_open', { cameras: cameraLink.getAllSources().filter((src) => src.connected).length });
   hideBackToReplay();
   setReplayUI(true);
 });
@@ -444,8 +463,10 @@ document.getElementById('btnGoLive').addEventListener('click', () => {
     btnBackToReplay.classList.add('show');
     backToReplayTimer = setTimeout(hideBackToReplay, BACK_TO_REPLAY_MS);
   }
+  maybeAskRole(); // 見返し終わった直後に、立場を聞く(条件は role-survey.js)
 });
 btnBackToReplay.addEventListener('click', () => {
+  dismissRoleSurvey(); // 戻る操作の直後に、立場の問いが出てしまわないようにする
   const point = backToReplayPoint;
   hideBackToReplay();
   if (!player.resumeAt(point)) {
@@ -485,6 +506,7 @@ document.getElementById('btnSaveClip').addEventListener('click', async () => {
       // 書き出しが終わった時点で「保存しました」を短く出す(共有画面が開く前に知らせる)
       onEncoded: (count) => {
         showSubBand(count > 1 ? `${count}件を保存しました` : '保存しました', { autoHideMs: SAVED_NOTICE_MS });
+        track('clip_save', { count, all_cameras: varSettings.saveScopeKey === 'all' });
       },
     });
   } finally {
@@ -510,6 +532,12 @@ document.getElementById('btnOpenPrep').addEventListener('click', () => {
   closeHelp();
   openPrep();
 });
+// ヘルプの「立場を答える・変える」。ヘルプを閉じて、立場のシートを出す
+document.getElementById('btnOpenRole').addEventListener('click', () => {
+  closeHelp();
+  openRoleSurveyFromHelp();
+});
+document.getElementById('btnLineContact').addEventListener('click', () => track('line_open'));
 document.getElementById('btnHelpInline').addEventListener('click', openHelp); // 横向き時の親機用
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);

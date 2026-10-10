@@ -13,7 +13,8 @@ function markSeen() {
 }
 
 // onFirstRunSolo: 初回の表示で「1台だけで使う」を押したときに呼ばれる(スタート画面の「前回」の印用)
-export function initPrepPage({ onFirstRunSolo } = {}) {
+// onChoice('ok' | 'single'): どちらのボタンを押したか(解析用)
+export function initPrepPage({ onFirstRunSolo, onChoice } = {}) {
   const area = document.getElementById('prepArea');
   if (!area) return;
   const steps = Array.from(area.querySelectorAll('.prep-step'));
@@ -43,6 +44,7 @@ export function initPrepPage({ onFirstRunSolo } = {}) {
     markSeen();
     area.classList.remove('show');
     root.classList.remove('needs-prep');
+    if (onChoice) onChoice(solo ? 'single' : 'ok');
     if (solo && wasFirstRun && onFirstRunSolo) onFirstRunSolo();
   }
   okButton.addEventListener('click', () => close({ solo: false }));
