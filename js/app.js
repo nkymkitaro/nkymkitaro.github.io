@@ -12,6 +12,7 @@ import { saveClip } from './clip-saver.js';
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
+import { createReplayUi } from './replay-ui.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
 import { initJoinQr, closeJoinQr, parseJoinParam, removeJoinParam } from './join-qr.js';
@@ -284,6 +285,9 @@ function renderCamSelector(sources) {
   container.style.display = multi ? '' : 'none';
   document.getElementById('monitorArea').classList.toggle('has-children', multi);
   const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
+  // リプレイ中は全画面で操作が消えることがあるので、いま見ているカメラは帯の下に常に出しておく
+  const current = sources.find((src) => src.id === highlightId);
+  document.getElementById('camBadge').textContent = current ? current.label : '';
 
   sources.forEach((src) => {
     const btn = document.createElement('button');
@@ -301,6 +305,8 @@ function renderCamSelector(sources) {
 function selectCamera(id) {
   if (player.isReplay) {
     player.switchAngle(id);
+    replayUi.resetZoom(true); // 別のカメラでは見たい場所が違うので、拡大は元に戻す
+    replayUi.showControls();
   } else {
     cameraLink.switchSource(id);
   }
@@ -438,17 +444,49 @@ const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
 const monitorArea = document.getElementById('monitorArea');
 const btnBackToReplay = document.getElementById('btnBackToReplay');
+// リプレイの全画面表示での、操作の出し入れ・タップ・2回タップ・2本指の拡大・なぞり(js/replay-ui.js)。
+// 拡大となぞりは、使われたかどうかをVAR1回につき1度だけ数える
+const replayUi = createReplayUi({
+  area: monitorArea,
+  stage: document.querySelector('.stage-video'),
+  canvas: document.getElementById('displayCanvas'),
+  zoomBadge: document.getElementById('zoomBadge'),
+  player,
+  onZoom: () => track('var_zoom'),
+  onScrub: () => track('var_scrub'),
+});
 const BACK_TO_REPLAY_MS = 6000; // 「リプレイに戻る」を出しておく時間
 let backToReplayPoint = null;
 let backToReplayTimer = null;
 
 // リプレイ中だけ見せる操作(コマ送り・再生・保存・LIVEに戻る)の表示を切り替える
-function setReplayUI(isReplay) {
+function setReplayUI(isReplay, { newVar = false } = {}) {
   playerToolbar.classList.toggle('show', isReplay);
   saveRow.classList.toggle('show', isReplay);
-  monitorArea.classList.toggle('replaying', isReplay); // LIVEに戻る・シークバーの表示や横向きの配置もこのクラスで切り替える
+  monitorArea.classList.toggle('replaying', isReplay); // リプレイ中は映像を全画面にして操作を重ねる(css の「VARリプレイの全画面」)
+  if (isReplay) replayUi.enter({ newSession: newVar }); // 操作を出した状態で始める。拡大は元の大きさ
+  else replayUi.leave();
   updateStateBand();
   renderCamSelector(cameraLink.getAllSources());
+}
+
+// ブラウザの全画面表示(対応する端末だけ)。VARに入ったときに入り、LIVEに戻ったら解除する。
+// iPhoneのブラウザは対応していないので何もしない。ホーム画面から開いていれば、すでにアドレスバーはない
+function enterBrowserFullscreen() {
+  try {
+    const el = document.documentElement;
+    if (getDisplayMode() === 'home_screen' || !document.fullscreenEnabled || !el.requestFullscreen || document.fullscreenElement) return;
+    const result = el.requestFullscreen({ navigationUI: 'hide' });
+    if (result && result.catch) result.catch(() => { /* 断られても、そのまま使える */ });
+  } catch (err) { /* 全画面にできなくても、そのまま使える */ }
+}
+
+function exitBrowserFullscreen() {
+  try {
+    if (!document.fullscreenElement || !document.exitFullscreen) return;
+    const result = document.exitFullscreen();
+    if (result && result.catch) result.catch(() => {});
+  } catch (err) { /* 解除できなくても、そのまま使える */ }
 }
 
 function hideBackToReplay() {
@@ -470,13 +508,15 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   dismissRoleSurvey(); // 立場の問いが開いたまま次のVARに入ったら、閉じる
   track('var_open', { cameras: cameraLink.getAllSources().filter((src) => src.connected).length });
   hideBackToReplay();
-  setReplayUI(true);
+  enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
+  setReplayUI(true, { newVar: true });
 });
 document.getElementById('btnGoLive').addEventListener('click', () => {
   // 押し間違いに備えて、見ていた場面を少しの間だけ控えておく
   const point = player.getResumePoint();
   player.goLive();
   setReplayUI(false);
+  exitBrowserFullscreen();
   if (point) {
     hideBackToReplay();
     backToReplayPoint = point;
@@ -493,12 +533,8 @@ btnBackToReplay.addEventListener('click', () => {
     showToast('リプレイの映像が残っていません');
     return;
   }
+  enterBrowserFullscreen();
   setReplayUI(true);
-});
-
-// リプレイ中は映像そのものをタップしても再生・一時停止できる(画面で一番大きい「ボタン」)
-document.getElementById('displayCanvas').addEventListener('click', () => {
-  if (player.isReplay) player.togglePlayPause();
 });
 
 // VAR設定の「保存するカメラ」に応じて、保存するクリップの対象を組み立てる

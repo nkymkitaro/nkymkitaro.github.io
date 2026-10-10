@@ -464,9 +464,8 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 #monitorArea.replaying #idHelp { display: none; }
 /* 縦向きのLIVE中だけ、横向きにすると見やすいことを案内する */
 .rotate-hint { display: none; }
-/* リプレイ中は映像をタップすると再生・一時停止 */
+/* リプレイ中の映像のタップ・なぞり・2本指は js/replay-ui.js が受け持つ(下の「VARリプレイの全画面」) */
 #displayCanvas { touch-action: manipulation; }
-#monitorArea.replaying #displayCanvas { cursor: pointer; }
 /* 操作中はタイトルより映像と操作を優先する */
 body.mode-monitor h1 { display: none; }
 
@@ -625,16 +624,6 @@ body.mode-monitor .help-inline { display: flex; }
       "video   video actions";
     gap: 10px 12px;
   }
-  /* リプレイ中だけ、映像の下にコマ送り・再生・速度とシークバーを1行で並べる */
-  body.mode-monitor #monitorArea.replaying {
-    grid-template-areas:
-      "video   video head"
-      "video   video ."
-      "video   video cams"
-      "video   video save"
-      "toolbar seek  actions";
-  }
-
   body.mode-monitor .monitor-head { grid-area: head; }
   body.mode-monitor .monitor-head .help-text { display: none; } /* 同じ説明はヘルプにもある */
   body.mode-monitor .monitor-head .status-row {
@@ -664,22 +653,8 @@ body.mode-monitor .help-inline { display: flex; }
   }
   body.mode-monitor #displayCanvas { width: 100%; height: 100%; }
 
-  /* LIVE中のシークバーは使えないので隠す(状態表示にLIVEと出ている) */
+  /* LIVE中のシークバーは使えないので隠す(状態表示にLIVEと出ている)。リプレイ中の配置は、下の「VARリプレイの全画面」 */
   body.mode-monitor .seek-row { display: none; }
-  body.mode-monitor #monitorArea.replaying .seek-row {
-    grid-area: seek;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  body.mode-monitor #seekBar { flex: 1; margin: 0; }
-  body.mode-monitor .time-readout { margin: 0; min-width: 64px; text-align: right; }
-
-  body.mode-monitor .player-toolbar { grid-area: toolbar; margin: 0; gap: 10px; justify-content: flex-start; }
-  body.mode-monitor .player-toolbar { flex-wrap: wrap; }
-  body.mode-monitor .player-toolbar button { margin: 0; flex-shrink: 0; }
-  body.mode-monitor .player-toolbar .icon-btn-primary { width: 52px; height: 52px; }
-  body.mode-monitor .player-toolbar .icon-btn-primary svg { width: 22px; height: 22px; }
 
   body.mode-monitor .primary-actions {
     grid-area: actions;
@@ -703,19 +678,10 @@ body.mode-monitor .help-inline { display: flex; }
   .help-sheet { max-height: 85vh; max-height: 85dvh; }
 }
 
-/* 横幅の狭いスマホ(iPhone SEなど)の横向きリプレイ: コマ送り列とシークバーを2段に分ける */
+/* 横幅の狭いスマホ(iPhone SEなど)の横向き: 右の列を少し詰める(リプレイ中の配置は、下の「VARリプレイの全画面」) */
 @media (orientation: landscape) and (max-height: 540px) and (max-width: 760px) {
-  /* 映像の下のコマ送り列(約300px)が1行に収まるよう、右の列を少し詰める */
   body.mode-monitor #monitorArea { grid-template-columns: auto minmax(0, 1fr) minmax(300px, 40%); }
   body.mode-monitor .monitor-head .status-row { gap: 8px; }
-  body.mode-monitor #monitorArea.replaying {
-    grid-template-areas:
-      "video   video   head"
-      "video   video   ."
-      "video   video   cams"
-      "seek    seek    save"
-      "toolbar toolbar actions";
-  }
 }
 
 /* =========================================================
@@ -1345,6 +1311,211 @@ input[type="range"]::-webkit-slider-thumb { transition: transform var(--dur-base
 input[type="range"]::-moz-range-thumb { transition: transform var(--dur-base) var(--ease-spring); }
 input[type="range"].bump::-webkit-slider-thumb { transform: scale(1.3); transition-duration: var(--dur-fast); }
 input[type="range"].bump::-moz-range-thumb { transform: scale(1.3); transition-duration: var(--dur-fast); }
+
+/* =========================================================
+   VARリプレイの全画面(デザインポリシー 2-1・3章・4章)
+   リプレイに入ると、親機の画面ぜんぶが映像になる(縦横比は保つ。余白は黒)。
+   操作は映像の上に重ね、下側は下から暗くなる帯を敷いて読めるようにする。
+   - 操作は、最後に触ってから約2秒で薄くなって消える(js/replay-ui.js が #monitorArea の data-ui を切り替える)。
+     「VAR REPLAY」の帯とカメラ番号は、操作を隠しても常に出す
+   - 位置: よく押すものほど下側。コマ送りは左下、LIVEに戻るは右下。押せる範囲は高さ48px以上、主要なものは56px、間は10px
+   - LIVE中の画面は変えない(この指定はすべて .replaying のときだけ)
+   - リプレイ中は「N秒前VAR」と親機の上の行(一時停止・設定・ヘルプ・QR)は出さない。LIVEに戻れば出る
+   ========================================================= */
+body.mode-monitor #monitorArea.replaying {
+  position: fixed;
+  inset: 0;
+  z-index: 30; /* 設定・ヘルプ・立場の問い・トースト(55以上)より下 */
+  display: grid !important; /* LIVE中の縦向き(flex)・横向き(grid)の指定を上書きする */
+  width: auto;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  overflow: hidden;
+  padding: 0 max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  /* 縦向き: 左から コマ送り・再生・コマ送り(56px) と、LIVEに戻る(残り)。上の行に 速度 と 保存 */
+  grid-template-columns: 56px 56px 56px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto auto auto;
+  grid-template-areas: none;
+  column-gap: 10px;
+  row-gap: 0;
+  align-content: stretch;
+}
+/* 映像: 画面いっぱい */
+body.mode-monitor #monitorArea.replaying .stage-video {
+  position: absolute;
+  inset: 0;
+  grid-area: auto;
+  z-index: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  display: block;
+  border-radius: 0;
+  touch-action: none; /* 拡大・なぞりは js/replay-ui.js が受け持つ。ブラウザの拡大・スクロールは起こさない */
+}
+body.mode-monitor #monitorArea.replaying #displayCanvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+  object-fit: contain;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  /* 2回タップ・2本指での拡大と、拡大中の移動(js/replay-ui.js が --zs / --zx / --zy を入れる)。録画データや保存には関係しない */
+  scale: var(--zs, 1);
+  translate: var(--zx, 0px) var(--zy, 0px);
+}
+#displayCanvas.zoom-anim { transition: scale var(--dur-base) var(--ease-out), translate var(--dur-base) var(--ease-out); }
+/* 下から暗くなる帯(操作の文字を、明るい映像の上でも読めるようにする) */
+body.mode-monitor #monitorArea.replaying::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0, rgba(0,0,0,0.62) 150px, rgba(0,0,0,0) 320px);
+}
+/* リプレイ中は出さないもの */
+body.mode-monitor #monitorArea.replaying .monitor-head,
+body.mode-monitor #monitorArea.replaying #btnRewind,
+body.mode-monitor #monitorArea.replaying #btnBackToReplay { display: none !important; }
+/* ツールバー・主要操作の入れ物は消して、中のボタンを直接並べる */
+body.mode-monitor #monitorArea.replaying .player-toolbar,
+body.mode-monitor #monitorArea.replaying .primary-actions { display: contents; }
+
+/* 操作の見た目: 映像の上でも読めるよう、暗い地にする */
+body.mode-monitor #monitorArea.replaying :is(.cam-selector button, .speed-btn, .save-btn) {
+  background: rgba(28, 28, 30, 0.82);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+body.mode-monitor #monitorArea.replaying .cam-selector button.btn-active { background: var(--text) !important; }
+body.mode-monitor #monitorArea.replaying .btn-live { background: var(--accent-live); border-color: var(--accent-live); }
+body.mode-monitor #monitorArea.replaying .icon-btn-primary { background: var(--text); border-color: var(--text); }
+
+/* 並べ方(縦向き) */
+body.mode-monitor #monitorArea.replaying :is(.seek-row, #camSelector, .save-row, #btnSpeed, #btnStepBack, #btnPlayPause, #btnStepForward, #btnGoLive) {
+  position: relative;
+  z-index: 2;
+  margin: 10px 0 0;
+}
+body.mode-monitor #monitorArea.replaying .seek-row {
+  grid-area: 2 / 1 / 3 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+body.mode-monitor #monitorArea.replaying #seekBar { flex: 1; margin: 0; border: 0; }
+body.mode-monitor #monitorArea.replaying .time-readout { margin: 0; min-width: 76px; text-align: right; font-size: 0.9rem; color: var(--text-soft); }
+body.mode-monitor #monitorArea.replaying .time-readout.is-replay { color: var(--accent-replay); }
+body.mode-monitor #monitorArea.replaying #camSelector {
+  grid-area: 3 / 1 / 4 / -1;
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 10px 0 0 !important; /* 横向きの通常画面の「余白0」(!important)と、HTMLに直接書いた余白を上書きする */
+  pointer-events: none; /* ボタンの間のすきまは、映像のタップとして扱う */
+}
+body.mode-monitor #monitorArea.replaying #camSelector button { flex: 0 0 auto; min-width: 72px; min-height: 48px; margin: 0; pointer-events: auto; }
+body.mode-monitor #monitorArea.replaying #btnSpeed { grid-area: 4 / 1 / 5 / 2; width: auto; min-width: 0; height: 56px; padding: 0; border-radius: 28px; align-self: stretch; }
+body.mode-monitor #monitorArea.replaying .save-row { grid-area: 4 / 2 / 5 / -1; pointer-events: none; }
+body.mode-monitor #monitorArea.replaying .save-btn { margin: 0; min-height: 56px; pointer-events: auto; }
+body.mode-monitor #monitorArea.replaying #btnStepBack { grid-area: 5 / 1; }
+body.mode-monitor #monitorArea.replaying #btnPlayPause { grid-area: 5 / 2; }
+body.mode-monitor #monitorArea.replaying #btnStepForward { grid-area: 5 / 3; }
+body.mode-monitor #monitorArea.replaying #btnGoLive { grid-area: 5 / 4; min-height: 56px; padding: 8px; }
+body.mode-monitor #monitorArea.replaying :is(#btnStepBack, #btnStepForward) {
+  width: 56px;
+  min-width: 0;
+  height: 56px;
+  padding: 0;
+  border-radius: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+body.mode-monitor #monitorArea.replaying :is(#btnStepBack, #btnStepForward) svg { width: 22px; height: 22px; flex: 0 0 auto; }
+body.mode-monitor #monitorArea.replaying .step-label { display: none; } /* 縦向きは幅が足りないので、絵だけ */
+body.mode-monitor #monitorArea.replaying #btnPlayPause { width: 56px; height: 56px; align-self: auto; }
+body.mode-monitor #monitorArea.replaying #btnPlayPause svg { width: 24px; height: 24px; }
+
+/* 状態の帯・カメラ番号・倍率: ノッチにかからない位置に、常に出す */
+body.mode-monitor #monitorArea.replaying .state-bands {
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: env(safe-area-inset-left);
+}
+.cam-badge {
+  display: none;
+  align-items: center;
+  padding: 6px 20px 6px 14px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+#monitorArea.replaying .cam-badge:not(:empty) { display: inline-flex; }
+.zoom-badge {
+  display: none;
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 12px);
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 2;
+  padding: 7px 12px;
+  border-radius: 10px;
+  background: var(--text);
+  color: #000;
+  font-size: 1.3rem;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+#monitorArea.replaying .zoom-badge.on { display: block; }
+
+/* 操作の出し入れ: 薄くなって消え、消えている間は押せない(映像のタップとして扱う) */
+@keyframes replay-ui-in { from { opacity: 0; visibility: visible; } to { opacity: 1; visibility: visible; } }
+@keyframes replay-ui-out { from { opacity: 1; visibility: visible; } to { opacity: 0; visibility: hidden; } }
+#monitorArea.replaying[data-ui="show"] :is(.seek-row, #camSelector, .save-row, #btnSpeed, #btnStepBack, #btnPlayPause, #btnStepForward, #btnGoLive),
+#monitorArea.replaying[data-ui="show"]::after { animation: replay-ui-in var(--dur-base) var(--ease-out) both; }
+#monitorArea.replaying[data-ui="hide"] :is(.seek-row, #camSelector, .save-row, #btnSpeed, #btnStepBack, #btnPlayPause, #btnStepForward, #btnGoLive),
+#monitorArea.replaying[data-ui="hide"]::after { animation: replay-ui-out var(--dur-base) var(--ease-out) both; }
+
+/* 横向き: 1行に並べる(左から コマ送り・再生・コマ送り・速度、右に 保存 と LIVEに戻る)。カメラの切り替えは、その上の行 */
+@media (orientation: landscape) {
+  body.mode-monitor #monitorArea.replaying {
+    grid-template-columns: 56px 56px 56px 56px minmax(0, 1fr) auto auto;
+    grid-template-rows: minmax(0, 1fr) auto auto auto;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  body.mode-monitor #monitorArea.replaying #btnStepBack { grid-area: 4 / 1; }
+  body.mode-monitor #monitorArea.replaying #btnPlayPause { grid-area: 4 / 2; }
+  body.mode-monitor #monitorArea.replaying #btnStepForward { grid-area: 4 / 3; }
+  body.mode-monitor #monitorArea.replaying #btnSpeed { grid-area: 4 / 4; width: 56px; }
+  body.mode-monitor #monitorArea.replaying .save-row { grid-area: 4 / 6; }
+  body.mode-monitor #monitorArea.replaying .save-btn { padding: 0 18px; white-space: nowrap; }
+  body.mode-monitor #monitorArea.replaying #btnGoLive { grid-area: 4 / 7; padding: 8px 20px; white-space: nowrap; }
+  body.mode-monitor #monitorArea.replaying .state-bands { top: 8px; }
+  body.mode-monitor #monitorArea.replaying .zoom-badge { top: 8px; }
+  .cam-badge { font-size: 0.95rem; padding: 5px 18px 5px 12px; }
+}
+/* 横幅が狭い横向き(初代iPhone SEなど): 保存をカメラ切り替えの行の右に上げて、LIVEに戻るが画面内に収まるようにする */
+@media (orientation: landscape) and (max-width: 640px) {
+  body.mode-monitor #monitorArea.replaying #camSelector { grid-area: 3 / 1 / 4 / 6; }
+  body.mode-monitor #monitorArea.replaying .save-row { grid-area: 3 / 6 / 4 / 8; justify-self: end; }
+}
+/* 横向きで、横幅に余裕があるときだけ、コマ送りに「1コマ」の文字も付ける */
+@media (orientation: landscape) and (min-width: 760px) {
+  body.mode-monitor #monitorArea.replaying { grid-template-columns: 112px 56px 112px 56px minmax(0, 1fr) auto auto; }
+  body.mode-monitor #monitorArea.replaying :is(#btnStepBack, #btnStepForward) { width: auto; }
+  body.mode-monitor #monitorArea.replaying .step-label { display: inline; font-size: 0.85rem; }
+}
 
 /* 端末で「動きを減らす」が設定されている場合は、動きを最小限にする(デザインポリシー 2-4) */
 @media (prefers-reduced-motion: reduce) {

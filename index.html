@@ -213,8 +213,12 @@
       <!-- 状態の帯: 今の状態を映像の左上に大きく出す(js/state-band.js) -->
       <div class="state-bands" aria-live="polite">
         <div class="state-band" id="stateBand" data-state="live"><span class="state-band-text">LIVE</span></div>
+        <!-- リプレイ中に、いま見ているカメラを常に出す(操作を隠しても消えない。js/app.js の renderCamSelector) -->
+        <div class="cam-badge" id="camBadge"></div>
         <div class="state-band state-band-sub" id="stateSubBand" hidden></div>
       </div>
+      <!-- リプレイ中に拡大しているとき、右上に倍率を出す(js/replay-ui.js) -->
+      <div class="zoom-badge" id="zoomBadge" aria-live="polite"></div>
     </div>
 
     <div class="seek-row">
@@ -235,11 +239,11 @@
     </div>
 
     <div class="player-toolbar" id="playerToolbar">
-      <button id="btnStepBack" class="speed-btn step-btn" aria-label="1コマ戻る">◀ 1コマ</button>
+      <button id="btnStepBack" class="speed-btn step-btn" aria-label="1コマ戻る"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2.4v14H6zM20 5v14L9.5 12z"/></svg><span class="step-label">1コマ</span></button>
       <button id="btnPlayPause" class="icon-btn icon-btn-primary" aria-label="再生">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
       </button>
-      <button id="btnStepForward" class="speed-btn step-btn" aria-label="1コマ進む">1コマ ▶</button>
+      <button id="btnStepForward" class="speed-btn step-btn" aria-label="1コマ進む"><span class="step-label">1コマ</span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.6 5H18v14h-2.4zM4 5v14l10.5-7z"/></svg></button>
       <button id="btnSpeed" class="speed-btn" aria-label="再生速度切り替え">0.5x</button>
     </div>
 

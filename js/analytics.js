@@ -24,6 +24,8 @@ const ALLOWED_EVENTS = {
   camera_join_result: ['result', 'reason', 'method'], // method: qr(QRから) / code(4桁を入れて)
   camera_reconnect: [],
   var_open: ['cameras'],
+  var_zoom: [], // リプレイ中に拡大を使った(VAR1回につき1度)
+  var_scrub: [], // リプレイ中に映像をなぞってコマ送りした(VAR1回につき1度)
   clip_save: ['count', 'all_cameras'],
   line_open: [],
 };

@@ -294,16 +294,34 @@ export class ReplayPlayer {
     this.pause();
     const frames = this.recorder.getFrames(this.currentCamId);
     const next = Math.max(0, Math.min(frames.length - 1, parseInt(value, 10)));
-    if (next !== this.frameIndex) {
-      // 指でなぞってコマが変わるたびに、小さく振動させる(間引いて鳴らす)
-      const now = performance.now();
-      if (now - this._lastSeekHaptic >= SEEK_HAPTIC_INTERVAL_MS) {
-        tapFeedback(8);
-        this._lastSeekHaptic = now;
-      }
-    }
+    if (next !== this.frameIndex) this._seekHaptic();
     this.frameIndex = next;
     this._renderCurrentFrame();
+  }
+
+  // 指でなぞってコマが変わるたびに、小さく振動させる(間引いて鳴らす)。シークバーと映像のなぞりで同じ手触りにする
+  _seekHaptic() {
+    const now = performance.now();
+    if (now - this._lastSeekHaptic >= SEEK_HAPTIC_INTERVAL_MS) {
+      tapFeedback(8);
+      this._lastSeekHaptic = now;
+    }
+  }
+
+  // 映像を指でなぞって、コマ番号を直接動かす(js/replay-ui.js から)。再生は止まる。動いたら true
+  scrubTo(index) {
+    if (!this.isReplay) return false;
+    this._cancelSweep();
+    const frames = this.recorder.getFrames(this.currentCamId);
+    if (frames.length === 0) return false;
+    this.pause();
+    const next = Math.max(0, Math.min(frames.length - 1, Math.round(index)));
+    if (next === this.frameIndex) return false;
+    this._seekHaptic();
+    this.frameIndex = next;
+    this._renderCurrentFrame();
+    this._bumpThumb(); // つまみの弾み(コマ送りボタンと同じ手触り)
+    return true;
   }
 
   // シークバーの位置と「− N秒」の表示だけを、今のコマ番号に合わせる
