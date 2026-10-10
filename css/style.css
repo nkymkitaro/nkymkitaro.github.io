@@ -718,6 +718,7 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   border-radius: 18px 18px 0 0;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--start-slant)), 0 100%);
   --start-cut-y: var(--start-slant); /* 文字と絵は、斜めの辺の一番高い所より上に置く */
+  --start-hint-h: 26px; /* 下の一言の高さぶん、文字を持ち上げる */
   --start-label: clamp(2.25rem, min(17.5cqw, 17cqh), 4rem); /* 約64px */
 }
 /* 「カメラで参加」: 上の辺を、「はじめる」の斜めに合わせて切り、少し重ねる。グレー地・白文字 */
@@ -739,21 +740,45 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   font-size: var(--start-label);
   white-space: nowrap;
 }
+.start-panel-main .start-panel-label { bottom: calc(var(--start-cut-y, 0px) + 22px + var(--start-hint-h)); }
 .start-panel-sub .start-panel-label { bottom: 40px; }
+/* 「はじめる」の下の一言(どの端末かを示す)。文字を優先し、絵はこの分も避ける */
+.start-panel-hint {
+  position: absolute;
+  left: 26px;
+  bottom: calc(var(--start-cut-y, 0px) + 22px);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: #333;
+  white-space: nowrap;
+}
+/* 「はじめる」を囲む枠(押す先の目印)。パネルの斜めの辺に沿って、内側に太さ3pxで描く */
+.start-panel-main .start-panel-body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  pointer-events: none;
+  clip-path: polygon(evenodd,
+    8px 8px, calc(100% - 8px) 8px, calc(100% - 8px) calc(100% - var(--start-slant) - 8px), 8px calc(100% - 8px),
+    11px 11px, calc(100% - 11px) 11px, calc(100% - 11px) calc(100% - var(--start-slant) - 11px), 11px calc(100% - 11px));
+}
 /* 役割の絵(準備ページの図と同じ線の絵)。パネルの余白に収まるよう、大きさは計算で決める */
 .start-art { position: absolute; display: block; aspect-ratio: 120 / 168; width: auto; }
 .start-panel-main .start-art {
   right: var(--start-art-right, 26px);
   top: 30px;
-  height: max(56px, min(168px, calc(100cqh - 30px - var(--start-cut-y, 0px) - 22px - var(--start-label) - 14px)));
+  height: max(56px, min(168px, calc(100cqh - 30px - var(--start-cut-y, 0px) - 22px - var(--start-hint-h) - var(--start-label) - 14px)));
 }
 .start-panel-sub .start-art {
   right: 30px;
-  bottom: 34px;
+  top: 30px;
   aspect-ratio: 84 / 118;
-  /* 文字の右端より左へ出ない幅まで。「カメラで参加」は6文字ぶん */
-  width: clamp(40px, calc(100cqw - 24px - 6 * var(--start-label) - 30px - 12px), 84px);
-  height: auto;
+  /* 上の余白いっぱいまで大きく。高さは、文字の上(文字の高さ+下の余白+すき間)までで止める。文字が優先 */
+  height: max(48px, min(176px, calc(100cqh - 30px - 40px - 1.2 * var(--start-label) - 14px)));
+  width: auto;
 }
 /* 前回選んだほうの印(自動で進めることはしない)。パネルの左上に置き、絵と重ならないようにする */
 .start-last {
@@ -811,6 +836,7 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
     border-radius: 18px 0 0 18px;
     clip-path: polygon(0 0, 100% 0, calc(100% - var(--start-slant)) 100%, 0 100%);
     --start-cut-y: 0px;
+    --start-hint-h: 24px;
     --start-art-right: calc(var(--start-slant) + 12px);
     --start-label: clamp(1.75rem, min(12cqw, 17cqh), 3.5rem);
   }
@@ -824,6 +850,12 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
     --start-label: clamp(1.25rem, min(8cqw, 10cqh), 2rem); /* 狭い横向きでも「カメラで参加」が1行に収まる大きさ */
   }
   .start-panel-sub .start-last { top: 22px; left: calc(var(--start-slant) + 14px); }
+  .start-panel-main .start-panel-body::after {
+    clip-path: polygon(evenodd,
+      8px 8px, calc(100% - 8px) 8px, calc(100% - var(--start-slant) - 8px) calc(100% - 8px), 8px calc(100% - 8px),
+      11px 11px, calc(100% - 11px) 11px, calc(100% - var(--start-slant) - 11px) calc(100% - 11px), 11px calc(100% - 11px));
+  }
+  .start-panel-hint { font-size: 0.875rem; }
 }
 
 /* =========================================================
