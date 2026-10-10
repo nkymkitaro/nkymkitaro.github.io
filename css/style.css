@@ -478,6 +478,65 @@ body.mode-monitor h1 { display: none; }
 .rec-cam-off { color: var(--text-dim); }
 #monitorArea.replaying .rec-status { display: none; }
 
+/* --- 参加用のQR(js/join-qr.js) ---
+   はじめた端末に、番号と並べて出す。押すと白地いっぱいに大きく出る(離れたスマホのカメラで読むため)。
+   子機がつながったあとは、映像を広く使えるよう小さな目印にして、押せば大きく出せるようにしておく */
+.join-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
+.join-qr {
+  flex: 0 0 auto;
+  width: 132px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+  line-height: 0;
+  cursor: pointer;
+}
+.join-qr[hidden] { display: none; }
+.join-qr-img { display: block; }
+.join-qr-img svg, .qr-overlay-img svg { display: block; width: 100%; height: auto; }
+#monitorArea.has-children .join-qr { width: 56px; }
+#monitorArea.replaying .join-qr { display: none; }
+
+.qr-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: #fff;
+  color: #000;
+  cursor: pointer;
+}
+.qr-overlay[hidden] { display: none; }
+.qr-overlay-body { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+.qr-overlay-img { width: min(100%, calc(100dvh - 200px), 520px); aspect-ratio: 1; }
+.qr-overlay-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; }
+.qr-overlay-code { margin: 0; font-size: 1rem; font-weight: 800; }
+.qr-overlay-code strong { font-size: 2rem; letter-spacing: 0.12em; }
+.qr-overlay-close {
+  min-width: 140px;
+  min-height: 48px;
+  margin: 6px 0 0;
+  padding: 0 24px;
+  border: 2px solid #000;
+  border-radius: 14px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-weight: 900;
+}
+@media (orientation: landscape) {
+  .qr-overlay-body { flex-direction: row; justify-content: center; gap: 28px; }
+  .qr-overlay-img { width: min(calc(100dvh - 32px), 52vw); flex: 0 0 auto; }
+  .qr-overlay-side { align-items: flex-start; }
+}
+
 /* 「ホーム画面に追加」ボタン: 追加できる端末(主にAndroid)でだけ出す */
 .install-btn { display: none; width: calc(100% - 6px); cursor: pointer; }
 .install-btn.show { display: block; }
@@ -586,6 +645,10 @@ body.mode-monitor .help-inline { display: flex; }
   body.mode-monitor .monitor-head .status-row .icon-btn { margin: 0; }
   body.mode-monitor .id-line { text-align: left; margin-top: 4px; font-size: 0.85rem; color: var(--text-dim); }
   body.mode-monitor #myIdDisplay { font-size: 1.1rem !important; }
+  body.mode-monitor .join-row { justify-content: flex-start; gap: 10px; margin-top: 4px; }
+  body.mode-monitor .join-qr { width: clamp(88px, 13vw, 120px); }
+  body.mode-monitor #monitorArea.has-children .join-qr { width: 48px; }
+  body.mode-monitor .join-row .id-line { margin-top: 0; }
   body.mode-monitor .rec-status { text-align: left; margin-top: 8px; }
   body.mode-monitor .rec-cams { justify-content: flex-start; }
 
@@ -754,20 +817,26 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   color: #333;
   white-space: nowrap;
 }
-/* 役割の絵(準備ページの図と同じ線の絵)。パネルの余白に収まるよう、大きさは計算で決める */
-.start-art { position: absolute; display: block; aspect-ratio: 120 / 168; width: auto; }
+/* 役割の絵(準備ページの図と同じ、横向きのスマホの線の絵)。パネルの余白に収まるよう、大きさは計算で決める。
+   幅(--art-w)を決めて、高さは縦横比から出す。文字と重ならないよう、余白が足りない画面では絵だけが縮む(文字を優先) */
+.start-art { position: absolute; display: block; width: var(--art-w); height: auto; }
+.art-rec { fill: var(--accent-live); stroke: none; } /* 録画の赤い点(既存の LIVE の赤) */
+.art-track { stroke: #cfcfcf; } /* 再生バーの、まだ再生していない部分 */
 .start-panel-main .start-art {
+  --art-avail: calc(100cqh - 30px - var(--start-cut-y, 0px) - 22px - var(--start-hint-h) - var(--start-label) - 14px); /* 文字の上の余白の高さ */
+  /* 幅は、文字の上の余白に入る大きさ(縦横比 236:140)、「前回」の印にかからない幅までに抑える */
+  --art-w: max(96px, min(236px, calc(var(--art-avail) * 1.686), calc(100cqw - var(--start-art-right, 26px) - 92px)));
+  aspect-ratio: 236 / 140;
   right: var(--start-art-right, 26px);
   top: 30px;
-  height: max(56px, min(168px, calc(100cqh - 30px - var(--start-cut-y, 0px) - 22px - var(--start-hint-h) - var(--start-label) - 14px)));
 }
 .start-panel-sub .start-art {
-  right: 30px;
-  top: 30px;
-  aspect-ratio: 84 / 118;
-  /* 上の余白いっぱいまで大きく。高さは、文字の上(文字の高さ+下の余白+すき間)までで止める。文字が優先 */
-  height: max(48px, min(176px, calc(100cqh - 30px - 40px - 1.2 * var(--start-label) - 14px)));
-  width: auto;
+  /* 「はじめる」の絵より小さく。斜めの縁にかからない高さから置く */
+  --art-avail: calc(100cqh - 46px - 40px - 1.2 * var(--start-label) - 14px);
+  --art-w: max(64px, min(176px, calc(var(--art-avail) * 1.66)));
+  aspect-ratio: 176 / 106;
+  right: 26px;
+  top: 46px;
 }
 /* 前回選んだほうの印(自動で進めることはしない)。パネルの左上に置き、絵と重ならないようにする */
 .start-last {
@@ -840,6 +909,13 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   }
   .start-panel-sub .start-last { top: 22px; left: calc(var(--start-slant) + 14px); }
   .start-panel-hint { font-size: 0.875rem; }
+  /* 横向きは上が平らなので、絵を少し上へ。「はじめる」の絵が「カメラで参加」の絵より大きいままになるよう、後者は幅を抑える */
+  .start-panel-main .start-art { top: 22px; --art-avail: calc(100cqh - 22px - 22px - var(--start-hint-h) - var(--start-label) - 14px); }
+  .start-panel-sub .start-art {
+    top: 22px;
+    --art-avail: calc(100cqh - 22px - 40px - 1.2 * var(--start-label) - 14px);
+    --art-w: max(64px, min(150px, calc(var(--art-avail) * 1.66), calc(100cqw - var(--start-slant) - 110px)));
+  }
 }
 
 /* =========================================================
@@ -1009,15 +1085,26 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
 
 .prep-figure {
   margin: 0;
-  min-height: 132px;
+  padding: 16px 12px 14px;
   border-radius: 14px;
   background: var(--surface);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 18px;
+  gap: 6px;
   color: var(--text);
 }
+/* 上に「同じWi‑Fi」。そこから2台のスマホ(横向き)へ線が分かれる */
+.prep-wifi { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.prep-wifi-label { font-size: 0.9375rem; font-weight: 900; }
+.prep-phones {
+  width: 100%;
+  max-width: 300px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  row-gap: 8px;
+}
+.prep-branch { grid-column: 1 / -1; width: 100%; height: auto; display: block; }
 .prep-phone { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .prep-phone figcaption { font-size: 0.8125rem; font-weight: 800; white-space: nowrap; }
 
@@ -1139,10 +1226,14 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
     align-content: start;
   }
   .prep-head { grid-area: head; gap: 2px; }
-  .prep-figure { grid-area: figure; min-height: 0; padding: 8px 0; gap: 8px; }
+  .prep-figure { grid-area: figure; padding: 8px 10px; gap: 2px; }
+  .prep-wifi { flex-direction: row; gap: 8px; }
+  .prep-wifi svg { width: 34px; height: 24px; }
+  .prep-wifi-label { font-size: 0.875rem; }
+  .prep-phones { max-width: 260px; row-gap: 4px; }
+  .prep-phone { gap: 4px; }
+  .prep-phone svg { width: 56px; height: 34px; }
   .prep-phone figcaption { font-size: 0.75rem; }
-  .prep-figure svg:not(.prep-arrow) { width: 36px; height: 56px; }
-  .prep-arrow { width: 56px; height: 28px; }
   .prep-steps { grid-area: steps; align-self: start; gap: 8px; }
   .prep-tether { grid-area: tether; align-self: end; padding: 10px 14px; gap: 4px; }
   .prep-actions { grid-area: actions; margin-top: 0; align-self: end; gap: 4px; }
@@ -1158,11 +1249,17 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
 /* 縦長でも背の低い端末(iPhone SE など)は、余白を詰めて1画面に収める */
 @media (orientation: portrait) and (max-height: 700px) {
   .prep-area { padding-top: max(14px, env(safe-area-inset-top)); padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-  .prep-inner { gap: 12px; }
+  .prep-inner { gap: 10px; }
   .prep-title { font-size: 2.125rem; }
-  .prep-figure { min-height: 88px; padding: 0 10px; gap: 12px; }
-  .prep-figure svg:not(.prep-arrow) { width: 42px; height: 66px; }
-  .prep-arrow { width: 64px; height: 32px; }
+  /* 背の低い縦長でも1画面に収まるよう、Wi‑Fiは横並びにして図を詰める */
+  .prep-figure { padding: 4px 12px; gap: 2px; }
+  .prep-wifi { flex-direction: row; gap: 8px; }
+  .prep-wifi svg { width: 34px; height: 24px; }
+  .prep-wifi-label { font-size: 0.875rem; }
+  .prep-phones { max-width: 270px; row-gap: 3px; }
+  .prep-phone { gap: 4px; }
+  .prep-phone svg { width: 52px; height: 32px; }
+  .prep-phone figcaption { font-size: 0.75rem; }
   .prep-steps { gap: 8px; }
   .prep-step { min-height: 76px; padding-top: 10px; padding-bottom: 10px; }
   .prep-tether { padding: 10px 16px; gap: 4px; }

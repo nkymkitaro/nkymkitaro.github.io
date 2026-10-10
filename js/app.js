@@ -14,6 +14,7 @@ import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
+import { initJoinQr, closeJoinQr, parseJoinParam, removeJoinParam } from './join-qr.js';
 import { initStartScreen, rememberRole } from './start-screen.js';
 import { initPrepPage, openPrep } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
@@ -65,6 +66,7 @@ function startMonitor() {
   cameraLink.startAsMonitor(() => {
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
   });
+  initJoinQr(cameraLink.myId); // 参加用のQR(番号は startAsMonitor の最初で決まる)。作れなくても、番号で参加できる
 
   setInterval(renderRecStatus, 500);
   renderRecStatus();
@@ -127,7 +129,8 @@ const JOIN_FAILURE_MESSAGES = {
 };
 const LONG_TOAST_MS = 7000; // 対処まで書いた長めの知らせは、読み終えられるよう長く出す
 
-function startCamera() {
+// focus: false は、QRから開いて自動でつなぐとき(番号は入っているので、キーボードは開かない)
+function startCamera({ focus = true } = {}) {
   leaveSetupScreen();
   document.body.classList.add('mode-camera'); // 画面の切り替え・横向きのレイアウト用
   enableWakeLock({ quiet: true }); // 送信中の画面に「画面をロックすると送信が止まります」と常に出すので、成功の知らせは出さない
@@ -152,7 +155,7 @@ function startCamera() {
   cameraLink.startAsCamera();
 
   codeInput = createCodeInput({ root: document.getElementById('codeInput'), onComplete: connectToMonitor });
-  codeInput.focus(); // 端末によっては、押した直後でないとキーボードが開かない。開かなければ枠を押せばよい
+  if (focus) codeInput.focus(); // 端末によっては、押した直後でないとキーボードが開かない。開かなければ枠を押せばよい
 }
 
 // 映像の枠を、カメラ映像の縦横比に合わせて画面いっぱいに広げる。
@@ -181,8 +184,9 @@ function updateCameraBand() {
 }
 
 // 4桁そろったら自動でつなぐ。失敗したら番号を消さずに理由を出し、入れ直せばまたつなぐ
+// method: 参加のしかた('code' = 4桁を入れて / 'qr' = QRを読んで開いた)。解析用で、つなぎ方は同じ
 let joining = false;
-async function connectToMonitor(targetId) {
+async function connectToMonitor(targetId, method = 'code') {
   if (joining) return;
   joining = true;
   codeInput.setBusy(true);
@@ -191,15 +195,17 @@ async function connectToMonitor(targetId) {
   joining = false;
   cameraStatusEl.textContent = '';
   codeInput.setBusy(false);
+  if (method === 'qr') removeJoinParam(); // 結果が出たら、URLから ?join= を消す(再読み込みで古い番号につなぎに行かないように)
   if (result.ok) {
-    track('camera_join_result', { result: 'success' });
+    track('camera_join_result', { result: 'success', method });
   } else if (result.reason !== 'cancelled') {
-    track('camera_join_result', { result: 'fail', reason: result.reason });
+    track('camera_join_result', { result: 'fail', reason: result.reason, method });
   }
   if (!result.ok) {
     if (result.reason !== 'cancelled') {
       const long = result.reason === 'unreachable';
       showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout, long ? { duration: LONG_TOAST_MS } : undefined);
+      if (method === 'qr') codeInput.focus(); // 番号の枠で入れ直せるように
     }
     return;
   }
@@ -226,7 +232,12 @@ function leaveCameraSending() {
 }
 
 // 接続中カメラの一覧が変わった(増えた/切断された)たびに呼ばれる
+let lastConnectedCount = 1;
 function handleCamsChanged(sources) {
+  // 子機がつながったら、参加用QRの大きい表示はもう要らないので閉じる
+  const connectedCount = sources.filter((src) => src.connected).length;
+  if (connectedCount > lastConnectedCount) closeJoinQr();
+  lastConnectedCount = connectedCount;
   sources.forEach((src) => {
     if (!recorder.listCameraIds().includes(src.id)) {
       recorder.registerCamera(src.id, src.label, () => src.videoEl);
@@ -412,6 +423,15 @@ initStartScreen({
 // 初めて開いたときに「はじめる前に」を出す。「1台だけで使う」を選んだ人には、スタート画面の「はじめる」に「前回」の印を付けておく
 initPrepPage({ onFirstRunSolo: () => rememberRole('monitor'), onChoice: (choice) => track('prep_choice', { choice }) });
 initRoleSurvey();
+// QRを読んで開いた(?join=1234)ときは、準備ページとスタート画面を飛ばして、カメラとして自動で参加する。
+// 「前回」の印は変えない(rememberRole を呼ばない)
+const qrJoinCode = parseJoinParam(window.location.search);
+if (qrJoinCode) {
+  document.documentElement.classList.remove('needs-prep');
+  startCamera({ focus: false });
+  codeInput.fill(qrJoinCode);
+  connectToMonitor(qrJoinCode, 'qr');
+}
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
 
 const playerToolbar = document.getElementById('playerToolbar');
@@ -550,5 +570,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     closeHelp();
     closeSettings();
+    closeJoinQr();
   }
 });

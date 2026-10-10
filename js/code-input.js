@@ -49,6 +49,12 @@ export function createCodeInput({ root, length = 4, onComplete }) {
       field.readOnly = busy;
       render();
     },
+    // 番号を埋める(QRから開いたとき用)。自動でつなぐのは呼ぶ側の仕事なので、onComplete は呼ばない
+    fill(digits) {
+      field.value = String(digits).replace(/\D/g, '').slice(0, length);
+      previous = field.value;
+      render();
+    },
     clear() {
       field.value = '';
       previous = '';

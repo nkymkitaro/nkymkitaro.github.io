@@ -31,7 +31,7 @@
 
   <!-- 初めて開いたときだけ「はじめる前に」を出すための目印。スタート画面が一瞬見えてしまわないよう、描画の前に付ける。
        覚えておけない環境(プライベートブラウズなど)では、毎回出る -->
-  <script>try { if (!localStorage.getItem('kendo-var-prep-seen')) document.documentElement.classList.add('needs-prep'); } catch (e) { document.documentElement.classList.add('needs-prep'); }</script>
+  <script>try { if (!/[?&]join=\d{4}(&|$)/.test(location.search) && !localStorage.getItem('kendo-var-prep-seen')) document.documentElement.classList.add('needs-prep'); } catch (e) { if (!/[?&]join=\d{4}(&|$)/.test(location.search)) document.documentElement.classList.add('needs-prep'); }</script>
 
   <!-- アクセス解析(GoatCounter: Cookie不使用・プライバシー配慮の軽量カウンター) -->
   <script data-goatcounter="https://kendo-var.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
@@ -52,26 +52,34 @@
       </header>
 
       <figure class="prep-figure">
-        <div class="prep-phone">
-          <svg width="54" height="84" viewBox="0 0 54 84" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
-            <rect x="4" y="4" width="46" height="76" rx="8"></rect>
-            <path d="M17 34a14 14 0 0 1 20 0"></path>
-            <path d="M21 40a8 8 0 0 1 12 0"></path>
-            <circle cx="27" cy="46" r="2.5" fill="currentColor"></circle>
+        <div class="prep-wifi">
+          <svg width="56" height="40" viewBox="0 0 56 40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 16a31 31 0 0 1 44 0"></path>
+            <path d="M14 24a19 19 0 0 1 28 0"></path>
+            <circle cx="28" cy="33" r="3.5" fill="currentColor" stroke="none"></circle>
           </svg>
-          <figcaption>はじめるスマホ</figcaption>
+          <span class="prep-wifi-label">同じWi‑Fi</span>
         </div>
-        <svg class="prep-arrow" width="84" height="40" viewBox="0 0 84 40" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true">
-          <path d="M6 20h62"></path>
-          <path d="M58 10l12 10-12 10"></path>
-        </svg>
-        <div class="prep-phone">
-          <svg width="54" height="84" viewBox="0 0 54 84" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
-            <rect x="4" y="4" width="46" height="76" rx="8"></rect>
-            <rect x="14" y="32" width="26" height="18" rx="4"></rect>
-            <circle cx="27" cy="41" r="5"></circle>
+        <div class="prep-phones">
+          <svg class="prep-branch" viewBox="0 0 300 18" fill="none" stroke="#6b6b6b" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M150 2v6M75 16V8h150v8"></path>
           </svg>
-          <figcaption>カメラにするスマホ</figcaption>
+          <div class="prep-phone">
+            <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+              <rect x="3" y="3" width="70" height="40" rx="7"></rect>
+              <path d="M32 15l12 8-12 8z" fill="currentColor" stroke-linejoin="round"></path>
+            </svg>
+            <figcaption>はじめるスマホ</figcaption>
+          </div>
+          <div class="prep-phone">
+            <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+              <rect x="3" y="3" width="70" height="40" rx="7"></rect>
+              <circle cx="38" cy="23" r="10"></circle>
+              <circle cx="38" cy="23" r="4"></circle>
+              <circle class="art-rec" cx="61" cy="13" r="3.5" stroke="none"></circle>
+            </svg>
+            <figcaption>カメラにするスマホ</figcaption>
+          </div>
         </div>
       </figure>
 
@@ -116,10 +124,13 @@
       <button id="btnStartMonitor" class="start-panel start-panel-main" type="button" data-role="monitor">
         <span class="start-panel-body">
           <span class="start-last" hidden>前回</span>
-          <!-- 画面に再生マーク(▶)のあるスマホ。黒の線 -->
-          <svg class="start-art" viewBox="0 0 120 168" fill="none" stroke="currentColor" stroke-width="7" aria-hidden="true">
-            <rect x="6" y="6" width="108" height="156" rx="18"></rect>
-            <path d="M46 60l34 24-34 24z" fill="currentColor" stroke-linejoin="round"></path>
+          <!-- 横向きのスマホ(剣道の動画は横長): 画面に再生マーク(▶)と再生バー。黒の線 -->
+          <svg class="start-art" viewBox="0 0 236 140" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" aria-hidden="true">
+            <rect x="6" y="6" width="224" height="128" rx="20"></rect>
+            <path d="M104 40l34 24-34 24z" fill="currentColor" stroke-linejoin="round"></path>
+            <path class="art-track" d="M36 108h164" stroke-width="5"></path>
+            <path d="M36 108h92" stroke-width="5"></path>
+            <circle cx="128" cy="108" r="7" fill="currentColor" stroke="none"></circle>
           </svg>
           <span class="start-panel-label">はじめる</span>
           <span class="start-panel-hint">見返す端末はこちら</span>
@@ -128,11 +139,12 @@
       <button id="btnStartCamera" class="start-panel start-panel-sub" type="button" data-role="camera">
         <span class="start-panel-body">
           <span class="start-last" hidden>前回</span>
-          <!-- 画面にカメラのあるスマホ。白の線 -->
-          <svg class="start-art" viewBox="0 0 84 118" fill="none" stroke="currentColor" stroke-width="5" aria-hidden="true">
-            <rect x="4" y="4" width="76" height="110" rx="13"></rect>
-            <rect x="20" y="42" width="44" height="32" rx="7"></rect>
-            <circle cx="42" cy="58" r="8"></circle>
+          <!-- 横向きのスマホ: レンズと、赤い録画の点。白の線 -->
+          <svg class="start-art" viewBox="0 0 176 106" fill="none" stroke="currentColor" stroke-width="5" aria-hidden="true">
+            <rect x="4" y="4" width="168" height="98" rx="16"></rect>
+            <circle cx="88" cy="53" r="22"></circle>
+            <circle cx="88" cy="53" r="9"></circle>
+            <circle class="art-rec" cx="146" cy="26" r="6" stroke="none"></circle>
           </svg>
           <span class="start-panel-label">カメラで参加</span>
         </span>
@@ -184,7 +196,11 @@
       </button>
       <button id="btnHelpInline" class="icon-btn help-inline" aria-label="使い方を見る">?</button>
     </div>
-    <div class="id-line">接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
+    <div class="join-row">
+      <!-- 参加用のQR(js/join-qr.js)。押すと大きく出す。作れなかったときは出ない -->
+      <button id="btnJoinQr" class="join-qr" type="button" aria-label="QRコードを大きく表示" hidden><span class="join-qr-img" id="joinQrThumb"></span></button>
+      <div class="id-line">接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
+    </div>
     <div class="rec-status" id="recStatus" aria-live="polite"></div>
     <p class="help-text" id="idHelp">ほかの端末は、この端末と同じ<span class="nowrap">Wi-Fi</span>か、この端末の<span class="nowrap">テザリング</span>につないでから番号を入れてください。</p>
     <p class="help-text rotate-hint">横向きにすると、映像を大きく表示できます。</p>
@@ -235,6 +251,18 @@
     </div>
 
     <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
+  </div>
+
+  <!-- 参加用QRの大きい表示。白地いっぱいに出して、離れたスマホのカメラでも読めるようにする(js/join-qr.js) -->
+  <div id="qrOverlay" class="qr-overlay" hidden role="dialog" aria-modal="true" aria-label="参加用のQRコード">
+    <div class="qr-overlay-body">
+      <div class="qr-overlay-img" id="qrBig"></div>
+      <div class="qr-overlay-side">
+        <p class="qr-overlay-note">カメラにするスマホで読み取る</p>
+        <p class="qr-overlay-code">接続ID <strong id="qrBigCode"></strong></p>
+        <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
+      </div>
+    </div>
   </div>
 
   <!-- VAR設定(親機のギアボタン + ボトムシート) -->

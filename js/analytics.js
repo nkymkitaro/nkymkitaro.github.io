@@ -21,7 +21,7 @@ const ALLOWED_EVENTS = {
   prep_choice: ['choice'],
   role_answer: ['user_role', 'ask_count'],
   role_select: ['role'],
-  camera_join_result: ['result', 'reason'],
+  camera_join_result: ['result', 'reason', 'method'], // method: qr(QRから) / code(4桁を入れて)
   camera_reconnect: [],
   var_open: ['cameras'],
   clip_save: ['count', 'all_cameras'],
