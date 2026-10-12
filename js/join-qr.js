@@ -1,5 +1,5 @@
 // join-qr.js: 「QRコードを読むだけで、カメラとして参加」のQRを、はじめた端末(親機)に出す部品。
-// - 中身は https://kendovar.jp/?join=1234 の形(番号はその時の4桁)。番号の表示も残す(QRが読めないとき用)
+// - 中身は https://kendovar.jp/?join=1234&openExternalBrowser=1 の形(番号はその時の4桁)。番号の表示も残す(QRが読めないとき用)
 // - QRを作る処理は js/vendor/qrcode.mjs(リポジトリ内。外部サービス・CDNは使わない)。使うときに初めて読み込む
 // - 親機の画面に小さく出し、押すと白地いっぱいに大きく出す(離れたスマホのカメラで読むには、大きいほどよい)
 // - 子機がつながったら、大きい表示は自動で閉じる(app.js から closeJoinQr)
@@ -11,11 +11,15 @@ export const JOIN_BASE_URL = 'https://kendovar.jp/';
 const JOIN_PARAM = 'join';
 const CODE_PATTERN = /^\d{4}$/;
 const QUIET_ZONE = 4; // 白い余白(モジュール数)。規格どおり4。これが狭いと読めない
-const ERROR_CORRECTION = 'M'; // 29桁のURLが、いちばん粗い(=1マスが大きい)バージョン3に収まる最も強い訂正レベル
+// 訂正レベル。M(約15%まで欠けても読める)。openExternalBrowser を足して URL が52文字になったので、
+// バージョン4(33マス角)になる。L にすると29マス角のままだが、映り込みや汚れに弱くなるため M のままにした(2026-10-12)
+const ERROR_CORRECTION = 'M';
+// LINEのQR読み取りで読んだときも、LINEの中ではなく標準ブラウザで開くようにする(LINEの仕様。js/in-app-browser.js と同じ名前)
+const EXTERNAL_PARAM = 'openExternalBrowser=1';
 
 // 参加用のURL
 export function buildJoinUrl(code) {
-  return `${JOIN_BASE_URL}?${JOIN_PARAM}=${encodeURIComponent(code)}`;
+  return `${JOIN_BASE_URL}?${JOIN_PARAM}=${encodeURIComponent(code)}&${EXTERNAL_PARAM}`;
 }
 
 // 「?join=1234」から番号を取り出す。4桁の数字でなければ null(普通に開いたときと同じにする)

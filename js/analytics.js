@@ -17,7 +17,7 @@ const GA_CONFIG = {
 
 // 送ってよい出来事と、付けてよい情報の名前(これ以外は送らない)
 const ALLOWED_EVENTS = {
-  app_open: ['display_mode'],
+  app_open: ['display_mode'], // display_mode: browser / home_screen / in_app(LINEなどのアプリ内ブラウザ)
   prep_choice: ['choice'],
   role_answer: ['user_role', 'ask_count'],
   role_select: ['role'],
@@ -91,11 +91,13 @@ export function setUserRole(role) {
   } catch (err) { /* 設定できなくても使える */ }
 }
 
-// ホーム画面から開いたか、ブラウザで開いたか
+// ホーム画面から開いたか、LINEなどのアプリ内ブラウザか、ふつうのブラウザか(in_app の判定は js/in-app-browser.js)
 export function getDisplayMode() {
   try {
     const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-    return standalone ? 'home_screen' : 'browser';
+    if (standalone) return 'home_screen';
+    if (window.kendoInApp && window.kendoInApp.isInApp()) return 'in_app';
+    return 'browser';
   } catch (err) {
     return 'browser';
   }

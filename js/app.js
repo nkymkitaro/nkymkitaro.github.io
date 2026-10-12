@@ -21,9 +21,16 @@ import { initPrepPage, openPrep } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
 
-// 利用状況の計測(analytics.js)。本番のドメイン以外では何も送らない。失敗してもアプリは普通に動く
-initAnalytics({ userRole: getSavedRole() });
-track('app_open', { display_mode: getDisplayMode() });
+// LINEなどのアプリ内ブラウザの判定(js/in-app-browser.js が <head> で先に済ませている)。
+// leaving: LINEから標準ブラウザへ開き直している最中。blocked: 「ブラウザで開いてください」を出して先へ進ませない
+const inApp = window.kendoInApp || { leaving: false, blocked: false };
+
+// 利用状況の計測(analytics.js)。本番のドメイン以外では何も送らない。失敗してもアプリは普通に動く。
+// 標準ブラウザへ開き直す前は送らない(開き直した先で1回だけ数える)
+if (!inApp.leaving) {
+  initAnalytics({ userRole: getSavedRole() });
+  track('app_open', { display_mode: getDisplayMode() });
+}
 
 const cameraLink = new CameraLink();
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
@@ -431,8 +438,10 @@ initPrepPage({ onFirstRunSolo: () => rememberRole('monitor'), onChoice: (choice)
 initRoleSurvey();
 // QRを読んで開いた(?join=1234)ときは、準備ページとスタート画面を飛ばして、カメラとして自動で参加する。
 // 「前回」の印は変えない(rememberRole を呼ばない)
+// アプリ内ブラウザで先へ進ませないときは、準備ページも出さず、自動の参加もしない(カメラが使えないため)
+if (inApp.blocked || inApp.leaving) document.documentElement.classList.remove('needs-prep');
 const qrJoinCode = parseJoinParam(window.location.search);
-if (qrJoinCode) {
+if (qrJoinCode && !inApp.blocked && !inApp.leaving) {
   document.documentElement.classList.remove('needs-prep');
   startCamera({ focus: false });
   codeInput.fill(qrJoinCode);

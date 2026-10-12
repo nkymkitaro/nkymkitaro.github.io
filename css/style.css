@@ -1024,6 +1024,42 @@ body.camera-sending .send-frame { animation: video-expand var(--dur-base) var(--
    押した時の反応・動きの値は共通部品(.press と :root の動きの設定)を使う。
    縦向きは1列、横向きは左(見出し・図・テザリング)と右(ステップ・ボタン)に分ける。
    ========================================================= */
+/* =========================================================
+   アプリ内ブラウザ(LINE・Instagramなど)で開かれたときの案内(js/in-app-browser.js)。
+   カメラが使えないため、すべての画面の上に出して、先へ進ませない。見出し・補足ひと言・ボタンだけ(ポリシー 11章)
+   ========================================================= */
+.in-app-area {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 90; /* 準備ページ(70)・トースト(80)・QRの大きい表示(85)より上 */
+  background: var(--bg);
+  overflow-y: auto;
+  text-align: left;
+  padding: max(24px, env(safe-area-inset-top)) max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+html.in-app-blocked .in-app-area { display: flex; flex-direction: column; }
+.in-app-inner {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+.in-app-title { margin: 0; font-size: clamp(34px, 10vw, 44px); line-height: 1.25; font-weight: 900; }
+.in-app-sub { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text-soft); }
+.in-app-hint { display: flex; align-items: center; gap: 12px; margin-top: 8px; font-size: 0.9375rem; font-weight: 800; color: var(--text); }
+.in-app-menu { flex: 0 0 auto; width: 44px; height: 44px; color: var(--text); }
+.in-app-copy { width: 100%; min-height: 56px; margin-top: 16px; font-size: 1.125rem; font-weight: 800; }
+/* アプリ内ブラウザでは「ホーム画面に追加」を出さない(追加できないため) */
+html.in-app .install-section,
+html.in-app .install-btn { display: none !important; }
+/* ヘルプの「ホーム画面に追加」は囲みに入れたので、見出しの上の間隔をほかの見出しとそろえる */
+.help-sheet .install-section h4:first-of-type { margin-top: 16px; }
+
 .nowrap { white-space: nowrap; }
 .prep-area {
   display: none;

@@ -2,14 +2,30 @@
 // Android Chrome などは、追加できる状態になると beforeinstallprompt を送ってくるので、
 // それを控えておき、ボタンが押されたときに追加の確認画面を出す。
 // iPhone(Safari)にはこの仕組みがないため、ボタンは出さず、ヘルプの手順案内に任せる。
+// LINEなどのアプリ内ブラウザでは追加できないので、ボタンを出さない(判定は js/in-app-browser.js)。
 import { showToast } from './toast.js';
+
+// 追加できたときの知らせ。ホーム画面に置かれたかはブラウザから分からない(端末のホームアプリの設定で決まる)ので、
+// アプリ一覧の場所も添える
+const INSTALLED_MESSAGE = '追加しました。ホーム画面にない場合は、アプリ一覧から置けます';
+const INSTALLED_NOTICE_MS = 5000;
 
 let deferredPrompt = null;
 
+function isInAppBrowser() {
+  return !!(window.kendoInApp && window.kendoInApp.isInApp());
+}
+
 function setButtonsVisible(visible) {
+  const show = visible && !isInAppBrowser();
   document.querySelectorAll('.install-btn').forEach((btn) => {
-    btn.classList.toggle('show', visible);
+    btn.classList.toggle('show', show);
   });
+}
+
+// 知らせはトーストで出す。後半は「次にどうするか」の案内で、1行のサブ帯には収まらないため(デザインポリシー 8章)
+function notifyInstalled() {
+  showToast(INSTALLED_MESSAGE, { duration: INSTALLED_NOTICE_MS });
 }
 
 export function initInstallPrompt() {
@@ -22,7 +38,7 @@ export function initInstallPrompt() {
   window.addEventListener('appinstalled', () => {
     deferredPrompt = null;
     setButtonsVisible(false);
-    showToast('ホーム画面に追加しました。次回からはホーム画面のアイコンから開いてください');
+    notifyInstalled();
   });
 
   document.querySelectorAll('.install-btn').forEach((btn) => {

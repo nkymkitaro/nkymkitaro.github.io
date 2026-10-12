@@ -18,6 +18,9 @@
   <!-- アプリアイコン (iOS用) -->
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
+  <!-- LINEなどのアプリ内ブラウザで開かれたかの判定。LINEなら、ここで標準ブラウザへ開き直す(描画・計測より前に) -->
+  <script src="js/in-app-browser.js"></script>
+
   <!-- WebRTC通信用ライブラリ (PeerJS) -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
@@ -38,6 +41,25 @@
   <h1>剣道VAR</h1>
 
   <div id="toast" class="toast"></div>
+
+  <!-- アプリ内ブラウザ(LINE・Instagramなど)で開かれたときだけ出す。カメラが使えないため、ここから先へは進ませない -->
+  <div id="inAppArea" class="in-app-area" role="dialog" aria-modal="true" aria-labelledby="inAppTitle">
+    <div class="in-app-inner">
+      <div class="prep-brand">剣道VAR</div>
+      <h2 class="in-app-title" id="inAppTitle">ブラウザで<br>開いてください</h2>
+      <p class="in-app-sub">カメラを使うため</p>
+      <div class="in-app-hint">
+        <svg class="in-app-menu" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="42" height="42" rx="12" stroke="currentColor" stroke-width="4"></rect>
+          <circle cx="14" cy="24" r="3.5" fill="currentColor"></circle>
+          <circle cx="24" cy="24" r="3.5" fill="currentColor"></circle>
+          <circle cx="34" cy="24" r="3.5" fill="currentColor"></circle>
+        </svg>
+        <span>右上か右下の「…」から開けます</span>
+      </div>
+      <button type="button" id="btnInAppCopy" class="btn-hero in-app-copy">URLをコピー</button>
+    </div>
+  </div>
 
   <!-- 0. はじめる前に(2台以上で使うときの準備)。初めて開いたときに1回出る。ヘルプからいつでも開ける -->
   <div id="prepArea" class="prep-area" role="dialog" aria-modal="true" aria-labelledby="prepTitle">
@@ -320,9 +342,11 @@
     <h4>🔆 画面が消えない件について</h4>
     <p>「はじめる」でも「カメラで参加」でも、撮影中は画面が自動でオフにならないようにしています(画面が消えるとカメラも止まってしまうため)。バッテリーの消費は増えるので、できれば電源に繋いでおいてください。なお、電源ボタンなどで手動でロックした場合はこの仕組みでは防げず、カメラが止まります。対応していない端末では、事前に端末の設定で画面の自動ロック時間を長めにしておくことをおすすめします。</p>
 
-    <h4>📱 ホーム画面に追加</h4>
-    <p>ホーム画面に追加すると、アドレスバーのない画面で広く使えます。Androidの場合はChromeのメニュー(︙)から「ホーム画面に追加」または「アプリをインストール」を、iPhoneの場合はSafariの共有ボタンから「ホーム画面に追加」を選んでください。</p>
-    <button class="link-btn install-btn" type="button">ホーム画面に追加</button>
+    <div class="install-section">
+      <h4>📱 ホーム画面に追加</h4>
+      <p>ホーム画面に追加すると、アドレスバーのない画面で広く使えます。Androidの場合はChromeのメニュー(︙)から「ホーム画面に追加」または「アプリをインストール」を、iPhoneの場合はSafariの共有ボタンから「ホーム画面に追加」を選んでください。ホーム画面に見当たらない場合は、アプリ一覧を確認してください。</p>
+      <button class="link-btn install-btn" type="button">ホーム画面に追加</button>
+    </div>
 
     <h4>ご意見・お問い合わせ</h4>
     <p>不具合のご報告やご意見は、公式LINEにて受け付けております。</p>
