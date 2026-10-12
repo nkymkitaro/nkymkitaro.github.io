@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>プライバシー | 剣道VAR</title>
+  <meta name="description" content="剣道VARが送るもの・送らないもの。映像はサーバーに保存されません。">
+  <meta name="theme-color" content="#000000">
+  <link rel="icon" href="../icons/icon-192.png">
+  <link rel="apple-touch-icon" href="../icons/apple-touch-icon.png">
+
+  <!-- フォントはアプリと同じ Murecho(500 / 800 / 900)。このページでは計測(GA4)を送らない -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #000000;
+      --text: #ffffff;
+      --text-body: #c7c7c7;   /* 本文。黒地で 4.5:1 以上 */
+      --text-soft: #b8b8b8;   /* 補足(デザインポリシー5章の --text-soft) */
+      --text-dim: #a3a3a3;
+      --panel: #161616;
+      --line: #2a2a2a;
+      --faint: #4a4a4a;       /* 絵の線(文字ではない) */
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Murecho", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+      font-weight: 500;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    }
+    a { color: var(--text); text-underline-offset: 3px; }
+    a:focus-visible { outline: 3px solid #ffffff; outline-offset: 3px; border-radius: 4px; }
+
+    .page {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .head { display: flex; flex-direction: column; gap: 14px; }
+    .eyebrow { font-size: 14px; font-weight: 800; color: var(--text-dim); letter-spacing: 0.04em; }
+    h1 { margin: 0; font-size: clamp(32px, 9.2vw, 44px); line-height: 1.3; font-weight: 900; }
+    .lead { margin: 0; font-size: 15px; line-height: 1.7; color: var(--text-body); }
+
+    .figure { width: 100%; max-width: 350px; height: auto; }
+
+    section { display: flex; flex-direction: column; gap: 12px; }
+    /* 状態の帯と同じ斜めの切り口の見出し */
+    .label {
+      align-self: flex-start;
+      margin: 0;
+      padding: 4px 22px 4px 12px;
+      background: var(--line);
+      color: var(--text);
+      font-size: 18px;
+      font-weight: 900;
+      clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%);
+    }
+    .label.strong { background: #ffffff; color: #000000; }
+
+    .rows { display: flex; flex-direction: column; gap: 8px; }
+    .row { padding: 14px 16px; border-radius: 14px; background: var(--panel); font-size: 16px; font-weight: 800; }
+
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+    .pills li { padding: 8px 12px; border-radius: 999px; border: 2px solid var(--line); font-size: 14px; font-weight: 800; }
+    .note { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-soft); }
+
+    .next { padding: 16px; border-radius: 14px; border: 2px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
+    .next-main { font-size: 17px; line-height: 1.5; font-weight: 800; }
+    .next-sub { font-size: 14px; line-height: 1.7; color: var(--text-body); }
+
+    .foot { margin-top: 8px; padding-top: 18px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-soft); }
+  </style>
+</head>
+<body>
+<main class="page">
+
+  <header class="head">
+    <div class="eyebrow">剣道VAR　プライバシー</div>
+    <!-- 見出しの文言は技術マネージャーが決め直し中(2026-10-12)。決まるまでは仮 -->
+    <h1 id="pageTitle">映像は、<br>サーバーに<br>保存されません。</h1>
+    <p class="lead">撮影した映像と保存したクリップは、お使いの端末の中にだけ保存されます。</p>
+  </header>
+
+  <svg class="figure" viewBox="0 0 350 120" fill="none" aria-hidden="true">
+    <rect x="95" y="8" width="160" height="96" rx="16" stroke="#ffffff" stroke-width="5"></rect>
+    <path d="M160 40l26 16-26 16z" fill="#ffffff"></path>
+    <path d="M30 56h40M280 56h40" stroke="#4a4a4a" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"></path>
+    <path d="M300 40l16 32M316 40l-16 32" stroke="#4a4a4a" stroke-width="4" stroke-linecap="round"></path>
+  </svg>
+
+  <section aria-labelledby="h-not">
+    <h2 class="label strong" id="h-not">送らないもの</h2>
+    <div class="rows">
+      <div class="row">映像・写真</div>
+      <div class="row">名前・連絡先など、あなたが分かる情報</div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-send">
+    <h2 class="label" id="h-send">送るもの</h2>
+    <p class="lead">使い勝手の改善のため、使われ方だけを、個人が分からない形で記録しています(Google アナリティクス)。</p>
+    <!-- 一覧は、アプリが送る出来事(js/analytics.js の ALLOWED_EVENTS)と対応させる。数は書かない。
+         出来事を足すときは、先に依頼書 2026-10-11-to-coder-privacy-page.md の対応表を直す -->
+    <ul class="pills">
+      <li>アプリを開いた</li>
+      <li>「はじめる」か「カメラで参加」か</li>
+      <li>カメラがつながったか</li>
+      <li>見返した</li>
+      <li>拡大・コマ送りを使ったか</li>
+      <li>保存した</li>
+      <li>立場(答えた場合)</li>
+      <li>公式LINEを開いた</li>
+    </ul>
+    <p class="note">端末の種類やおおよその地域は、Google アナリティクスが記録します。<a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google のプライバシーポリシー</a></p>
+  </section>
+
+  <section aria-labelledby="h-next">
+    <h2 class="label" id="h-next">これから</h2>
+    <div class="next">
+      <div class="next-main">AI機能の改善のため、データの提供をお願いすることがあります。</div>
+      <div class="next-sub">お願いするのは、映像ではなく、端末の中で計算した数値などです。その際は事前にお知らせします。提供は任意で、お断りいただいても今の機能はそのままお使いいただけます。</div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div>ベータ版です。</div>
+    <div>2026年10月 更新</div>
+    <div>ご意見・お問い合わせ: <a href="https://lin.ee/VP2gCS6" target="_blank" rel="noopener">公式LINE</a></div>
+  </footer>
+
+</main>
+</body>
+</html>

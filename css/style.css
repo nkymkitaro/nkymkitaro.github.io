@@ -451,6 +451,8 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 }
 .link-btn:active { opacity: 0.6; transform: scale(0.97); }
 #btnOpenRole { width: calc(100% - 6px); font-family: inherit; }
+/* ヘルプの一番下の小さな「ベータ版です。」(中山さんの判断 2026-10-11。ここ・プライバシーのページ・告知文だけに出す) */
+.help-sheet p.help-beta { margin: 14px 0 0; font-size: 13px; font-weight: 500; text-align: center; color: var(--text-soft); }
 
 /* --- 親機: 今使える操作・必要な情報だけを出す --- */
 /* LIVE中は「LIVEに戻る」とシークバーは使えないので隠す */
