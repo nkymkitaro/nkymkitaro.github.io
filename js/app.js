@@ -295,8 +295,10 @@ function renderCamSelector(sources) {
   document.getElementById('monitorArea').classList.toggle('has-children', multi);
   const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
   // リプレイ中は全画面で操作が消えることがあるので、いま見ているカメラは帯の下に常に出しておく
+  // (並べて見ているときは、それぞれの映像にカメラ名が出るので出さない)
   const current = sources.find((src) => src.id === highlightId);
-  document.getElementById('camBadge').textContent = current ? current.label : '';
+  const showingGrid = player.isReplay && player.view === 'grid';
+  document.getElementById('camBadge').textContent = current && !showingGrid ? current.label : '';
 
   sources.forEach((src) => {
     const btn = document.createElement('button');
@@ -308,11 +310,25 @@ function renderCamSelector(sources) {
     btn.addEventListener('click', () => selectCamera(src.id));
     container.appendChild(btn);
   });
+
+  // リプレイ中で、2台以上の映像があれば「並べる」(並べて見る形に戻る)を出す
+  if (player.isReplay && player.view !== 'grid' && player.canGrid()) {
+    const gridBtn = document.createElement('button');
+    gridBtn.id = 'btnGridView';
+    gridBtn.className = 'grid-view-btn';
+    gridBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="3" y="4" width="8" height="7" rx="1.2"/><rect x="13" y="4" width="8" height="7" rx="1.2"/><rect x="3" y="13" width="8" height="7" rx="1.2"/><rect x="13" y="13" width="8" height="7" rx="1.2"/></svg>並べる';
+    gridBtn.addEventListener('click', () => applyReplayView('grid'));
+    container.appendChild(gridBtn);
+  }
 }
 
 // ライブ中はカメラの切り替え、リプレイ中は「同じ瞬間を別アングルで見る」切り替えになる
 function selectCamera(id) {
   if (player.isReplay) {
+    if (player.view === 'grid') {
+      applyReplayView('single', id);
+      return;
+    }
     player.switchAngle(id);
     replayUi.resetZoom(true); // 別のカメラでは見たい場所が違うので、拡大は元に戻す
     replayUi.showControls();
@@ -465,6 +481,11 @@ const replayUi = createReplayUi({
   player,
   onZoom: () => track('var_zoom'),
   onScrub: () => track('var_scrub'),
+  // 並べて見ているとき、触ったカメラを1つずつ見る形にする
+  onGridTap: (point) => {
+    const camId = player.tileAt(point.x, point.y);
+    if (camId) applyReplayView('single', camId);
+  },
 });
 const BACK_TO_REPLAY_MS = 6000; // 「リプレイに戻る」を出しておく時間
 let backToReplayPoint = null;
@@ -478,8 +499,58 @@ function setReplayUI(isReplay, { newVar = false } = {}) {
   if (isReplay) replayUi.enter({ newSession: newVar }); // 操作を出した状態で始める。拡大は元の大きさ
   else replayUi.leave();
   updateStateBand();
+  syncReplayViewUi(); // 並べて見る形の印と「並べる」ボタン(カメラの切り替えボタンも描き直す)
+}
+
+// --- リプレイの見え方(並べて見る / 1つずつ見る)。2026-10-16 技術マネージャーの依頼 ---
+// 2台以上の映像があれば、並べて見る形から始める。最後に使った見え方は、この端末の中だけに覚えておく
+const REPLAY_VIEW_KEY = 'kendoVar.replayView';
+function savedReplayView() {
+  try { return localStorage.getItem(REPLAY_VIEW_KEY); } catch (err) { return null; }
+}
+function rememberReplayView(view) {
+  try { localStorage.setItem(REPLAY_VIEW_KEY, view); } catch (err) { /* 覚えられなくても動く */ }
+}
+// VARに入る・リプレイに戻るときの見え方。描き直しは呼んだ側(rewind・resumeAt)が行う
+function chooseReplayView() {
+  const view = player.canGrid() && savedReplayView() !== 'single' ? 'grid' : 'single';
+  return player.setView(view, { render: false });
+}
+// 見え方の印(CSSの .grid-view)と、指の操作の扱いを今の見え方に合わせる
+function syncReplayViewUi() {
+  const grid = player.isReplay && player.view === 'grid';
+  monitorArea.classList.toggle('grid-view', grid);
+  replayUi.setGrid(grid);
   renderCamSelector(cameraLink.getAllSources());
 }
+// 切り替えたことが分かるよう、映像を短く浮かび上がらせる(--dur-base。動きを減らす設定では出ない)
+function flashViewChange() {
+  const canvas = document.getElementById('displayCanvas');
+  canvas.classList.remove('view-in');
+  void canvas.offsetWidth;
+  canvas.classList.add('view-in');
+}
+// 見え方を切り替える(見ている時刻はそのまま)。camId: 1つずつ見る形にするとき、見るカメラ
+function applyReplayView(view, camId) {
+  if (!player.isReplay) return;
+  if (view === 'single') {
+    player.setView('single', { render: false });
+    if (camId && camId !== player.currentCamId) player.switchAngle(camId);
+    else player._renderCurrentFrame();
+  } else {
+    player.setView('grid');
+  }
+  rememberReplayView(player.view);
+  syncReplayViewUi();
+  flashViewChange();
+  replayUi.showControls();
+}
+// 並べて見ていてカメラが減り、自動で1つずつ見る形に戻ったとき
+player.onViewChanged = () => syncReplayViewUi();
+// 端末を回したら、並べ方(左右・上下・2×2)を新しい画面の形で選び直す
+window.addEventListener('resize', () => {
+  if (player.isReplay && player.view === 'grid') player._renderCurrentFrame();
+});
 
 // ブラウザの全画面表示(対応する端末だけ)。VARに入ったときに入り、LIVEに戻ったら解除する。
 // iPhoneのブラウザは対応していないので何もしない。ホーム画面から開いていれば、すでにアドレスバーはない
@@ -509,6 +580,7 @@ function hideBackToReplay() {
 document.getElementById('btnRewind').addEventListener('click', () => {
   // 一瞬止めて(ため)から、キュッと巻き戻してリプレイに入る。値は css/style.css の --var-hold / --var-sweep
   recorder.hold(); // 見返している間は、録画の古いコマを捨てない(場面がずれないように)
+  chooseReplayView(); // 2台以上なら並べて見る形から(最後に1つずつ見る形を使っていたら、そちら)
   const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource, {
     holdMs: motionMs('--var-hold'),
     sweepMs: motionMs('--var-sweep'),
@@ -544,6 +616,7 @@ btnBackToReplay.addEventListener('click', () => {
   const point = backToReplayPoint;
   hideBackToReplay();
   recorder.hold();
+  chooseReplayView();
   if (!player.resumeAt(point)) {
     recorder.release();
     showToast('リプレイの映像が残っていません');

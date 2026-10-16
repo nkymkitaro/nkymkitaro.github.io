@@ -1525,6 +1525,38 @@ body.mode-monitor #monitorArea.replaying .state-bands {
 #monitorArea.replaying[data-ui="hide"] :is(.seek-row, #camSelector, .save-row, #btnSpeed, #btnStepBack, #btnPlayPause, #btnStepForward, #btnGoLive),
 #monitorArea.replaying[data-ui="hide"]::after { animation: replay-ui-out var(--dur-base) var(--ease-out) both; }
 
+/* 「並べる」ボタン(1つずつ見ているときだけ、カメラの切り替えの行の右に出す。js/app.js の renderCamSelector) */
+body.mode-monitor #monitorArea.replaying #camSelector .grid-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.grid-view-btn svg { width: 18px; height: 18px; flex: 0 0 auto; }
+/* カメラが多いとき(4台+「並べる」)も1行に収める */
+body.mode-monitor #monitorArea.replaying #camSelector button { flex: 0 1 auto; min-width: 56px; }
+
+/* 並べて見る形(js/app.js が .grid-view を付ける)
+   - 映像は、操作の上の残りの場所に並べる(操作は消さずに出したままなので、映像に重ねない)
+   - 状態の帯は映像の上に置き、並べた映像にかからないようにする
+   - カメラの切り替えの行は出さない(映像をタップして選ぶ)。拡大はしない */
+body.mode-monitor #monitorArea.replaying.grid-view .stage-video {
+  position: relative;
+  inset: auto;
+  grid-area: 1 / 1 / 2 / -1;
+  margin: calc(env(safe-area-inset-top) + 60px) calc(-1 * max(16px, env(safe-area-inset-right))) 0 calc(-1 * max(16px, env(safe-area-inset-left)));
+  overflow: visible;
+}
+body.mode-monitor #monitorArea.replaying.grid-view .state-bands { top: -48px; }
+body.mode-monitor #monitorArea.replaying.grid-view #displayCanvas { scale: 1; translate: 0 0; }
+body.mode-monitor #monitorArea.replaying.grid-view #camSelector,
+body.mode-monitor #monitorArea.replaying.grid-view .zoom-badge { display: none !important; }
+body.mode-monitor #monitorArea.replaying.grid-view::after { display: none; }
+/* 見え方を切り替えたときの短い動き(--dur-base) */
+@keyframes view-in { from { opacity: 0.35; } to { opacity: 1; } }
+#displayCanvas.view-in { animation: view-in var(--dur-base) var(--ease-out) both; }
+
 /* 横向き: 1行に並べる(左から コマ送り・再生・コマ送り・速度、右に 保存 と LIVEに戻る)。カメラの切り替えは、その上の行 */
 @media (orientation: landscape) {
   body.mode-monitor #monitorArea.replaying {
@@ -1541,6 +1573,8 @@ body.mode-monitor #monitorArea.replaying .state-bands {
   body.mode-monitor #monitorArea.replaying #btnGoLive { grid-area: 4 / 7; padding: 8px 20px; white-space: nowrap; }
   body.mode-monitor #monitorArea.replaying .state-bands { top: 8px; }
   body.mode-monitor #monitorArea.replaying .zoom-badge { top: 8px; }
+  body.mode-monitor #monitorArea.replaying.grid-view .stage-video { margin-top: 46px; }
+  body.mode-monitor #monitorArea.replaying.grid-view .state-bands { top: -38px; }
   .cam-badge { font-size: 0.95rem; padding: 5px 18px 5px 12px; }
 }
 /* 横幅が狭い横向き(初代iPhone SEなど): 保存をカメラ切り替えの行の右に上げて、LIVEに戻るが画面内に収まるようにする */

@@ -5,6 +5,11 @@
 import { tapFeedback } from './haptics.js';
 
 const SEEK_HAPTIC_INTERVAL_MS = 50; // シークを指でなぞったときの振動の間隔(ブーッと鳴り続けないように間引く)
+// 並べて見るとき、ほかのカメラで「同じ瞬間」とみなすずれの上限。これより離れたコマしかなければ「映像なし」にする
+// (切断などで、その時刻のコマがないカメラに、別の時刻の映像を出さないため)
+const GRID_MATCH_LIMIT_MS = 300;
+const GRID_LABEL_PX = 14; // 並べて見るときのカメラ名の文字の大きさ(画面上の見た目の大きさ)
+const GRID_GAP_PX = 3;    // 並べた映像どうしのすきま(画面上の見た目の大きさ)
 
 async function blobToDrawable(blob) {
   if (window.createImageBitmap) {
@@ -37,6 +42,14 @@ export class ReplayPlayer {
     this._liveLoopStarted = false;
     this._sweepId = 0; // VARに入るときの「ため」と巻き戻しの動き。途中で別の操作が来たら番号を進めて打ち切る
     this._lastSeekHaptic = 0;
+
+    // 見え方: 'single'(1つずつ見る) / 'grid'(並べて見る)。
+    // 並べて見るときも、時刻の基準は currentCamId のコマ(シークバー・コマ送りはこのカメラのコマで動く)。
+    // ほかのカメラは、同じ撮影時刻に一番近いコマを出す
+    this.view = 'single';
+    this.onViewChanged = null; // (view) => void: カメラが減って並べられなくなり、自動で1つずつ見る形に戻したとき
+    this._gridCache = new Map(); // camId -> { frame, drawable }: コマが変わらないカメラは、描き直すときに画像を作り直さない
+    this._gridLayout = null; // 最後に並べたときの配置(タップした場所のカメラを調べるため)
 
     this.seekBar = document.getElementById('seekBar');
     this.timeReadout = document.getElementById('timeReadout');
@@ -287,6 +300,7 @@ export class ReplayPlayer {
     this.seekBar.value = 0;
     this.timeReadout.textContent = 'LIVE';
     this.timeReadout.classList.remove('is-replay');
+    this._clearGridCache(); // 見え方(this.view)は残す。次のVARで app.js が決め直す
   }
 
   setSpeed(speed) {
@@ -367,6 +381,7 @@ export class ReplayPlayer {
   }
 
   async _renderCurrentFrame() {
+    if (this.view === 'grid') return this._renderGrid();
     if (!this._updateSeekUi()) return;
     const frames = this._frames();
     const frame = frames[this.frameIndex];
@@ -385,6 +400,192 @@ export class ReplayPlayer {
     } catch (err) {
       console.error(err);
     }
+  }
+
+  // ---- 並べて見る ----
+
+  // 並べられるカメラ(録画のコマがあるもの)。カメラ1、カメラ2…の順
+  gridCamIds() {
+    const num = (id) => {
+      const m = /(\d+)/.exec(this.recorder.getLabel(id) || '');
+      return m ? parseInt(m[1], 10) : 99;
+    };
+    return this.recorder.listCameraIds()
+      .filter((id) => this.recorder.getFrames(id).length > 0)
+      .sort((a, b) => num(a) - num(b));
+  }
+
+  canGrid() {
+    return this.gridCamIds().length >= 2;
+  }
+
+  // 見え方を切り替える。時刻(基準のカメラのコマ)はそのまま。render: false なら描き直さない(続けて別の操作をするとき)
+  setView(view, { render = true } = {}) {
+    const next = view === 'grid' && this.canGrid() ? 'grid' : 'single';
+    this.view = next;
+    if (next !== 'grid') this._clearGridCache();
+    if (render && this.isReplay) this._renderCurrentFrame();
+    return next;
+  }
+
+  _clearGridCache() {
+    this._renderToken++; // 描いている途中のものがあれば、片付けた画像を使わないよう打ち切る
+    for (const entry of this._gridCache.values()) {
+      if (entry.drawable && entry.drawable.close) entry.drawable.close();
+    }
+    this._gridCache.clear();
+    this._gridLayout = null;
+  }
+
+  // 撮影時刻 ts に一番近いコマ(コマは撮影順に並んでいるので、二分探索で探す)
+  _nearestFrame(frames, ts) {
+    if (frames.length === 0) return null;
+    let lo = 0;
+    let hi = frames.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (frames[mid].ts < ts) lo = mid + 1;
+      else hi = mid;
+    }
+    let best = frames[lo];
+    if (lo > 0 && Math.abs(frames[lo - 1].ts - ts) < Math.abs(best.ts - ts)) best = frames[lo - 1];
+    return Math.abs(best.ts - ts) <= GRID_MATCH_LIMIT_MS ? best : null;
+  }
+
+  // 並べ方を選ぶ。映像1つあたりが一番大きく見える並べ方にする
+  // (横向きの2台は左右、縦向きは上下。3〜4台は2×2か、縦・横の1列のうち大きく見えるほう)
+  _chooseGrid(count, tileW, tileH) {
+    const boxW = this.canvas.clientWidth || tileW * 2;
+    const boxH = this.canvas.clientHeight || tileH;
+    const candidates = count <= 2 ? [[2, 1], [1, 2]] : [[2, 2], [1, count], [count, 1]];
+    let best = null;
+    for (const [cols, rows] of candidates) {
+      const scale = Math.min(boxW / (cols * tileW), boxH / (rows * tileH));
+      if (!best || scale > best.scale + 1e-6) best = { cols, rows, scale };
+    }
+    return best;
+  }
+
+  async _renderGrid() {
+    if (!this._updateSeekUi()) return;
+    const ids = this.gridCamIds();
+    if (ids.length < 2) {
+      // カメラが減って並べられなくなった: 1つずつ見る形に戻す
+      this.setView('single', { render: false });
+      if (this.onViewChanged) this.onViewChanged('single');
+      return this._renderCurrentFrame();
+    }
+    const ref = this._frames()[this.frameIndex];
+    if (!ref) return;
+    const token = ++this._renderToken;
+    const created = [];
+    let items;
+    try {
+      items = await Promise.all(ids.map(async (id) => {
+        const frame = this._nearestFrame(this.recorder.getFrames(id), ref.ts);
+        if (!frame) return { id, frame: null, drawable: null };
+        const cached = this._gridCache.get(id);
+        if (cached && cached.frame === frame) return { id, frame, drawable: cached.drawable };
+        const drawable = await blobToDrawable(frame.blob);
+        created.push(drawable);
+        return { id, frame, drawable };
+      }));
+    } catch (err) {
+      console.error(err);
+      created.forEach((d) => d.close && d.close());
+      return;
+    }
+    if (token !== this._renderToken || this.view !== 'grid') {
+      created.forEach((d) => d.close && d.close()); // 描画中に追い越された(古いコマが遅れて出るのを防ぐ)
+      return;
+    }
+
+    // 1つの枠の大きさは、映像の一番大きいものに合わせる(縦向きと横向きのカメラが混ざっても、引き伸ばさない)
+    let tileW = 0;
+    let tileH = 0;
+    items.forEach((it) => {
+      if (!it.drawable) return;
+      tileW = Math.max(tileW, it.drawable.width);
+      tileH = Math.max(tileH, it.drawable.height);
+    });
+    if (!tileW || !tileH) { tileW = 640; tileH = 480; }
+    const layout = this._chooseGrid(items.length, tileW, tileH);
+    this._fitCanvasTo(layout.cols * tileW, layout.rows * tileH);
+    const ctx = this.ctx;
+    const unit = 1 / layout.scale; // 画面上の1pxが、canvasの何pxにあたるか
+    const gap = Math.round(GRID_GAP_PX * unit);
+    const fontPx = Math.round(GRID_LABEL_PX * unit);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    items.forEach((it, i) => {
+      const col = i % layout.cols;
+      const row = Math.floor(i / layout.cols);
+      const x = col * tileW + gap / 2;
+      const y = row * tileH + gap / 2;
+      const w = tileW - gap;
+      const h = tileH - gap;
+      ctx.fillStyle = '#111';
+      ctx.fillRect(x, y, w, h);
+      if (it.drawable) {
+        const s = Math.min(w / it.drawable.width, h / it.drawable.height);
+        const dw = it.drawable.width * s;
+        const dh = it.drawable.height * s;
+        ctx.drawImage(it.drawable, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+      } else {
+        ctx.fillStyle = '#8e8e93';
+        ctx.font = `800 ${fontPx}px Murecho, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('映像なし', x + w / 2, y + h / 2);
+      }
+      // カメラ名(左上)。暗い地に白い文字で、明るい映像の上でも読めるようにする
+      const label = this.recorder.getLabel(it.id);
+      ctx.font = `900 ${fontPx}px Murecho, sans-serif`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const padX = Math.round(fontPx * 0.6);
+      const bw = ctx.measureText(label).width + padX * 2;
+      const bh = Math.round(fontPx * 1.7);
+      ctx.fillStyle = 'rgba(28, 28, 30, 0.82)';
+      ctx.fillRect(x, y, bw, bh);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(label, x + padX, y + bh / 2);
+    });
+
+    // 新しく作った画像を控え、使わなくなった古い画像は片付ける
+    items.forEach((it) => {
+      const old = this._gridCache.get(it.id);
+      if (old && old.drawable !== it.drawable && old.drawable && old.drawable.close) old.drawable.close();
+      if (it.drawable) this._gridCache.set(it.id, { frame: it.frame, drawable: it.drawable });
+      else this._gridCache.delete(it.id);
+    });
+    for (const id of [...this._gridCache.keys()]) {
+      if (!ids.includes(id)) {
+        const old = this._gridCache.get(id);
+        if (old.drawable && old.drawable.close) old.drawable.close();
+        this._gridCache.delete(id);
+      }
+    }
+    this._gridLayout = { cols: layout.cols, rows: layout.rows, tileW, tileH, ids };
+  }
+
+  // 並べて見ているとき、映像の枠の中の点(x, y: 枠の左上からのpx)に映っているカメラ。なければ null
+  tileAt(x, y) {
+    const g = this._gridLayout;
+    if (this.view !== 'grid' || !g) return null;
+    const W = this.canvas.clientWidth;
+    const H = this.canvas.clientHeight;
+    const cw = this.canvas.width;
+    const ch = this.canvas.height;
+    if (!W || !H || !cw || !ch) return null;
+    // canvas は object-fit: contain で枠に収めているので、余白の分をずらして canvas の座標に直す
+    const s = Math.min(W / cw, H / ch);
+    const cx = (x - (W - cw * s) / 2) / s;
+    const cy = (y - (H - ch * s) / 2) / s;
+    if (cx < 0 || cy < 0 || cx >= cw || cy >= ch) return null;
+    const index = Math.floor(cy / g.tileH) * g.cols + Math.floor(cx / g.tileW);
+    return g.ids[index] || null;
   }
 
   _updatePlayPauseButton() {

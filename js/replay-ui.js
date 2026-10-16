@@ -10,6 +10,11 @@
 // - 手が震えていても、1回タップで拡大しないよう、拡大は「2回タップ」か「2本指」のときだけ。
 //   指の動きが数px以内なら、なぞった扱いにしない(タップのまま)
 // - 保存するクリップには関係しない(拡大は表示だけ。録画バッファの映像はそのまま)
+// - 並べて見る形(setGrid(true))のとき:
+//     操作は消さずに出したままにする(タップはカメラを選ぶのに使うため)
+//     1回タップ・2回タップ .. 触ったカメラを1つずつ見る形にする(onGridTap)。待たずにすぐ切り替える
+//     1本で横になぞる ........ コマを前後に送る(全カメラが同じ時刻で動く)
+//     拡大はしない(2本指も無視する)
 
 const HIDE_AFTER_MS = 2000;       // 最後に触ってから、操作が消えるまで
 const TAP_SLOP_PX = 12;           // この距離までの動きは、なぞりではなくタップ(手の震えの余裕)
@@ -21,6 +26,7 @@ const MAX_ZOOM = 4;
 const DOUBLE_TAP_ZOOM = 2;
 const PINCH_DEADZONE = 0.05;      // 2本指の幅が、始めの5%以内の変化なら拡大・縮小しない(震え対策)
 const SNAP_TO_ONE = 1.03;         // 指を離したとき、これ以下なら等倍に戻す
+const GRID_TAP_GUARD_MS = DOUBLE_TAP_GAP_MS; // 並べた形でタップして切り替えた直後の2回目のタップは、無視する(2回タップで操作が消えないように)
 
 // 触っている間は操作を消さない対象
 const CONTROL_SELECTOR = '#camSelector button, .seek-row, .save-btn, #btnSpeed, #btnStepBack, #btnPlayPause, #btnStepForward, #btnGoLive';
@@ -30,8 +36,10 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // area: #monitorArea(.replaying が付く全画面の入れ物) / stage: 映像の枠 / canvas: 映像
 // onZoom・onScrub: 使われたとき(リプレイ1回につき1度だけ)に呼ぶ。送る側(app.js)は何も数えなくてよい
-export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom = () => {}, onScrub = () => {} }) {
+export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom = () => {}, onScrub = () => {}, onGridTap = () => {} }) {
   let active = false;
+  let grid = false; // 並べて見る形か
+  let ignoreTapUntil = 0;
   let uiShown = true;
   let hideTimer = 0;
   let tapTimer = 0;
@@ -61,7 +69,7 @@ export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom 
 
   function scheduleHide() {
     cancelHide();
-    if (!active || touching || heldControls.size > 0) return;
+    if (!active || grid || touching || heldControls.size > 0) return;
     hideTimer = setTimeout(() => setUi(false), HIDE_AFTER_MS);
   }
 
@@ -149,6 +157,14 @@ export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom 
 
   function handleTap(point, wasHidden) {
     const now = performance.now();
+    if (now < ignoreTapUntil) return;
+    if (grid) {
+      clearTimeout(tapTimer);
+      lastTap = null;
+      ignoreTapUntil = now + GRID_TAP_GUARD_MS;
+      onGridTap(point);
+      return;
+    }
     if (lastTap && now - lastTap.t <= DOUBLE_TAP_GAP_MS && dist(lastTap, point) <= DOUBLE_TAP_DISTANCE_PX) {
       clearTimeout(tapTimer);
       lastTap = null;
@@ -198,7 +214,7 @@ export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom 
     if (pointers.size === 1) {
       mode = 'tap';
       down = { ...point, wasHidden: !uiShown, startIndex: player.frameIndex };
-    } else if (pointers.size === 2) {
+    } else if (pointers.size === 2 && !grid) {
       clearTimeout(tapTimer);
       lastTap = null;
       mode = 'pinch';
@@ -307,6 +323,7 @@ export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom 
     // LIVEに戻ったとき。拡大を元に戻す
     leave() {
       active = false;
+      grid = false;
       cancelHide();
       clearTimeout(tapTimer);
       lastTap = null;
@@ -315,6 +332,17 @@ export function createReplayUi({ area, stage, canvas, zoomBadge, player, onZoom 
       mode = 'idle';
       resetZoom(false);
       delete area.dataset.ui;
+    },
+    // 並べて見る形にする / やめる。並べている間は拡大せず、操作を出したままにする
+    setGrid(on) {
+      grid = !!on;
+      if (grid) {
+        resetZoom(false);
+        cancelHide();
+        setUi(true);
+      } else {
+        scheduleHide();
+      }
     },
     resetZoom,
     showControls,
