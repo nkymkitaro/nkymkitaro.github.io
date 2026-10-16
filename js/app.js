@@ -33,16 +33,18 @@ if (!inApp.leaving) {
 }
 
 const cameraLink = new CameraLink();
-const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 320, quality: 0.6 });
+// 録画の幅の既定は640px(カメラの取り込みと同じ大きさ。拡大して見たときに粗くならないよう、2026-10-14 に320pxから上げた)
+const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 640, quality: 0.6 });
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 // --- VAR設定(親機からいつでも調整できる) ---
 const REWIND_OPTIONS = [10, 15, 20, 30]; // 秒
 const BUFFER_OPTIONS = [10, 15, 20, 30]; // 秒
+// 録画の画質。カメラは640×480で取り込むので、640pxより上げても細かくならない(「高」は外した、2026-10-14)。
+// 「低」は、重い・熱くなる端末向けの逃げ道(以前の標準の320px)
 const QUALITY_OPTIONS = [
-  { key: 'low', label: '低', width: 240, quality: 0.5 },
-  { key: 'standard', label: '標準', width: 320, quality: 0.6 },
-  { key: 'high', label: '高', width: 480, quality: 0.7 },
+  { key: 'low', label: '低', width: 320, quality: 0.6 },
+  { key: 'standard', label: '標準', width: 640, quality: 0.6 },
 ];
 const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
@@ -506,11 +508,13 @@ function hideBackToReplay() {
 
 document.getElementById('btnRewind').addEventListener('click', () => {
   // 一瞬止めて(ため)から、キュッと巻き戻してリプレイに入る。値は css/style.css の --var-hold / --var-sweep
+  recorder.hold(); // 見返している間は、録画の古いコマを捨てない(場面がずれないように)
   const ok = player.rewind(varSettings.rewindSeconds, cameraLink.activeSource, {
     holdMs: motionMs('--var-hold'),
     sweepMs: motionMs('--var-sweep'),
   });
   if (!ok) {
+    recorder.release();
     showToast('録画データがまだありません');
     return;
   }
@@ -524,6 +528,7 @@ document.getElementById('btnGoLive').addEventListener('click', () => {
   // 押し間違いに備えて、見ていた場面を少しの間だけ控えておく
   const point = player.getResumePoint();
   player.goLive();
+  recorder.release(); // 録画を既定の長さに切り詰める
   setReplayUI(false);
   exitBrowserFullscreen();
   if (point) {
@@ -538,7 +543,9 @@ btnBackToReplay.addEventListener('click', () => {
   dismissRoleSurvey(); // 戻る操作の直後に、立場の問いが出てしまわないようにする
   const point = backToReplayPoint;
   hideBackToReplay();
+  recorder.hold();
   if (!player.resumeAt(point)) {
+    recorder.release();
     showToast('リプレイの映像が残っていません');
     return;
   }
@@ -546,17 +553,29 @@ btnBackToReplay.addEventListener('click', () => {
   setReplayUI(true);
 });
 
+// 保存する範囲: 今見ている場面の前後(中山さん決定、2026-10-14)。録画の端にかかるときは、ある分だけ
+const SAVE_BEFORE_MS = 5000;
+const SAVE_AFTER_MS = 5000;
+
+// 撮影時刻で、見ている場面の前後だけを切り出す(カメラどうしは同じ時計で記録しているので、全カメラでも同じ時間帯になる)
+function framesAround(frames, centerTs) {
+  if (centerTs == null) return frames;
+  return frames.filter((f) => f.ts >= centerTs - SAVE_BEFORE_MS && f.ts <= centerTs + SAVE_AFTER_MS);
+}
+
 // VAR設定の「保存するカメラ」に応じて、保存するクリップの対象を組み立てる
 function buildSaveTargets() {
   const sources = cameraLink.getAllSources();
+  const point = player.getResumePoint(); // 今見ている場面(カメラと撮影時刻)
+  const centerTs = point ? point.ts : null;
   if (varSettings.saveScopeKey === 'all') {
     return sources
-      .filter((src) => recorder.getFrames(src.id).length > 0)
-      .map((src) => ({ id: src.id, label: src.label, frames: recorder.getFrames(src.id) }));
+      .map((src) => ({ id: src.id, label: src.label, frames: framesAround(recorder.getFrames(src.id), centerTs) }))
+      .filter((t) => t.frames.length > 0);
   }
   const src = sources.find((s) => s.id === player.currentCamId);
   const label = src ? src.label : 'カメラ';
-  return [{ id: player.currentCamId, label, frames: recorder.getFrames(player.currentCamId) }];
+  return [{ id: player.currentCamId, label, frames: framesAround(recorder.getFrames(player.currentCamId), centerTs) }];
 }
 
 const SAVED_NOTICE_MS = 1800; // 「保存しました」を出しておく時間

@@ -55,6 +55,26 @@ export class ReplayPlayer {
     }
   }
 
+  // 見ているカメラのコマの並び。録画が古いコマを捨てていたら、そのぶんコマ番号を前へずらして、
+  // 同じ場面を指し続けるようにする(VAR中は録画側が捨てないので、ふつうは上限を超えたときだけ)
+  _frames() {
+    const frames = this.recorder.getFrames(this.currentCamId);
+    const dropped = this.recorder.getDropped ? this.recorder.getDropped(this.currentCamId) : 0;
+    if (this._droppedCam === this.currentCamId) {
+      const diff = dropped - this._dropped;
+      if (diff > 0) this.frameIndex = Math.max(0, this.frameIndex - diff);
+    }
+    this._droppedCam = this.currentCamId;
+    this._dropped = dropped;
+    return frames;
+  }
+
+  // カメラを切り替えたとき・VARに入ったときに、捨てたコマの数の基準を今の値にそろえる
+  _resetDropBaseline() {
+    this._droppedCam = this.currentCamId;
+    this._dropped = this.recorder.getDropped ? this.recorder.getDropped(this.currentCamId) : 0;
+  }
+
   // ライブ中は録画バッファとは別に、選択中カメラの映像をそのまま描画し続ける
   startLiveLoop(getActiveVideoEl) {
     if (this._liveLoopStarted) return;
@@ -86,6 +106,7 @@ export class ReplayPlayer {
     this._cancelSweep();
     this.isReplay = true; // ここでライブ描画が止まり、押した瞬間の映像のまま止まる(ため)
     this.currentCamId = camId;
+    this._resetDropBaseline();
     this.seekBar.disabled = false;
 
     const rewindCount = Math.min(Math.round(seconds * this.recorder.fps), frames.length - 1);
@@ -135,7 +156,7 @@ export class ReplayPlayer {
 
   // 撮影時刻 ts 以降で一番近いコマの番号(なければ最新のコマ)
   _indexAt(ts) {
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     const index = frames.findIndex((f) => f.ts >= ts);
     return index < 0 ? Math.max(0, frames.length - 1) : index;
   }
@@ -170,7 +191,7 @@ export class ReplayPlayer {
   // 今見ている場面(カメラと撮影時刻)。誤ってLIVEに戻ったときに元の場面へ戻すために使う
   getResumePoint() {
     if (!this.isReplay) return null;
-    const frame = this.recorder.getFrames(this.currentCamId)[this.frameIndex];
+    const frame = this._frames()[this.frameIndex];
     return frame ? { camId: this.currentCamId, ts: frame.ts } : null;
   }
 
@@ -186,6 +207,7 @@ export class ReplayPlayer {
 
     this.isReplay = true;
     this.currentCamId = point.camId;
+    this._resetDropBaseline();
     this.frameIndex = index;
     this.pause();
     this._enterReplayState();
@@ -196,7 +218,7 @@ export class ReplayPlayer {
   switchAngle(camId) {
     if (!this.isReplay) return false;
     this._cancelSweep();
-    const oldFrames = this.recorder.getFrames(this.currentCamId);
+    const oldFrames = this._frames();
     const newFrames = this.recorder.getFrames(camId);
     if (newFrames.length === 0) return false;
 
@@ -214,6 +236,7 @@ export class ReplayPlayer {
     }
 
     this.currentCamId = camId;
+    this._resetDropBaseline();
     this.frameIndex = nearestIndex;
     this._renderCurrentFrame();
     return true;
@@ -225,7 +248,7 @@ export class ReplayPlayer {
     this._updatePlayPauseButton();
     const intervalMs = (1000 / this.recorder.fps) / this.playbackSpeed;
     this.replayTimer = setInterval(() => {
-      const frames = this.recorder.getFrames(this.currentCamId);
+      const frames = this._frames();
       if (this.frameIndex < frames.length - 1) {
         this.frameIndex++;
         this._renderCurrentFrame();
@@ -280,7 +303,7 @@ export class ReplayPlayer {
   stepFrame(dir) {
     if (!this.isReplay) return;
     this._cancelSweep();
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     if (frames.length === 0) return;
     this.pause();
     this.frameIndex = Math.max(0, Math.min(frames.length - 1, this.frameIndex + dir));
@@ -292,7 +315,7 @@ export class ReplayPlayer {
     if (!this.isReplay) return;
     this._cancelSweep();
     this.pause();
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     const next = Math.max(0, Math.min(frames.length - 1, parseInt(value, 10)));
     if (next !== this.frameIndex) this._seekHaptic();
     this.frameIndex = next;
@@ -312,7 +335,7 @@ export class ReplayPlayer {
   scrubTo(index) {
     if (!this.isReplay) return false;
     this._cancelSweep();
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     if (frames.length === 0) return false;
     this.pause();
     const next = Math.max(0, Math.min(frames.length - 1, Math.round(index)));
@@ -326,7 +349,7 @@ export class ReplayPlayer {
 
   // シークバーの位置と「− N秒」の表示だけを、今のコマ番号に合わせる
   _updateSeekUi() {
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     this.seekBar.max = Math.max(0, frames.length - 1);
     this.seekBar.value = this.frameIndex;
 
@@ -345,7 +368,7 @@ export class ReplayPlayer {
 
   async _renderCurrentFrame() {
     if (!this._updateSeekUi()) return;
-    const frames = this.recorder.getFrames(this.currentCamId);
+    const frames = this._frames();
     const frame = frames[this.frameIndex];
     if (!frame) return;
 
