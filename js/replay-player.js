@@ -11,8 +11,21 @@ const GRID_MATCH_LIMIT_MS = 300;
 const GRID_LABEL_PX = 14; // 並べて見るときのカメラ名の文字の大きさ(画面上の見た目の大きさ)
 const GRID_GAP_PX = 3;    // 並べた映像どうしのすきま(画面上の見た目の大きさ)
 
-async function blobToDrawable(blob) {
+// 並べて見るとき、描き直しが1コマの時間(15コマ/秒=67ms)を超える端末では、映像を小さくしてから描く。
+// 小さくするのは並べた形だけ(1つずつ見る形は元の画質)。判断は、直近の描き直しの時間の中央値で自動で行う
+const GRID_FRAME_BUDGET_MS = 67;
+const GRID_TIMING_SAMPLES = 5;     // 中央値を取る描き直しの回数
+const GRID_SMALL_WIDTH_PX = 320;   // 小さくするときの映像の幅(元は640px)
+
+async function blobToDrawable(blob, smallWidth = 0) {
   if (window.createImageBitmap) {
+    if (smallWidth) {
+      try {
+        return await createImageBitmap(blob, { resizeWidth: smallWidth, resizeQuality: 'low' });
+      } catch (err) {
+        // 小さくして読み込む指定に対応しない端末は、元の大きさで読み込む
+      }
+    }
     return await createImageBitmap(blob);
   }
   // createImageBitmap非対応ブラウザ向けの保険
@@ -50,6 +63,8 @@ export class ReplayPlayer {
     this.onViewChanged = null; // (view) => void: カメラが減って並べられなくなり、自動で1つずつ見る形に戻したとき
     this._gridCache = new Map(); // camId -> { frame, drawable }: コマが変わらないカメラは、描き直すときに画像を作り直さない
     this._gridLayout = null; // 最後に並べたときの配置(タップした場所のカメラを調べるため)
+    this._gridSmall = false; // 描き直しが遅い端末では true: 並べた形のときだけ映像を小さくして読み込む
+    this._gridTimes = [];    // 直近の描き直しの時間(ms)。コマを新しく読み込んだ回だけ数える
 
     this.seekBar = document.getElementById('seekBar');
     this.timeReadout = document.getElementById('timeReadout');
@@ -479,6 +494,7 @@ export class ReplayPlayer {
     if (!ref) return;
     const token = ++this._renderToken;
     const created = [];
+    const startedAt = performance.now();
     let items;
     try {
       items = await Promise.all(ids.map(async (id) => {
@@ -486,7 +502,7 @@ export class ReplayPlayer {
         if (!frame) return { id, frame: null, drawable: null };
         const cached = this._gridCache.get(id);
         if (cached && cached.frame === frame) return { id, frame, drawable: cached.drawable };
-        const drawable = await blobToDrawable(frame.blob);
+        const drawable = await blobToDrawable(frame.blob, this._gridSmall ? GRID_SMALL_WIDTH_PX : 0);
         created.push(drawable);
         return { id, frame, drawable };
       }));
@@ -568,6 +584,25 @@ export class ReplayPlayer {
       }
     }
     this._gridLayout = { cols: layout.cols, rows: layout.rows, tileW, tileH, ids };
+    if (created.length > 0) this._noteGridTime(performance.now() - startedAt);
+  }
+
+  // 並べた形の描き直しにかかった時間を控え、1コマの時間を超える端末では、映像を小さくして読み込む形に切り替える
+  // (一度切り替えたら戻さない。切り替え後は新しく読み込むコマから小さくなる)
+  _noteGridTime(ms) {
+    if (this._gridSmall) return;
+    this._gridTimes.push(ms);
+    if (this._gridTimes.length > GRID_TIMING_SAMPLES) this._gridTimes.shift();
+    if (this._gridTimes.length < GRID_TIMING_SAMPLES) return;
+    const sorted = [...this._gridTimes].sort((a, b) => a - b);
+    if (sorted[sorted.length >> 1] > GRID_FRAME_BUDGET_MS) {
+      this._gridSmall = true;
+      // 大きいまま控えた画像は使わず、次の描き直しで小さく読み込み直す(今の配置はタップの判定に使うので残す)
+      for (const entry of this._gridCache.values()) {
+        if (entry.drawable && entry.drawable.close) entry.drawable.close();
+      }
+      this._gridCache.clear();
+    }
   }
 
   // 並べて見ているとき、映像の枠の中の点(x, y: 枠の左上からのpx)に映っているカメラ。なければ null

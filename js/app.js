@@ -33,13 +33,17 @@ if (!inApp.leaving) {
 }
 
 const cameraLink = new CameraLink();
+// さかのぼれる長さの既定は30秒(15秒は試合でも地稽古でも短いため、2026-10-17 に15秒から上げた)。
+// 数分の録画は、この写真方式ではなく動画で残す別の方式で扱う
+const DEFAULT_BUFFER_SEC = 30;
 // 録画の幅の既定は640px(カメラの取り込みと同じ大きさ。拡大して見たときに粗くならないよう、2026-10-14 に320pxから上げた)
-const recorder = new MultiCamRecorder({ fps: 15, durationSec: 15, width: 640, quality: 0.6 });
+const recorder = new MultiCamRecorder({ fps: 15, durationSec: DEFAULT_BUFFER_SEC, width: 640, quality: 0.6 });
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 // --- VAR設定(親機からいつでも調整できる) ---
 const REWIND_OPTIONS = [10, 15, 20, 30]; // 秒
-const BUFFER_OPTIONS = [10, 15, 20, 30]; // 秒
+const BUFFER_OPTIONS = [15, 30, 60]; // 秒
+const BUFFER_HEAVY_SEC = 60; // この長さを選んだときは「重くなることがあります。」を出す
 // 録画の画質。カメラは640×480で取り込むので、640pxより上げても細かくならない(「高」は外した、2026-10-14)。
 // 「低」は、重い・熱くなる端末向けの逃げ道(以前の標準の320px)
 const QUALITY_OPTIONS = [
@@ -52,7 +56,7 @@ const SAVE_SCOPE_OPTIONS = [
 ];
 const varSettings = {
   rewindSeconds: 15,
-  bufferSeconds: 15,
+  bufferSeconds: DEFAULT_BUFFER_SEC,
   qualityKey: 'standard',
   saveScopeKey: 'selected',
 };
@@ -405,6 +409,13 @@ function selectBufferSeconds(sec) {
   varSettings.bufferSeconds = sec;
   recorder.setDurationSec(sec);
   renderSecondsSelector('bufferSecSelector', BUFFER_OPTIONS, varSettings.bufferSeconds, selectBufferSeconds);
+  updateBufferNote();
+}
+
+// 長い設定(60秒)を選んでいるときだけ、選んだ場所の下に小さく注意を出す
+function updateBufferNote() {
+  const note = document.getElementById('bufferHeavyNote');
+  if (note) note.hidden = varSettings.bufferSeconds < BUFFER_HEAVY_SEC;
 }
 
 function selectQuality(key) {
@@ -429,6 +440,7 @@ function renderSaveScopeSelector() {
 function selectSaveScope(key) {
   varSettings.saveScopeKey = key;
   renderSaveScopeSelector();
+  updateSaveTarget();
 }
 
 function renderAllSettingsSelectors() {
@@ -436,6 +448,7 @@ function renderAllSettingsSelectors() {
   renderSecondsSelector('bufferSecSelector', BUFFER_OPTIONS, varSettings.bufferSeconds, selectBufferSeconds);
   renderQualitySelector();
   renderSaveScopeSelector();
+  updateBufferNote();
 }
 renderAllSettingsSelectors();
 updateRewindLabel();
@@ -522,6 +535,19 @@ function syncReplayViewUi() {
   monitorArea.classList.toggle('grid-view', grid);
   replayUi.setGrid(grid);
   renderCamSelector(cameraLink.getAllSources());
+  updateSaveTarget();
+}
+// 並べて見ているときだけ、保存ボタンの中に「どのカメラを保存するか」を小さく出す
+// (並べた形では「選択中」が画面から分かりにくいため。1つずつ見る形では、見ているカメラなので出さない)
+function updateSaveTarget() {
+  const el = document.getElementById('saveTarget');
+  if (!el) return;
+  const grid = player.isReplay && player.view === 'grid';
+  if (!grid) { el.hidden = true; return; }
+  el.textContent = varSettings.saveScopeKey === 'all'
+    ? '全カメラ'
+    : (recorder.getLabel(player.currentCamId) || 'カメラ');
+  el.hidden = false;
 }
 // 切り替えたことが分かるよう、映像を短く浮かび上がらせる(--dur-base。動きを減らす設定では出ない)
 function flashViewChange() {

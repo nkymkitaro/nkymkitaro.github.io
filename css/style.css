@@ -1325,6 +1325,9 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
   color: #000;
 }
 .state-band-sub[hidden] { display: none; }
+/* 長い設定(60秒)を選んだときの注意。見出しの説明と同じ文字の大きさで、選択肢のすぐ下に出す */
+.buffer-heavy-note[hidden] { display: none; }
+.buffer-heavy-note { color: var(--accent-replay); font-weight: 700; }
 .state-band.band-enter { animation: band-in var(--dur-base) var(--ease-spring) both; }
 @keyframes band-in {
   from { transform: translateX(-105%); }
@@ -1549,6 +1552,12 @@ body.mode-monitor #monitorArea.replaying.grid-view .stage-video {
   overflow: visible;
 }
 body.mode-monitor #monitorArea.replaying.grid-view .state-bands { top: -48px; }
+/* 「保存中」などの小さい帯は、主の帯の右に並べる(下に重ねると、一番上の映像にかかるため) */
+body.mode-monitor #monitorArea.replaying.grid-view .state-bands { flex-direction: row; align-items: flex-start; gap: 8px; }
+/* 保存するカメラ(「選択中のみ」のとき基準のカメラ、「全カメラ」のとき全部)を、保存ボタンの中に小さく出す */
+.save-label { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+.save-target { font-size: 0.72rem; font-weight: 700; opacity: 0.85; }
+.save-target[hidden] { display: none; }
 body.mode-monitor #monitorArea.replaying.grid-view #displayCanvas { scale: 1; translate: 0 0; }
 body.mode-monitor #monitorArea.replaying.grid-view #camSelector,
 body.mode-monitor #monitorArea.replaying.grid-view .zoom-badge { display: none !important; }
