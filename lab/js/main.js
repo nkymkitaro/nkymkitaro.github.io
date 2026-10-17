@@ -136,6 +136,7 @@ async function initParent(app) {
 
   const monitorArea = document.getElementById('monitorArea');
   const actions = monitorArea.querySelector('.primary-actions');
+  const statusRow = monitorArea.querySelector('.status-row');
   const bands = monitorArea.querySelector('.state-bands');
 
   const root = document.createElement('div');
@@ -207,12 +208,14 @@ async function initParent(app) {
   document.body.appendChild(root);
   const el = (s) => $(root, s);
 
-  // 操作ボタンの列に「録画」を入れる(LIVEのとき N秒前VAR の隣に出る)
+  // 操作ボタンの列に「録画」を入れる(LIVEのとき N秒前VAR の隣に出る。見た目は lab.css)
   const recBtn = document.createElement('button');
   recBtn.type = 'button';
   recBtn.id = 'labRec';
   recBtn.className = 'action-btn lab-rec-btn';
-  recBtn.textContent = '録画';
+  const REC_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4.6" fill="currentColor"/></svg>';
+  const STOP_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>';
+  recBtn.innerHTML = `${REC_SVG}<span class="lab-rec-label">録画</span>`;
   actions.appendChild(recBtn);
   // 「REC 0:10」などを、リプレイ中にも見せるための小さい帯
   const subBand = document.createElement('div');
@@ -618,7 +621,10 @@ async function initParent(app) {
     const recording = isRecording();
     const collecting = isCollecting();
     // 操作ボタン: 録画中だけ「録画を終える」。集めている間は出さない(今使える操作だけ)
-    recBtn.textContent = recording ? '録画を終える' : '録画';
+    if (recBtn.dataset.rec !== String(recording)) {
+      recBtn.dataset.rec = String(recording);
+      recBtn.innerHTML = `${recording ? STOP_SVG : REC_SVG}<span class="lab-rec-label">${recording ? '録画を終える' : '録画'}</span>`;
+    }
     recBtn.classList.toggle('is-recording', recording);
     recBtn.hidden = collecting;
     monitorArea.classList.toggle('lab-recording', recording);

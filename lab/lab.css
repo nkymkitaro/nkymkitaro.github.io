@@ -10,29 +10,51 @@
 .state-band[data-state="collect"] { background: var(--surface-2); color: var(--text); }
 .state-band { font-variant-numeric: tabular-nums; }
 
-/* ---- 操作ボタンの列の「録画」「録画を終える」 ---- */
-body.mode-monitor .action-btn.lab-rec-btn { font-size: 1.5rem; }
-.lab-rec-btn { flex: 1.5 1 0; min-width: 0; margin: 0; padding: 8px; font-size: 1.5rem; font-weight: 800; white-space: nowrap; }
-.lab-rec-btn.is-recording { background: var(--text); color: #000; border-color: var(--text); }
+/* ---- 下の操作: 「15秒前VAR」と「録画」(LIVE中だけ)。2枚のパネルを、状態の帯と同じ向きの斜めの境目で分ける(ポリシー 2-2)。
+   VARが主役(広く・アンバー)、録画は白。文字は太く大きく、上に線の絵を置いて役割をひと目で伝える ---- */
+.lab-rec-btn { white-space: nowrap; }
+.lab-rec-btn svg { width: 30px; height: 30px; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions { gap: 0; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
+  flex-direction: column; gap: 6px; min-height: 96px; margin: 0; padding: 10px 6px;
+  font-family: inherit; font-size: 1.5rem; font-weight: 900; line-height: 1; letter-spacing: 0; white-space: nowrap;
+  border: 0; border-radius: 0;
+}
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind svg { width: 30px; height: 30px; }
+/* 左: VAR(主役)。右の辺を斜めに切る */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind {
+  flex: 1.1 1 0; min-width: 0; background: var(--accent-replay); color: #1a1200;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 22px) 100%, 0 100%); border-radius: 14px 0 0 14px; padding-right: 14px;
+}
+/* 右: 録画。左の辺を同じ向きに切り、境目の幅を一定(10px)にする */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
+  flex: 1 1 0; min-width: 0; margin-left: -12px; background: var(--text); color: #000;
+  clip-path: polygon(22px 0, 100% 0, 100% 100%, 0 100%); border-radius: 0 14px 14px 0; padding-left: 16px; padding-right: 4px;
+}
+.lab-rec-btn .lab-rec-label { display: block; }
+/* 録画中は、文字が長い「録画を終える」に幅を多めに渡す */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn.is-recording { flex: 1.2 1 0; }
 /* リプレイ中は、録画していないときは出さない。録画中は、右上に「録画を終える」を出し続ける(帯の「REC」は小さい帯に出る) */
 body.mode-monitor #monitorArea.replaying:not(.lab-recording) .lab-rec-btn { display: none !important; }
 body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn {
-  position: fixed; z-index: 30; flex: none;
+  position: fixed; z-index: 30; flex: none; margin: 0; flex-direction: row; gap: 8px;
   top: calc(env(safe-area-inset-top) + 12px); right: max(12px, env(safe-area-inset-right));
-  min-height: 52px; padding: 0 16px; font-size: 1.25rem; box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+  min-height: 52px; padding: 0 16px; font-family: inherit; font-size: 1.25rem; font-weight: 800; line-height: 1;
+  background: var(--text); color: #000; border: 0; border-radius: 26px; box-shadow: 0 2px 10px rgba(0,0,0,0.45);
 }
+body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn svg { width: 20px; height: 20px; }
 body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(env(safe-area-inset-top) + 72px); }
 @media (orientation: landscape) and (max-height: 540px) {
-  body.mode-monitor #monitorArea:not(.replaying) .lab-rec-btn { min-height: 96px; }
-  body.mode-monitor .action-btn.lab-rec-btn { padding: 8px 4px; }
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn { min-height: 96px; padding-top: 8px; padding-bottom: 8px; }
   .lab-sheet .help-sheet-handle { margin-bottom: 6px; }
   .lab-sheet h3 { margin-bottom: 6px; }
   .lab-sheet h3 { font-weight: 800; }
-.lab-big { min-height: 56px; margin-bottom: 4px; }
+  .lab-big { min-height: 56px; margin-bottom: 4px; }
   .lab-takes li { padding: 8px 0; }
   .lab-foot { margin-top: 8px; }
-  body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn { top: 8px; }
-  body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn { font-size: 1.125rem; min-height: 48px; }
+  body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn { top: 8px; font-size: 1.125rem; min-height: 48px; }
   body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: 68px; }
 }
 
