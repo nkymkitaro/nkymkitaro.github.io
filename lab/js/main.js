@@ -1,7 +1,7 @@
 // main.js: 長めの録画(試作)の画面と、既存のアプリ(js/app.js)との結び付け。試作用。
 // 画面の考え方(claude/specs/long-recording-spec.md):
 // - 録画前: 状態の帯は LIVE のまま。操作ボタンの列に「録画」が1つ。押すとシートが開き、「録画を始める」
-// - 録画中: 帯が「REC 0:10」(赤地・白文字)。ボタンが「録画を終える」に替わる
+// - 録画中: 帯が「REC 0:10」(赤地・白文字)。ボタンが「停止」に替わる
 // - 集めている間: 帯が「集めています 60%」(グレー)
 // - 終わったら: 録画の一覧(1本ごとに 見る・保存・消す)
 // - 試験用の設定と数値は、シート「試験用」の中だけに置く
@@ -217,6 +217,13 @@ async function initParent(app) {
   const STOP_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>';
   recBtn.innerHTML = `${REC_SVG}<span class="lab-rec-label">録画</span>`;
   actions.appendChild(recBtn);
+  // VARのボタンは「VAR」だけにする(戻る秒数は設定で決まっているので、ボタンには出さない)。本番のコードが秒数入りの文字に書き戻すので、そのたびに直す(試作のページだけ)
+  const rewindLabel = document.getElementById('btnRewindLabel');
+  if (rewindLabel) {
+    const fix = () => { if (rewindLabel.textContent !== 'VAR') rewindLabel.textContent = 'VAR'; };
+    fix();
+    new MutationObserver(fix).observe(rewindLabel, { childList: true, characterData: true, subtree: true });
+  }
   // 「REC 0:10」などを、リプレイ中にも見せるための小さい帯
   const subBand = document.createElement('div');
   subBand.className = 'state-band state-band-sub';
@@ -620,10 +627,10 @@ async function initParent(app) {
   function render() {
     const recording = isRecording();
     const collecting = isCollecting();
-    // 操作ボタン: 録画中だけ「録画を終える」。集めている間は出さない(今使える操作だけ)
+    // 操作ボタン: 録画中だけ「停止」。集めている間は出さない(今使える操作だけ)
     if (recBtn.dataset.rec !== String(recording)) {
       recBtn.dataset.rec = String(recording);
-      recBtn.innerHTML = `${recording ? STOP_SVG : REC_SVG}<span class="lab-rec-label">${recording ? '録画を終える' : '録画'}</span>`;
+      recBtn.innerHTML = `${recording ? STOP_SVG : REC_SVG}<span class="lab-rec-label">${recording ? '停止' : '録画'}</span>`;
     }
     recBtn.classList.toggle('is-recording', recording);
     recBtn.hidden = collecting;
@@ -637,7 +644,7 @@ async function initParent(app) {
     el('#labStart').hidden = recording || collecting;
     const line = el('#labLine');
     line.hidden = !(recording || collecting);
-    if (recording) line.textContent = '録画しています。終えるには、画面の下の「録画を終える」を押します。';
+    if (recording) line.textContent = '録画しています。止めるには、画面の下の「停止」を押します。';
     else if (collecting) {
       const p = collectPercent();
       line.textContent = `ほかのスマホの映像を集めています${p == null ? '' : ` ${p}%`}`;

@@ -18,7 +18,7 @@ body.mode-monitor #monitorArea:not(.replaying) .primary-actions { gap: 0; }
 body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
 body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
   flex-direction: column; gap: 6px; min-height: 96px; margin: 0; padding: 10px 6px;
-  font-family: inherit; font-size: 1.5rem; font-weight: 900; line-height: 1; letter-spacing: 0; white-space: nowrap;
+  font-family: inherit; font-size: 2rem; font-weight: 900; line-height: 1; letter-spacing: 1px; white-space: nowrap;
   border: 0; border-radius: 0;
 }
 body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind svg { width: 30px; height: 30px; }
@@ -33,9 +33,7 @@ body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
   clip-path: polygon(22px 0, 100% 0, 100% 100%, 0 100%); border-radius: 0 14px 14px 0; padding-left: 16px; padding-right: 4px;
 }
 .lab-rec-btn .lab-rec-label { display: block; }
-/* 録画中は、文字が長い「録画を終える」に幅を多めに渡す */
-body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn.is-recording { flex: 1.2 1 0; }
-/* リプレイ中は、録画していないときは出さない。録画中は、右上に「録画を終える」を出し続ける(帯の「REC」は小さい帯に出る) */
+/* リプレイ中は、録画していないときは出さない。録画中は、右上に「停止」を出し続ける(帯の「REC」は小さい帯に出る) */
 body.mode-monitor #monitorArea.replaying:not(.lab-recording) .lab-rec-btn { display: none !important; }
 body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn {
   position: fixed; z-index: 30; flex: none; margin: 0; flex-direction: row; gap: 8px;
