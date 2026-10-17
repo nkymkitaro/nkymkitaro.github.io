@@ -34,6 +34,8 @@ const MAX_STRING_LENGTH = 40; // 万一、長い文字が混ざっても送ら�
 let enabled = false;
 
 function isProductionHost() {
+  // 試作ページ(lab/)は <html data-lab> を付けてあり、本番のドメインでも何も送らない
+  try { if (document.documentElement.hasAttribute('data-lab')) return false; } catch (err) { return false; }
   try { return ALLOWED_HOSTNAMES.includes(window.location.hostname); } catch (err) { return false; }
 }
 

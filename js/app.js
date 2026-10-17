@@ -736,3 +736,16 @@ document.addEventListener('keydown', (e) => {
     closeJoinQr();
   }
 });
+
+// 試作ページ(lab/multi-rec.html、<html data-lab>)だけに、接続と録画を貸し出す。
+// 試作の部品(lab/js/)がここから受け取る。通常のページ(index.html)では何も公開しない
+if (document.documentElement.hasAttribute('data-lab')) {
+  window.kendoVarApp = {
+    cameraLink,
+    recorder,
+    player,
+    getRole: () => (document.body.classList.contains('camera-sending') ? 'camera' : document.body.classList.contains('mode-monitor') ? 'monitor' : ''),
+    getCameraNumber: () => cameraNumber,
+  };
+  document.dispatchEvent(new CustomEvent('kendovar-app-ready'));
+}

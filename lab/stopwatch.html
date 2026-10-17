@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>ストップウォッチ(試作)</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+    #t { font-size: 22vw; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+    button { font-size: 20px; padding: 12px 28px; border-radius: 10px; border: 1px solid #666; background: #333; color: #fff; }
+    p { margin: 0; color: #aaa; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <!-- 各カメラで同時に映して、並べて見たときの数字の差から、カメラ間のずれを読むためのもの。試作です。 -->
+  <div id="t">0.000</div>
+  <button id="b" type="button">スタート</button>
+  <p>試作です。全カメラでこの画面を映してから、スタートを押してください。</p>
+  <script>
+    var t0 = 0, run = false, el = document.getElementById('t'), b = document.getElementById('b');
+    function tick() { if (run) { el.textContent = ((performance.now() - t0) / 1000).toFixed(3); requestAnimationFrame(tick); } }
+    b.addEventListener('click', function () {
+      if (!run) { t0 = performance.now(); run = true; b.textContent = 'ストップ'; tick(); } else { run = false; b.textContent = 'スタート'; }
+    });
+  </script>
+</body>
+</html>

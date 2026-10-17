@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <!-- 試作ページ(地稽古の録画)。通常のページからリンクしない・検索に出さない・利用状況の計測もしない(js/analytics.js が data-lab を見て止める) -->
+  <base href="../">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>剣道VAR(試作:地稽古の録画)</title>
+  <!-- LINEなどにリンクを貼ったときの表示(OGP)。説明はタイトルと重ねない。画像は icons/og-image.png(1200×630) -->
+  <meta name="description" content="スマホで撮って、その場で見返す。剣道のVAR。">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="剣道VAR">
+  <meta property="og:title" content="剣道VAR">
+  <meta property="og:description" content="スマホで撮って、その場で見返す。剣道のVAR。">
+  <meta property="og:url" content="https://kendovar.jp/">
+  <meta property="og:image" content="https://kendovar.jp/icons/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="剣道VAR">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- PWA / 全画面表示設定 (iOS & Android) -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="剣道VAR">
+  <meta name="theme-color" content="#000000">
+
+  <!-- Web App Manifest(ホーム画面に追加したとき、アドレスバーなしで開くため) -->
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- アプリアイコン (iOS用) -->
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+  <!-- LINEなどのアプリ内ブラウザで開かれたかの判定。LINEなら、ここで標準ブラウザへ開き直す(描画・計測より前に) -->
+  <script src="js/in-app-browser.js"></script>
+
+  <!-- WebRTC通信用ライブラリ (PeerJS) -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+  <!-- フォント: Murecho(力強い太字ゴシック)。端末ごとの見た目をそろえるため、Webフォントで読み込む。
+       重さは本文500・ボタンや見出し800・タイトル900の3つだけに絞り、読み込みを軽くする -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="lab/lab.css">
+
+  <!-- 初めて開いたときだけ「はじめる前に」を出すための目印。スタート画面が一瞬見えてしまわないよう、描画の前に付ける。
+       覚えておけない環境(プライベートブラウズなど)では、毎回出る -->
+</head>
+<body class="mode-setup">
+
+  <h1>剣道VAR</h1>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- アプリ内ブラウザ(LINE・Instagramなど)で開かれたときだけ出す。カメラが使えないため、ここから先へは進ませない -->
+  <div id="inAppArea" class="in-app-area" role="dialog" aria-modal="true" aria-labelledby="inAppTitle">
+    <div class="in-app-inner">
+      <div class="prep-brand">剣道VAR</div>
+      <h2 class="in-app-title" id="inAppTitle">ブラウザで<br>開いてください</h2>
+      <p class="in-app-sub">カメラを使うため</p>
+      <div class="in-app-hint">
+        <svg class="in-app-menu" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <rect x="3" y="3" width="42" height="42" rx="12" stroke="currentColor" stroke-width="4"></rect>
+          <circle cx="14" cy="24" r="3.5" fill="currentColor"></circle>
+          <circle cx="24" cy="24" r="3.5" fill="currentColor"></circle>
+          <circle cx="34" cy="24" r="3.5" fill="currentColor"></circle>
+        </svg>
+        <span>右上か右下の「…」から開けます</span>
+      </div>
+      <button type="button" id="btnInAppCopy" class="btn-hero in-app-copy">URLをコピー</button>
+    </div>
+  </div>
+
+  <!-- 0. はじめる前に(2台以上で使うときの準備)。初めて開いたときに1回出る。ヘルプからいつでも開ける -->
+  <div id="prepArea" class="prep-area" role="dialog" aria-modal="true" aria-labelledby="prepTitle">
+    <div class="prep-inner">
+      <header class="prep-head">
+        <div class="prep-brand">剣道VAR</div>
+        <h2 class="prep-title" id="prepTitle" tabindex="-1">はじめる前に</h2>
+        <p class="prep-sub">2台以上で使うとき</p>
+      </header>
+
+      <figure class="prep-figure">
+        <div class="prep-wifi">
+          <svg width="56" height="40" viewBox="0 0 56 40" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 16a31 31 0 0 1 44 0"></path>
+            <path d="M14 24a19 19 0 0 1 28 0"></path>
+            <circle cx="28" cy="33" r="3.5" fill="currentColor" stroke="none"></circle>
+          </svg>
+          <span class="prep-wifi-label">同じWi‑Fi</span>
+        </div>
+        <div class="prep-phones">
+          <svg class="prep-branch" viewBox="0 0 300 18" fill="none" stroke="#6b6b6b" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <path d="M150 2v6M75 16V8h150v8"></path>
+          </svg>
+          <div class="prep-phone">
+            <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+              <rect x="3" y="3" width="70" height="40" rx="7"></rect>
+              <path d="M32 15l12 8-12 8z" fill="currentColor" stroke-linejoin="round"></path>
+            </svg>
+            <figcaption>はじめるスマホ</figcaption>
+          </div>
+          <div class="prep-phone">
+            <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+              <rect x="3" y="3" width="70" height="40" rx="7"></rect>
+              <circle cx="38" cy="23" r="10"></circle>
+              <circle cx="38" cy="23" r="4"></circle>
+              <circle class="art-rec" cx="61" cy="13" r="3.5" stroke="none"></circle>
+            </svg>
+            <figcaption>カメラにするスマホ</figcaption>
+          </div>
+        </div>
+      </figure>
+
+      <div class="prep-steps">
+        <button type="button" class="prep-step" aria-pressed="false">
+          <span class="prep-num" aria-hidden="true">1</span>
+          <span class="prep-step-text">
+            <span class="prep-step-title">全部のスマホを、同じWi‑Fiにつなぐ</span>
+            <span class="prep-step-detail">会場のWi‑Fiでも、テザリングでも</span>
+          </span>
+          <span class="prep-check" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5l3.5 3.5 7.5-8"></path></svg>
+          </span>
+        </button>
+        <button type="button" class="prep-step" aria-pressed="false">
+          <span class="prep-num" aria-hidden="true">2</span>
+          <span class="prep-step-text">
+            <span class="prep-step-title"><span class="nowrap">「はじめる」</span>と<span class="nowrap">「カメラで参加」</span>を選ぶ</span>
+            <span class="prep-step-detail">番号は、はじめるスマホに出ます</span>
+          </span>
+          <span class="prep-check" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5l3.5 3.5 7.5-8"></path></svg>
+          </span>
+        </button>
+      </div>
+
+      <div class="prep-tether">
+        <div class="prep-tether-title">つながらないときは、テザリング</div>
+        <p><span class="nowrap">iPhone：インターネット共有</span>　<span class="nowrap">Android：テザリング</span></p>
+      </div>
+
+      <div class="prep-actions">
+        <button type="button" id="btnPrepOk" class="prep-ok">準備OK</button>
+        <button type="button" id="btnPrepSolo" class="prep-solo">1台だけで使う</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 1. スタート画面: 2枚のパネルで選ぶ。長い説明文は付けない(ポリシー 2-3・11章)。「はじめる」にだけ、どの端末かを示す短い一言を添える(中山さんの判断・要ポリシー確認) -->
+  <div id="setupArea">
+    <div class="start-panels">
+      <button id="btnStartMonitor" class="start-panel start-panel-main" type="button" data-role="monitor">
+        <span class="start-panel-body">
+          <span class="start-last" hidden>前回</span>
+          <!-- 横向きのスマホ(剣道の動画は横長): 画面に再生マーク(▶)と再生バー。黒の線 -->
+          <svg class="start-art" viewBox="0 0 236 140" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" aria-hidden="true">
+            <rect x="6" y="6" width="224" height="128" rx="20"></rect>
+            <path d="M104 40l34 24-34 24z" fill="currentColor" stroke-linejoin="round"></path>
+            <path class="art-track" d="M36 108h164" stroke-width="5"></path>
+            <path d="M36 108h92" stroke-width="5"></path>
+            <circle cx="128" cy="108" r="7" fill="currentColor" stroke="none"></circle>
+          </svg>
+          <span class="start-panel-label">はじめる</span>
+          <span class="start-panel-hint">見返す端末はこちら</span>
+        </span>
+      </button>
+      <button id="btnStartCamera" class="start-panel start-panel-sub" type="button" data-role="camera">
+        <span class="start-panel-body">
+          <span class="start-last" hidden>前回</span>
+          <!-- 横向きのスマホ: レンズと、赤い録画の点。白の線 -->
+          <svg class="start-art" viewBox="0 0 176 106" fill="none" stroke="currentColor" stroke-width="5" aria-hidden="true">
+            <rect x="4" y="4" width="168" height="98" rx="16"></rect>
+            <circle cx="88" cy="53" r="22"></circle>
+            <circle cx="88" cy="53" r="9"></circle>
+            <circle class="art-rec" cx="146" cy="26" r="6" stroke="none"></circle>
+          </svg>
+          <span class="start-panel-label">カメラで参加</span>
+        </span>
+      </button>
+    </div>
+    <button class="install-btn start-install" type="button">ホーム画面に追加</button>
+  </div>
+
+  <!-- 2. カメラで参加する画面。「参加する前」と「送信中」で丸ごと切り替える(ポリシー 1章・9章) -->
+  <div id="cameraArea">
+    <!-- ① 参加する前 -->
+    <div class="join-view" id="joinView">
+      <h2 class="join-title">カメラで参加</h2>
+      <p class="join-guide">はじめた端末の画面に出ている番号を入れてください</p>
+      <div class="code-input" id="codeInput">
+        <div class="code-boxes" aria-hidden="true">
+          <div class="code-box"></div><div class="code-box"></div><div class="code-box"></div><div class="code-box"></div>
+        </div>
+        <input type="text" id="targetIdInput" class="code-field" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="4桁の番号">
+      </div>
+      <div class="join-status" id="cameraStatus" aria-live="polite"></div>
+      <p class="join-note">はじめた端末と同じ<span class="nowrap">Wi-Fi</span>か、はじめた端末の<span class="nowrap">テザリング</span>につないでください</p>
+    </div>
+
+    <!-- ② 送信中: カメラの映像を画面いっぱいに出す -->
+    <div class="send-view" id="sendView">
+      <!-- 映像の枠。はじめた端末に届くのと同じ範囲を切らずに出す(大きさは js/app.js が映像の縦横比に合わせる) -->
+      <div class="send-frame" id="sendFrame">
+        <video id="localVideo" class="send-video" autoplay playsinline muted></video>
+        <div class="state-bands" aria-live="polite">
+          <div class="state-band" id="camStateBand" data-state="sending"><span class="state-band-text">送信中</span></div>
+          <div class="state-band state-band-sub" id="camSubBand" hidden></div>
+        </div>
+      </div>
+      <button id="btnDisconnect" class="disconnect-btn" type="button">接続を切る</button>
+      <p class="send-note">画面をロックすると送信が止まります</p>
+    </div>
+  </div>
+
+  <!-- 3. 親機（モニター＋カメラ）画面 -->
+  <div id="monitorArea" class="card">
+    <div class="monitor-head">
+    <div class="status-row">
+      <button id="btnPauseAll" class="icon-btn" aria-label="録画を一時停止">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>
+      </button>
+      <button id="btnSettings" class="icon-btn" aria-label="VAR設定">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35c-0.59,0.24-1.13,0.57-1.62,0.94L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.82,11.69,4.82,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/></svg>
+      </button>
+      <button id="btnHelpInline" class="icon-btn help-inline" aria-label="使い方を見る">?</button>
+    </div>
+    <div class="join-row">
+      <!-- 参加用のQR(js/join-qr.js)。押すと大きく出す。作れなかったときは出ない -->
+      <button id="btnJoinQr" class="join-qr" type="button" aria-label="QRコードを大きく表示" hidden><span class="join-qr-img" id="joinQrThumb"></span></button>
+      <div class="id-line">接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
+    </div>
+    <div class="rec-status" id="recStatus" aria-live="polite"></div>
+    <p class="help-text" id="idHelp">ほかの端末は、この端末と同じ<span class="nowrap">Wi-Fi</span>か、この端末の<span class="nowrap">テザリング</span>につないでから番号を入れてください。</p>
+    <p class="help-text rotate-hint">横向きにすると、映像を大きく表示できます。</p>
+    </div>
+
+    <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
+
+    <div class="stage-video">
+      <canvas id="displayCanvas" width="480" height="360"></canvas>
+      <!-- 状態の帯: 今の状態を映像の左上に大きく出す(js/state-band.js) -->
+      <div class="state-bands" aria-live="polite">
+        <div class="state-band" id="stateBand" data-state="live"><span class="state-band-text">LIVE</span></div>
+        <!-- リプレイ中に、いま見ているカメラを常に出す(操作を隠しても消えない。js/app.js の renderCamSelector) -->
+        <div class="cam-badge" id="camBadge"></div>
+        <div class="state-band state-band-sub" id="stateSubBand" hidden></div>
+      </div>
+      <!-- リプレイ中に拡大しているとき、右上に倍率を出す(js/replay-ui.js) -->
+      <div class="zoom-badge" id="zoomBadge" aria-live="polite"></div>
+    </div>
+
+    <div class="seek-row">
+      <input type="range" id="seekBar" min="0" max="0" value="0" step="1" disabled>
+      <div class="time-readout" id="timeReadout">LIVE</div>
+    </div>
+
+    <div class="controls-row primary-actions">
+      <button id="btnRewind" class="btn-replay action-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 5V1L4 7l7 6V9c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H3c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+        <span id="btnRewindLabel">15秒前VAR</span>
+      </button>
+      <button id="btnGoLive" class="btn-live action-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>
+        LIVEに戻る
+      </button>
+      <button id="btnBackToReplay" class="action-btn undo-btn">リプレイに戻る</button>
+    </div>
+
+    <div class="player-toolbar" id="playerToolbar">
+      <button id="btnStepBack" class="speed-btn step-btn" aria-label="1コマ戻る"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2.4v14H6zM20 5v14L9.5 12z"/></svg><span class="step-label">1コマ</span></button>
+      <button id="btnPlayPause" class="icon-btn icon-btn-primary" aria-label="再生">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button id="btnStepForward" class="speed-btn step-btn" aria-label="1コマ進む"><span class="step-label">1コマ</span><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.6 5H18v14h-2.4zM4 5v14l10.5-7z"/></svg></button>
+      <button id="btnSpeed" class="speed-btn" aria-label="再生速度切り替え">0.5x</button>
+    </div>
+
+    <div class="save-row" id="saveRow">
+      <button id="btnSaveClip" class="action-btn save-btn">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 12v6H5v-6H3v6c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6h-2zM13 12.67l2.59-2.58L17 11.5l-5 5-5-5 1.41-1.41L11 12.67V3h2v9.67z"/></svg>
+        <span class="save-label">クリップを保存<small class="save-target" id="saveTarget" hidden></small></span>
+      </button>
+    </div>
+
+    <video id="localMonitorVideo" autoplay playsinline muted style="display:none;"></video>
+  </div>
+
+  <!-- 参加用QRの大きい表示。白地いっぱいに出して、離れたスマホのカメラでも読めるようにする(js/join-qr.js) -->
+  <div id="qrOverlay" class="qr-overlay" hidden role="dialog" aria-modal="true" aria-label="参加用のQRコード">
+    <div class="qr-overlay-body">
+      <div class="qr-overlay-img" id="qrBig"></div>
+      <div class="qr-overlay-side">
+        <p class="qr-overlay-note">カメラにするスマホで読み取る</p>
+        <p class="qr-overlay-code">接続ID <strong id="qrBigCode"></strong></p>
+        <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VAR設定(親機のギアボタン + ボトムシート) -->
+  <div id="settingsOverlay" class="help-overlay"></div>
+  <div id="settingsSheet" class="help-sheet">
+    <div class="help-sheet-handle"></div>
+    <h3>VAR設定</h3>
+
+    <h4>巻き戻し秒数</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">「N秒前VAR」ボタンで、何秒前まで一気に戻るか。</p>
+    <div class="cam-selector" id="rewindSecSelector"></div>
+
+    <h4>裏録画バッファ秒数</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">常時裏で持っておく録画の長さ。長くするほど、より前まで見返せます。</p>
+    <div class="cam-selector" id="bufferSecSelector"></div>
+    <p class="help-text buffer-heavy-note" id="bufferHeavyNote" hidden>重くなることがあります。</p>
+
+    <h4>映像品質</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">「標準」のほうが鮮明です。端末が重い・熱くなるときは「低」にしてください。</p>
+    <div class="cam-selector" id="qualitySelector"></div>
+
+    <h4>保存するカメラ</h4>
+    <p class="help-text" style="margin:0 0 8px 0;">「クリップを保存」を押したとき、どのカメラの映像を残すか。全カメラを選ぶとファイルが増えますが、あとで見返す角度を選べます。</p>
+    <div class="cam-selector" id="saveScopeSelector"></div>
+
+    <button id="btnCloseSettings" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
+  </div>
+
+  <!-- 使い方ヘルプ(常時表示のFAB + ボトムシート) -->
+  <button id="btnHelp" class="help-fab" aria-label="使い方を見る">?</button>
+  <div id="helpOverlay" class="help-overlay"></div>
+  <div id="helpSheet" class="help-sheet">
+    <div class="help-sheet-handle"></div>
+    <h3>使い方</h3>
+    <button id="btnOpenPrep" class="link-btn prep-link" type="button">はじめる前に</button>
+
+    <h4>📺 はじめる</h4>
+    <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときは、そのままお使いいただけます。この端末のカメラは「カメラ1」です。</p>
+
+    <h4>📷 カメラで参加</h4>
+    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。はじめた端末に表示されているIDを入力すると、その映像が届きます。参加したカメラは「カメラ2」から順に呼ばれ、同じIDに最大3台まで同時に参加できます。できれば同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
+
+    <h4>📶 会場でつながらないとき</h4>
+    <p>はじめた端末でテザリング(iPhoneでは「インターネット共有」)をオンにし、「カメラで参加」する端末を、そのWi-Fiにつないでください。iPhoneは「設定」→「インターネット共有」、Androidは「設定」→「ネットワーク」→「テザリング」で設定できます。機種によって名前や場所が異なる場合は、「テザリング」で探してください。映像ははじめた端末とカメラの間で直接やり取りされるため、携帯の通信量はほとんど使いません。ただし、番号を受け渡すために、インターネットにはつながっている必要があります。会場のWi-Fiは、端末どうしの通信を遮断していることがあり、その場合は、同じWi-Fiにつないでもつながりません。</p>
+
+    <h4>⏪ VARで見返す</h4>
+    <p>接続している全カメラの映像を、常に裏で録画しています。「N秒前VAR」を押すとその場で巻き戻せて、シークバーや戻る/進むボタンで好きな瞬間まで動かせます。上のカメラ切り替えボタンを押せば、同じ瞬間を別アングルで見返すことも可能です。速度は0.25x〜1xで変えられ、見終わったら「LIVEに戻る」でライブに戻ります。リプレイ中は、映像をタップすると操作の表示・非表示、2回タップや2本指で拡大できます。誤って「LIVEに戻る」を押した場合は、数秒間表示される「リプレイに戻る」で元の場面に戻れます。巻き戻し秒数・バッファの長さ・映像品質は、状態表示横の⚙ボタンから調整できます。</p>
+    <p>2台以上のときは、映像を並べて見られます。映像を押すと、そのカメラを大きく表示します。</p>
+
+    <h4>💾 クリップを保存</h4>
+    <p>気になった場面は、VARで見返している間に表示される「クリップを保存」でその場で端末に残せます。対応していれば共有シートがそのまま開くので、LINEなどにすぐ送ることもできます。保存するのは見返していた区間の映像で、ファイル名には日時とカメラ名が自動で入ります。保存するカメラ(選択中のみ/全カメラ)は⚙設定から選べます。</p>
+
+    <h4>⏸ 一時停止</h4>
+    <p>状態表示の横にある一時停止ボタンを押すと、すべてのカメラをまとめて止められます。休憩中などバッテリーや通信量を節約したいときに使ってください。もう一度押せばすぐに再開できます。</p>
+
+    <h4>🔆 画面が消えない件について</h4>
+    <p>「はじめる」でも「カメラで参加」でも、撮影中は画面が自動でオフにならないようにしています(画面が消えるとカメラも止まってしまうため)。バッテリーの消費は増えるので、できれば電源に繋いでおいてください。なお、電源ボタンなどで手動でロックした場合はこの仕組みでは防げず、カメラが止まります。対応していない端末では、事前に端末の設定で画面の自動ロック時間を長めにしておくことをおすすめします。</p>
+
+    <div class="install-section">
+      <h4>📱 ホーム画面に追加</h4>
+      <p>ホーム画面に追加すると、アドレスバーのない画面で広く使えます。Androidの場合はChromeのメニュー(︙)から「ホーム画面に追加」または「アプリをインストール」を、iPhoneの場合はSafariの共有ボタンから「ホーム画面に追加」を選んでください。ホーム画面に見当たらない場合は、アプリ一覧を確認してください。</p>
+      <button class="link-btn install-btn" type="button">ホーム画面に追加</button>
+    </div>
+
+    <h4>ご意見・お問い合わせ</h4>
+    <p>不具合のご報告やご意見は、公式LINEにて受け付けております。</p>
+    <a id="btnLineContact" class="link-btn" href="https://lin.ee/VP2gCS6" target="_blank" rel="noopener">LINEで送る</a>
+
+    <h4>利用状況の計測について</h4>
+    <p>使い勝手をよくするため、使われ方だけを、個人が分からない形で計測しています(Google アナリティクス)。映像や、個人を特定できる情報は送っていません。</p>
+    <a id="linkPrivacy" class="link-btn" href="privacy/" target="_blank" rel="noopener">プライバシー</a>
+    <button id="btnOpenRole" class="link-btn" type="button">立場を答える・変える</button>
+
+    <button id="btnCloseHelp" class="btn-hero" style="width:100%; margin-top:16px;">閉じる</button>
+    <p class="help-beta">ベータ版です。</p>
+  </div>
+
+  <!-- 立場の1問(使い方の改善のため。画面全体はふさがない小さなシート) -->
+  <div id="roleSheet" class="help-sheet role-sheet" role="dialog" aria-labelledby="roleTitle" aria-hidden="true">
+    <div class="help-sheet-handle"></div>
+    <div id="roleAsk">
+      <div class="role-head">
+        <div class="role-head-text">
+          <h3 id="roleTitle" class="role-title">あなたは？</h3>
+          <p class="role-sub">使い勝手の改善に使います</p>
+        </div>
+        <button id="btnRoleClose" class="role-close" type="button">閉じる</button>
+      </div>
+      <div id="roleOptions" class="role-options"></div>
+    </div>
+    <div id="roleThanks" class="role-thanks" hidden>
+      <div class="role-thanks-title">ありがとうございます</div>
+      <p id="roleThanksText" class="role-thanks-text"></p>
+    </div>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+  <script type="module" src="lab/js/main.js"></script>
+</body>
+</html>
