@@ -77,6 +77,12 @@ class TrackA {
   }
 
   get hasAudio() { return true; }
+  // 画面の外へ録り直すとき(まとめ動画)、音を端末のスピーカーではなく録画へ渡す
+  routeTo(out) {
+    if (this._routed) return;
+    this._routed = out.ctx.createMediaElementSource(this.video);
+    this._routed.connect(out.node);
+  }
   setSound(on) { this.video.muted = !on; }
   play() { if (this.has && this.video.paused) this.video.play().catch(() => {}); this.playing = true; }
   pause() { this.video.pause(); this.playing = false; this.video.muted = true; }
@@ -258,6 +264,8 @@ export class LabViewer {
     this.playing = false;
     this.focus = null; // 1つずつ見ているカメラ(null なら全カメラを並べる)
     this.audioCamSetting = 'auto'; // 音を出すカメラ。auto は 並べて見る形ではカメラ1、1つずつ見る形ではそのカメラ
+    this.pixelRatio = 2; // 画面の描き込みの細かさ。まとめ動画の録り直しでは 1 にする
+    this.audioOut = null; // 設定すると、音をスピーカーでなくここ({ ctx, node })へ流す
     this.debug = false; // true のとき、各映像に合わせ誤差(ms)も出す
     this.audioCam = null; // 今、音を出しているカメラ(動作の確認用)
     this.metrics = { seekMs: null, stepMs: null, maxErrMs: null, fps: 30, jumpMs: null, spreadMs: null };
@@ -338,18 +346,19 @@ export class LabViewer {
     if (!this.playing) return;
     const tr = this._audioTrack();
     if (!tr) return;
-    if (tr instanceof TrackA) { tr.setSound(true); this.audioCam = tr.cam; return; }
+    if (tr instanceof TrackA) { if (this.audioOut) tr.routeTo(this.audioOut); tr.setSound(true); this.audioCam = tr.cam; return; }
     try {
       const Ctx = window.AudioContext || window.webkitAudioContext;
-      this._actx = this._actx || new Ctx();
-      if (this._actx.state === 'suspended') await this._actx.resume().catch(() => {});
-      const got = await tr.audioAt(this._actx, this.t);
+      if (!this.audioOut) this._actx = this._actx || new Ctx();
+      const actx = this.audioOut ? this.audioOut.ctx : this._actx;
+      if (actx.state === 'suspended') await actx.resume().catch(() => {});
+      const got = await tr.audioAt(actx, this.t);
       if (tok !== this._aTok || !this.playing || !got) return;
       const off = (this.t - got.wallStart) / 1000;
-      const src = this._actx.createBufferSource();
+      const src = actx.createBufferSource();
       src.buffer = got.buf;
-      src.connect(this._actx.destination);
-      if (off >= 0) { if (off >= got.buf.duration) return; src.start(0, off); } else src.start(this._actx.currentTime - off, 0);
+      src.connect(this.audioOut ? this.audioOut.node : actx.destination);
+      if (off >= 0) { if (off >= got.buf.duration) return; src.start(0, off); } else src.start(actx.currentTime - off, 0);
       this._aSrc = src; this._aSeg = got.idx; this.audioCam = tr.cam;
     } catch (err) { /* 音が出せなくても映像は見られる */ }
   }
@@ -423,9 +432,10 @@ export class LabViewer {
     const cv = this.canvas;
     const w = cv.clientWidth || 640;
     const h = cv.clientHeight || 360;
-    if (cv.width !== w * 2 || cv.height !== h * 2) { cv.width = w * 2; cv.height = h * 2; }
+    const pr = this.pixelRatio;
+    if (cv.width !== w * pr || cv.height !== h * pr) { cv.width = w * pr; cv.height = h * pr; }
     const g = this.ctx;
-    g.setTransform(2, 0, 0, 2, 0, 0);
+    g.setTransform(pr, 0, 0, pr, 0, 0);
     g.fillStyle = '#000';
     g.fillRect(0, 0, w, h);
     const shown = this.focus ? this.tracks.filter((tr) => tr.cam === this.focus) : this.tracks;

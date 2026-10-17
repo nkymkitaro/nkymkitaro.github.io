@@ -9,7 +9,8 @@
 import { LabStore } from './store.js';
 import { LocalCapture, ChildAgent, ParentAgent, DEFAULTS, probeMethods, batteryPercent } from './agents.js';
 import { LabViewer } from './viewer.js';
-import { buildTakeFiles, deliverFiles } from './save.js';
+import { buildTakeFiles, deliverFiles, fileStamp } from './save.js';
+import { composeTake, QUALITY } from './compose.js';
 import { ensureMicPermission } from './audio-input.js';
 import { showToast } from '../../js/toast.js';
 import { attachPress } from '../../js/press-feedback.js';
@@ -162,8 +163,9 @@ async function initParent(app) {
         <label>最長<select id="optMax"><option value="180">3分</option><option value="600" selected>10分</option><option value="1200">20分</option></select></label>
         <label>音<select id="optAudio"><option value="1" selected>録る</option><option value="0">録らない</option></select></label>
         <label>見るときの音<select id="optAudioCam"><option value="auto" selected>自動</option></select></label>
+        <label>まとめ動画の画質<select id="optQuality"><option value="low" selected>低(幅960・15コマ)</option><option value="std">標準(幅1280・30コマ)</option></select></label>
       </div>
-      <p class="lab-note">見るときの音は、自動だと「並べて見る形ではカメラ1、1つずつ見る形ではそのカメラ」になります。</p>
+      <p class="lab-note">見るときの音とまとめ動画の音は、自動だと「カメラ1」(1つずつ見る形ではそのカメラ)になります。</p>
       <p class="lab-note" id="labSupport"></p>
       <table class="lab-table"><thead><tr><th>カメラ</th><th>状態</th><th>動画の数</th><th>容量</th><th>通信(ms)</th><th>途切れ(ms)</th><th>音</th></tr></thead><tbody id="labNums"></tbody></table>
       <div class="lab-actions">
@@ -199,7 +201,8 @@ async function initParent(app) {
         <p class="lab-vinfo" id="labVInfo" hidden></p>
       </div>
     </section>
-    <div class="toast lab-undo" id="labUndo" role="status"><span id="labUndoText">消しました</span><button type="button" id="labUndoBtn">元に戻す</button></div>`;
+    <div class="toast lab-undo" id="labUndo" role="status"><span id="labUndoText">消しました</span><button type="button" id="labUndoBtn">元に戻す</button></div>
+    <div class="toast lab-undo lab-make" id="labMake" role="status"><span id="labMakeText">まとめができました</span><button type="button" id="labMakeBtn">保存</button></div>`;
   document.body.appendChild(root);
   const el = (s) => $(root, s);
 
@@ -217,7 +220,7 @@ async function initParent(app) {
   subBand.hidden = true;
   bands.appendChild(subBand);
 
-  [recBtn, el('#labStart'), el('#labCloseSheet'), el('#labBackSheet'), el('#labVClose'), el('#labVGrid'), el('#labPlay'), el('#labUndoBtn')].forEach((b) => attachPress(b, { vibrate: 30 }));
+  [recBtn, el('#labStart'), el('#labCloseSheet'), el('#labBackSheet'), el('#labVClose'), el('#labVGrid'), el('#labPlay'), el('#labUndoBtn'), el('#labMakeBtn')].forEach((b) => attachPress(b, { vibrate: 30 }));
 
   const sheet = el('#labSheet');
   const testSheet = el('#labTestSheet');
@@ -329,6 +332,66 @@ async function initParent(app) {
     takesSig = ''; render();
   });
 
+  // ---- まとめ動画(全カメラを並べた1本) ----
+  const makeEl = el('#labMake');
+  let makeTimer = 0;
+  let makeAct = null;
+  function showMake(text, btn, act, hideAfterMs = 0) {
+    clearTimeout(makeTimer);
+    el('#labMakeText').textContent = text;
+    el('#labMakeBtn').textContent = btn;
+    makeAct = act;
+    makeEl.classList.add('show');
+    if (hideAfterMs) makeTimer = setTimeout(hideMake, hideAfterMs);
+  }
+  function hideMake() { clearTimeout(makeTimer); makeEl.classList.remove('show'); makeAct = null; }
+  el('#labMakeBtn').addEventListener('click', () => { if (makeAct) makeAct(); });
+  const fmtRemain = (ms) => (ms < 60000 ? `あと${Math.max(1, Math.round(ms / 1000))}秒` : `あと約${Math.round(ms / 60000)}分`);
+
+  async function makeCombined(t) {
+    let cancel = false;
+    const started = performance.now();
+    const stamp = fileStamp(t.startedAt);
+    saving = { text: 'まとめを作っています 0%' };
+    refreshSub();
+    showMake('まとめを作っています', 'やめる', () => { cancel = true; });
+    let out;
+    try {
+      out = await composeTake(store, t, {
+        quality: el('#optQuality').value,
+        audioCam: el('#optAudioCam').value,
+        shouldCancel: () => cancel,
+        onProgress: ({ fraction, remainMs, replay }) => {
+          const pct = Math.round(fraction * 100);
+          saving = { text: `まとめを作っています ${pct}%${replay ? `(${fmtRemain(remainMs)})` : ''}` };
+          el('#labMakeText').textContent = saving.text; // 縦の画面では状態の帯がシートに隠れるので、「やめる」の横にも出す
+          refreshSub();
+        },
+      });
+    } catch (err) {
+      hideMake();
+      window.__lastMakeError = String(err && err.message ? err.message : err);
+      if (err && err.cancelled) showToast('まとめをやめました。カメラごとの動画は保存済みです');
+      else if (err && err.unsupported) showToast('この端末では、まとめ動画は作れません');
+      else showToast('まとめを作れませんでした。カメラごとの動画は保存済みです');
+      return;
+    }
+    const file = new File([out.blob], `kendovar_${stamp}_まとめ.${out.ext}`, { type: out.mime });
+    lastSave.make = { mode: out.mode, ms: out.ms, bytes: file.size, width: out.width, height: out.height, fps: out.fps, frames: out.frames, videoCodec: out.videoCodec, audioCodec: out.audioCodec, hasAudio: out.hasAudio, audioCam: out.audioCam, name: file.name, quality: el('#optQuality').value };
+    window.__lastMake = { file, ...lastSave.make };
+    saving = null;
+    refreshSub();
+    const deliver = async () => {
+      hideMake();
+      const how = await deliverFiles([file], { title: '剣道VAR 長めの録画(まとめ)' });
+      if (how === 'cancelled') showToast('保存をやめました');
+      else { saving = { text: '保存しました' }; refreshSub(); setTimeout(() => { saving = null; refreshSub(); }, 2200); }
+    };
+    window.__lab.deliverMake = deliver;
+    showMake('まとめができました', '保存', deliver, 120000);
+    window.__lastMake.performanceNote = `${Math.round(performance.now() - started)}ms`;
+  }
+
   // ---- 保存 ----
   const savingIds = new Set();
   let lastSave = null;
@@ -353,10 +416,13 @@ async function initParent(app) {
       window.__lastSave = lastSave;
       if (how === 'cancelled') showToast('保存をやめました');
       else {
-        saving = { text: '保存しました' };
-        refreshSub();
         if (res.note) showToast(res.note);
-        await new Promise((r) => setTimeout(r, 2200));
+        if (res.info.length >= 2) await makeCombined(t);
+        else {
+          saving = { text: '保存しました' };
+          refreshSub();
+          await new Promise((r) => setTimeout(r, 2200));
+        }
       }
     } finally {
       saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; render();
@@ -473,6 +539,10 @@ async function initParent(app) {
       }
       lines.push(`${a.label}(${a.role}): 動画${a.n}${exp} ${(a.bytes / 1048576).toFixed(1)}MB${extra}`);
     });
+    if (lastSave && lastSave.make) {
+      const m = lastSave.make;
+      lines.push(`まとめ: ${m.mode === 'fast' ? '読み出して作り直し' : '再生しながら録り直し'} ${m.quality === 'std' ? '標準' : '低'} ${m.width}x${m.height} ${m.fps}コマ ${(m.bytes / 1048576).toFixed(1)}MB 作成${(m.ms / 1000).toFixed(1)}秒 映像${m.videoCodec} 音${m.hasAudio ? `${m.audioCodec}(${m.audioCam})` : 'なし'}`);
+    }
     if (lastSave) {
       lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);
     }
