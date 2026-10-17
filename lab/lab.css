@@ -52,3 +52,18 @@
 .lab-chip.is-rec { background: #8d1220; border-color: #ff6b7a; }
 .lab-chip.is-alarm { background: #c0182b; }
 [hidden] { display: none !important; }
+
+/* 画面の見直し(2026-10-17): やることが分かる並びにした */
+.lab-state { font-size: 18px; font-weight: 800; margin: 6px 0 10px; text-align: left; }
+.lab-state.is-rec { color: #ff8a96; }
+.lab-rec { display: block; width: 100%; box-sizing: border-box; }
+.lab-hint { color: #bbb; font-size: 13px; margin: 8px 0 12px; text-align: left; }
+.lab-cams { list-style: none; margin: 0 0 8px; padding: 0; }
+.lab-cams li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #333; font-size: 14px; }
+.lab-cams li.is-alarm { color: #ff8a96; }
+.lab-takes li span { text-align: left; font-size: 14px; }
+.lab-adv { margin-top: 14px; border-top: 1px solid #333; padding-top: 8px; }
+.lab-adv summary { cursor: pointer; color: #bbb; font-size: 14px; padding: 6px 0; }
+.lab-root button.is-armed { background: #c0182b; border-color: #ff6b7a; }
+.lab-vclose { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; z-index: 2; }
+.lab-viewer { position: fixed; }
