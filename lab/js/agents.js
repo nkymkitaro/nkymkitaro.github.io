@@ -7,8 +7,9 @@
 import { RecorderA, probeA } from './recorder-a.js';
 import { RecorderB, probeB } from './recorder-b.js';
 import { SegmentSender, SegmentReceiver } from './transfer.js';
+import { openMic } from './audio-input.js';
 
-export const DEFAULTS = { segSec: 60, maxSec: 600, minFreeMB: 200 };
+export const DEFAULTS = { segSec: 60, maxSec: 600, minFreeMB: 200, method: 'B' };
 const STATUS_EVERY_MS = 2000;
 const PING_EVERY_MS = 10000;
 const FLUSH_EVERY_MS = 3000;
@@ -20,6 +21,11 @@ export async function batteryPercent() {
     const b = await navigator.getBattery();
     return Math.round(b.level * 100);
   } catch (err) { return null; }
+}
+
+function pickSettings(s) {
+  if (!s) return null;
+  return { echoCancellation: s.echoCancellation, noiseSuppression: s.noiseSuppression, autoGainControl: s.autoGainControl, channelCount: s.channelCount, sampleRate: s.sampleRate, latency: s.latency };
 }
 
 export async function probeMethods() {
@@ -49,12 +55,13 @@ export class LocalCapture {
     return {
       recording: false, take: '', method: '', requested: '', fellBack: false, segSec: 0, segs: 0, bytes: 0,
       startedAt: 0, lastSegAt: 0, maxGapMs: 0, maxSegMs: 0, errors: [], dropped: 0, alarm: '', stoppedAt: 0,
+      audio: null, // { ok, codec, reason, settings, ... } 音の状態(録れているか、理由)
     };
   }
 
   get recording() { return this.status.recording; }
 
-  async start({ take, method = 'A', segSec = DEFAULTS.segSec, maxSec = DEFAULTS.maxSec }) {
+  async start({ take, method = DEFAULTS.method, segSec = DEFAULTS.segSec, maxSec = DEFAULTS.maxSec, audio = true }) {
     if (this.status.recording) return true;
     const stream = this.getStream();
     if (!stream || !stream.getVideoTracks().length) { this._alarm('カメラの映像がありません。録画を始められませんでした'); return false; }
@@ -63,10 +70,20 @@ export class LocalCapture {
     let useB = method === 'B';
     if (useB) {
       const p = await probeB();
-      if (!p.ok) { useB = false; this.status.fellBack = true; this.status.errors.push(`方式Bが使えないため方式Aで録画(${p.reason})`); }
+      if (!p.ok) { useB = false; this.status.fellBack = true; this.status.errors.push(`コマ送り重視が使えないため「ふつう」で録画(${p.reason})`); }
     }
+    // マイク(許可が無い・使えないときは、映像だけで録画を続け、理由を記録に残す)
+    let mic = null;
+    if (audio) {
+      mic = await openMic();
+      if (mic.error) { this.status.audio = { ok: false, reason: mic.error }; this.status.errors.push(`音なしで録画: ${mic.error}`); mic = null; }
+    } else {
+      this.status.audio = { ok: false, reason: '音を録らない設定です' };
+    }
+    this._mic = mic;
     const common = {
       segMs: segSec * 1000,
+      audioTrack: mic ? mic.track : null,
       now: this.now,
       onSegment: (seg) => this._onSegment(seg),
       onError: (msg) => this._error(msg),
@@ -76,10 +93,20 @@ export class LocalCapture {
       await this.recorder.start();
     } catch (err) {
       this.recorder = null;
+      if (this._mic) { this._mic.close(); this._mic = null; }
       this._alarm(`録画を始められませんでした(${err && err.message ? err.message : err})`);
       return false;
     }
     this.status.method = useB ? 'B' : 'A';
+    if (mic) {
+      if (useB) {
+        const a = this.recorder.audio;
+        this.status.audio = { ok: a.ok, codec: a.codec, reason: a.reason, sampleRate: a.sampleRate, latencyMs: a.latencyMs, settings: pickSettings(mic.settings) };
+      } else {
+        this.status.audio = { ok: !!this.recorder.hasAudio, codec: this.recorder.mime, reason: this.recorder.hasAudio ? '' : 'この録画方式では音を入れられません', settings: pickSettings(mic.settings) };
+      }
+      if (!this.status.audio.ok) this.status.errors.push(`音なしで録画: ${this.status.audio.reason}`);
+    }
     this.status.recording = true;
     this.status.startedAt = this.now();
     this._trackEnded = () => { if (this.status.recording && !this.status.alarm) this._alarm('カメラの映像が止まりました。録画が止まっています'); };
@@ -144,6 +171,8 @@ export class LocalCapture {
     const rec = this.recorder;
     this.recorder = null;
     if (rec) await rec.stop();
+    if (rec && rec.audio && this.status.audio) { this.status.audio.chunks = rec.audio.chunks; this.status.audio.dropped = rec.audio.dropped; }
+    if (this._mic) { this._mic.close(); this._mic = null; }
     // 最後の区切りの保存が終わるのを待つ
     if (this.status.recording) {
       for (let i = 0; i < 50 && this._pendingWrites(); i++) await new Promise((r) => setTimeout(r, 40));
@@ -202,7 +231,7 @@ export class ChildAgent {
       this.takeInfo = { take: msg.take, segSec: msg.segSec };
       this._starting = true;
       let ok;
-      try { ok = await this.capture.start({ take: msg.take, method: msg.method, segSec: msg.segSec, maxSec: msg.maxSec }); } finally { this._starting = false; }
+      try { ok = await this.capture.start({ take: msg.take, method: msg.method, segSec: msg.segSec, maxSec: msg.maxSec, audio: msg.audio !== false }); } finally { this._starting = false; }
       this.bat0 = await batteryPercent();
       this.sendStatus();
       if (!ok) this._send({ op: 'ALARM', cam: this.camKey, msg: this.capture.status.alarm });
@@ -237,7 +266,7 @@ export class ChildAgent {
     this.sender.unsentCount().then((unsent) => {
       this._send({
         op: 'STATUS', cam: this.camKey, label: this.label,
-        rec: { recording: st.recording, take: st.take, method: st.method, requested: st.requested, fellBack: st.fellBack, segs: st.segs, bytes: st.bytes, maxGapMs: st.maxGapMs, dropped: st.dropped, errors: st.errors.slice(-3), alarm: st.alarm },
+        rec: { recording: st.recording, take: st.take, method: st.method, requested: st.requested, fellBack: st.fellBack, segs: st.segs, bytes: st.bytes, maxGapMs: st.maxGapMs, dropped: st.dropped, errors: st.errors.slice(-4), alarm: st.alarm, audio: st.audio },
         unsent, rtt: this.rtt, offset: this.offset, free: this.free, send: this.sender.stats,
       });
     });
@@ -336,7 +365,7 @@ export class ParentAgent {
 
   _sendStart(c) {
     if (!c.conn || !this.take) return;
-    try { c.conn.send({ k: 'LAB', op: 'REC-START', take: this.take.id, method: this.take.method, segSec: this.take.segSec, maxSec: this.take.maxSec }); } catch (err) { /* 次回 */ }
+    try { c.conn.send({ k: 'LAB', op: 'REC-START', take: this.take.id, method: this.take.method, segSec: this.take.segSec, maxSec: this.take.maxSec, audio: this.take.audio !== false }); } catch (err) { /* 次回 */ }
   }
 
   _onReceived(rec) {
@@ -346,12 +375,12 @@ export class ParentAgent {
     this.onChange();
   }
 
-  async startTake({ method = 'A', segSec = DEFAULTS.segSec, maxSec = DEFAULTS.maxSec } = {}) {
+  async startTake({ method = DEFAULTS.method, segSec = DEFAULTS.segSec, maxSec = DEFAULTS.maxSec, audio = true } = {}) {
     if (this.take && !this.take.stoppedAt) return false;
     const id = String(this.now());
-    this.take = { id, startedAt: this.now(), stoppedAt: 0, method, segSec, maxSec, collectedAt: 0, bat0: await batteryPercent(), bat1: null };
+    this.take = { id, startedAt: this.now(), stoppedAt: 0, method, segSec, maxSec, audio, collectedAt: 0, bat0: await batteryPercent(), bat1: null };
     for (const c of this.children.values()) { c.recv = 0; c.recvBytes = 0; c.expected = null; c.stopped = false; c.lastRecvAt = 0; c.alarms = []; this._sendStart(c); }
-    const ok = await this.capture.start({ take: id, method, segSec, maxSec });
+    const ok = await this.capture.start({ take: id, method, segSec, maxSec, audio });
     await this._saveTake();
     this.onChange();
     return ok;
@@ -417,13 +446,13 @@ export class ParentAgent {
     const take = this.take;
     const rows = [];
     const own = this.capture.status;
-    rows.push({ cam: this.capture.camKey, label: this.capture.label, role: '親機', segs: own.segs, expected: own.segs, mb: own.bytes / 1048576, maxGapMs: own.maxGapMs, method: own.method, errors: own.errors, alarm: own.alarm, rtt: 0, offset: 0, dropped: own.dropped });
+    rows.push({ cam: this.capture.camKey, label: this.capture.label, role: '親機', segs: own.segs, expected: own.segs, mb: own.bytes / 1048576, maxGapMs: own.maxGapMs, method: own.method, errors: own.errors, alarm: own.alarm, rtt: 0, offset: 0, dropped: own.dropped, audio: own.audio });
     for (const c of this.children.values()) {
       const s = c.status;
       rows.push({
         cam: c.camKey, label: c.label, role: '子機', connected: c.connected, segs: c.recv, expected: c.expected, mb: c.recvBytes / 1048576,
         maxGapMs: s ? s.rec.maxGapMs : null, method: s ? s.rec.method : '', errors: s ? s.rec.errors : [], alarm: (c.alarms.slice(-1)[0]) || (s && s.rec.alarm) || '',
-        rtt: s ? s.rtt : null, offset: s ? s.offset : null, unsent: s ? s.unsent : null, dropped: s ? s.rec.dropped : null, sendMs: s ? s.send.lastSendMs : null, free: s ? s.free : null,
+        rtt: s ? s.rtt : null, offset: s ? s.offset : null, unsent: s ? s.unsent : null, dropped: s ? s.rec.dropped : null, audio: s ? s.rec.audio : null, sendMs: s ? s.send.lastSendMs : null, free: s ? s.free : null,
       });
     }
     return {

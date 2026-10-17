@@ -1,69 +1,107 @@
-/* lab.css: 地稽古の録画(試作)の画面。通常のページ(index.html)では読み込まない */
-.lab-root { font-family: 'Murecho', system-ui, sans-serif; color: #fff; }
-.lab-fab {
-  position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; z-index: 300;
-  background: rgba(30, 30, 30, 0.85); color: #fff; border: 1px solid #666; border-radius: 18px;
-  padding: 8px 14px; font-size: 14px; font-weight: 800;
-}
-.lab-fab.is-rec { background: #c0182b; border-color: #ff6b7a; }
-.lab-sheet {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 310; max-height: 80vh; overflow-y: auto;
-  background: #181818; border-top: 2px solid #666; padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.lab-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; position: sticky; top: 0; background: #181818; }
-.lab-head button { margin-left: auto; }
-.lab-tag { background: #e8a200; color: #000; font-weight: 800; border-radius: 4px; padding: 2px 8px; font-size: 13px; }
-.lab-body { padding: 4px 14px 16px; font-size: 14px; }
-.lab-ctl { display: flex; align-items: center; gap: 14px; margin: 6px 0 10px; }
-.lab-rec { background: #2a8f3f; color: #fff; border: 0; border-radius: 10px; padding: 14px 28px; font-size: 20px; font-weight: 900; }
-.lab-rec.is-rec { background: #c0182b; }
-.lab-timer { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.lab-opts { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 8px; }
-.lab-opts select { margin-left: 4px; background: #333; color: #fff; border: 1px solid #666; border-radius: 6px; padding: 4px; }
-.lab-note { color: #aaa; font-size: 12px; margin: 4px 0 8px; }
-.lab-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-.lab-table th, .lab-table td { border-bottom: 1px solid #333; padding: 5px 4px; text-align: left; font-size: 13px; }
-.lab-table tr.is-alarm td { color: #ff8a96; }
-.lab-result { color: #8ee09f; min-height: 1.2em; }
-.lab-body h4 { margin: 10px 0 4px; font-size: 14px; }
-.lab-takes { list-style: none; margin: 0; padding: 0; }
-.lab-takes li { display: flex; align-items: center; gap: 6px; padding: 6px 0; border-bottom: 1px solid #333; }
-.lab-takes li span { flex: 1; }
-.lab-empty { color: #888; }
-.lab-actions { display: flex; gap: 8px; margin: 10px 0; }
-.lab-root button { background: #333; color: #fff; border: 1px solid #666; border-radius: 8px; padding: 8px 12px; font-size: 14px; font-family: inherit; }
-.lab-root .lab-rec { border: 0; }
-.lab-text { width: 100%; background: #0c0c0c; color: #ddd; border: 1px solid #444; border-radius: 6px; font-size: 12px; box-sizing: border-box; }
-.lab-viewer { position: fixed; inset: 0; z-index: 320; background: #000; display: flex; flex-direction: column; }
-.lab-canvas { flex: 1; width: 100%; min-height: 0; }
-.lab-vbar { padding: 8px 12px calc(env(safe-area-inset-bottom, 0px) + 10px); background: #111; }
-.lab-vbar input[type=range] { width: 100%; }
-.lab-vrow { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 6px; }
-.lab-vinfo { font-size: 12px; color: #bbb; margin: 6px 0 0; }
-.lab-alarm {
-  position: fixed; left: 0; right: 0; top: 0; z-index: 400; background: #c0182b; color: #fff; font-weight: 900;
-  font-size: 16px; padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 14px; text-align: center;
-}
-.lab-alarm[hidden] { display: none; }
-.lab-chip {
-  position: fixed; left: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); z-index: 300; max-width: calc(100% - 16px);
-  background: rgba(30, 30, 30, 0.85); border: 1px solid #666; border-radius: 12px; padding: 6px 10px; font-size: 12px; font-weight: 800;
-}
-.lab-chip.is-rec { background: #8d1220; border-color: #ff6b7a; }
-.lab-chip.is-alarm { background: #c0182b; }
+/* lab.css: 長めの録画(試作)の画面。通常のページ(index.html)では読み込まない。
+   デザインポリシー: 色は状態だけ(赤はREC帯だけ。ボタンは白とグレー)、文字は13px以上・主な言葉は24px前後、押せる範囲は48px以上、
+   動きと手応えは css/style.css の共通の値と部品(.press など)を使う。新しい部品は作らず、既存の .help-sheet・.state-band・.toast などを使い回す。 */
 [hidden] { display: none !important; }
+.lab-root { font-family: 'Murecho', system-ui, sans-serif; color: var(--text); }
 
-/* 画面の見直し(2026-10-17): やることが分かる並びにした */
-.lab-state { font-size: 18px; font-weight: 800; margin: 6px 0 10px; text-align: left; }
-.lab-state.is-rec { color: #ff8a96; }
-.lab-rec { display: block; width: 100%; box-sizing: border-box; }
-.lab-hint { color: #bbb; font-size: 13px; margin: 8px 0 12px; text-align: left; }
-.lab-cams { list-style: none; margin: 0 0 8px; padding: 0; }
-.lab-cams li { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #333; font-size: 14px; }
-.lab-cams li.is-alarm { color: #ff8a96; }
-.lab-takes li span { text-align: left; font-size: 14px; }
-.lab-adv { margin-top: 14px; border-top: 1px solid #333; padding-top: 8px; }
-.lab-adv summary { cursor: pointer; color: #bbb; font-size: 14px; padding: 6px 0; }
-.lab-root button.is-armed { background: #c0182b; border-color: #ff6b7a; }
-.lab-vclose { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 8px; z-index: 2; }
-.lab-viewer { position: fixed; }
+/* ---- 状態の帯: REC(赤地・白文字)と、集めている間(グレー) ---- */
+.state-band[data-state="rec"] { background: var(--accent-live); color: #fff; }
+.state-band[data-state="rec"]::before { content: ''; width: 0.45em; height: 0.45em; border-radius: 50%; background: currentColor; }
+.state-band[data-state="collect"] { background: var(--surface-2); color: var(--text); }
+.state-band { font-variant-numeric: tabular-nums; }
+
+/* ---- 操作ボタンの列の「録画」「録画を終える」 ---- */
+body.mode-monitor .action-btn.lab-rec-btn { font-size: 1.5rem; }
+.lab-rec-btn { flex: 1.5 1 0; min-width: 0; margin: 0; padding: 8px; font-size: 1.5rem; font-weight: 800; white-space: nowrap; }
+.lab-rec-btn.is-recording { background: var(--text); color: #000; border-color: var(--text); }
+/* リプレイ中は、録画していないときは出さない。録画中は、右上に「録画を終える」を出し続ける(帯の「REC」は小さい帯に出る) */
+body.mode-monitor #monitorArea.replaying:not(.lab-recording) .lab-rec-btn { display: none !important; }
+body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn {
+  position: fixed; z-index: 30; flex: none;
+  top: calc(env(safe-area-inset-top) + 12px); right: max(12px, env(safe-area-inset-right));
+  min-height: 52px; padding: 0 16px; font-size: 1.25rem; box-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(env(safe-area-inset-top) + 72px); }
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) .lab-rec-btn { min-height: 96px; }
+  body.mode-monitor .action-btn.lab-rec-btn { padding: 8px 4px; }
+  .lab-sheet .help-sheet-handle { margin-bottom: 6px; }
+  .lab-sheet h3 { margin-bottom: 6px; }
+  .lab-sheet h3 { font-weight: 800; }
+.lab-big { min-height: 56px; margin-bottom: 4px; }
+  .lab-takes li { padding: 8px 0; }
+  .lab-foot { margin-top: 8px; }
+  body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn { top: 8px; }
+  body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn { font-size: 1.125rem; min-height: 48px; }
+  body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: 68px; }
+}
+
+/* ---- 録画のシート(.help-sheet を使い回す) ---- */
+.lab-sheet { z-index: 60; max-height: 85vh; max-height: 85dvh; }
+.lab-big { display: block; width: 100%; min-height: 64px; margin: 0 0 12px; font-size: 1.5rem; }
+.help-sheet p.lab-line { font-size: 1rem; font-weight: 800; color: var(--text); margin: 4px 0 12px; }
+.lab-takes { list-style: none; margin: 4px 0 0; padding: 0; }
+.lab-takes li { padding: 14px 0; border-top: 1px solid var(--hairline); }
+.lab-take-info { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.lab-take-info b { font-size: 1.125rem; font-weight: 800; }
+.lab-take-info span { font-size: 0.95rem; font-weight: 500; color: var(--text-soft); }
+.lab-take-info em { font-style: normal; font-size: 0.8125rem; font-weight: 800; background: var(--glass-strong); padding: 3px 10px; border-radius: 8px; }
+.lab-take-btns { display: flex; gap: 10px; margin-top: 10px; }
+.lab-act { flex: 1; min-height: 56px; margin: 0; padding: 0; font-size: 1.5rem; }
+.lab-act-main { background: var(--text); color: #000; border-color: var(--text); }
+.lab-act:disabled { opacity: 0.4; }
+.lab-take-wait { margin-top: 8px; font-size: 1.125rem; font-weight: 800; color: var(--text-soft); }
+.lab-foot { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.lab-link { min-height: 48px; margin: 0; padding: 0 14px; background: transparent; border-color: transparent; color: var(--text-soft); font-size: 0.9rem; text-decoration: underline; }
+.lab-close { flex: 1; min-height: 56px; margin: 0; font-size: 1.25rem; }
+#labTestSheet .lab-close { width: 100%; margin-top: 14px; }
+
+/* ---- 試験用のシート ---- */
+.lab-opts { display: grid; gap: 10px; margin: 8px 0; }
+.lab-opts label { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 0.9rem; font-weight: 800; }
+.lab-opts select { min-height: 48px; max-width: 62%; background: var(--surface-2); color: var(--text); border: 1px solid var(--hairline); border-radius: var(--radius-md); font: inherit; font-weight: 500; padding: 0 10px; }
+.lab-note { color: var(--text-soft); font-size: 0.8125rem; font-weight: 500; line-height: 1.5; margin: 6px 0; }
+.lab-table { display: block; overflow-x: auto; border-collapse: collapse; margin: 8px 0; }
+.lab-table th, .lab-table td { border-bottom: 1px solid var(--hairline); padding: 6px 8px; text-align: left; font-size: 0.8125rem; font-weight: 500; white-space: nowrap; }
+.lab-table th { font-weight: 800; }
+.lab-table tr.is-alarm td { color: var(--text-soft); text-decoration: underline; }
+.lab-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+.lab-actions button { min-height: 48px; margin: 0; font-size: 0.9rem; }
+.lab-text { width: 100%; box-sizing: border-box; background: #0c0c0c; color: #ddd; border: 1px solid var(--hairline); border-radius: 8px; font-size: 0.8125rem; }
+
+/* ---- 録画を見る画面(全カメラを並べる。VARの「並べて見る」と同じ見え方) ---- */
+.lab-viewer { position: fixed; inset: 0; z-index: 320; background: #000; display: flex; flex-direction: column; }
+.lab-canvas { flex: 1; width: 100%; height: auto; min-height: 0; border-radius: 0; }
+.lab-vhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: calc(env(safe-area-inset-top) + 8px) max(12px, env(safe-area-inset-right)) 8px env(safe-area-inset-left); }
+.lab-vhead .state-band { box-shadow: none; }
+.lab-vtop { display: flex; gap: 10px; }
+.lab-vbtn { min-height: 52px; margin: 0; padding: 0 18px; font-size: 1.25rem; background: rgba(28, 28, 30, 0.82); border-color: rgba(255, 255, 255, 0.22); }
+.lab-vbar { padding: 8px max(16px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(16px, env(safe-area-inset-left)); background: #000; }
+.lab-vseek { display: flex; align-items: center; gap: 10px; }
+.lab-vseek input[type="range"] { flex: 1; margin: 0; border: 0; height: 48px; }
+.lab-vseek .time-readout { margin: 0; min-width: 96px; text-align: right; font-size: 0.9rem; color: var(--text-soft); }
+.lab-vrow { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
+.lab-vrow .speed-btn { height: 56px; min-width: 76px; margin: 0; padding: 0 12px; font-size: 1rem; border-radius: 28px; background: rgba(28, 28, 30, 0.82); border-color: rgba(255, 255, 255, 0.22); }
+.lab-vrow .step-btn { width: 56px; min-width: 56px; padding: 0; display: flex; align-items: center; justify-content: center; }
+.lab-vrow .step-btn svg { width: 22px; height: 22px; }
+.lab-vrow .icon-btn-primary { width: 64px; height: 64px; margin: 0; }
+.lab-vinfo { font-size: 0.8125rem; font-weight: 500; color: var(--text-soft); margin: 8px 0 0; text-align: center; }
+@media (orientation: landscape) and (max-height: 540px) {
+  .lab-vhead { padding-top: calc(env(safe-area-inset-top) + 4px); padding-bottom: 4px; }
+  .lab-vbtn { min-height: 48px; }
+  .lab-vbar { display: flex; align-items: center; gap: 12px; padding-top: 4px; }
+  .lab-vseek { flex: 1; min-width: 0; }
+  .lab-vrow { margin-top: 0; flex: none; }
+  .lab-vinfo { display: none; }
+}
+
+/* ---- 警報(録画が止まったとき): 赤い帯。音と振動も出る ---- */
+.lab-alarm {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 400; background: var(--accent-live); color: #fff; font-weight: 900;
+  font-size: 1.125rem; line-height: 1.4; padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 14px; text-align: center;
+}
+
+/* ---- 消したあとの「元に戻す」(トーストの形を使い回す) ---- */
+.lab-undo { display: flex; align-items: center; gap: 12px; z-index: 90; padding: 8px 8px 8px 18px; text-align: left; }
+.lab-undo.show { pointer-events: auto; }
+.lab-undo button { margin: 0; min-height: 56px; padding: 0 20px; background: var(--text); color: #000; border-color: var(--text); font-size: 1.5rem; white-space: nowrap; }

@@ -60,6 +60,44 @@ export class LabStore {
     return all.sort((a, b) => b.startedAt - a.startedAt);
   }
 
+  // 「消す」は、まず隠すだけ(10秒の間は元に戻せる)。時間がたったら deleteTake で本当に消す
+  async hideTake(id) {
+    const t = await this.getTake(id);
+    if (!t) return;
+    t.hiddenAt = Date.now();
+    await this.putTake(t);
+  }
+
+  async unhideTake(id) {
+    const t = await this.getTake(id);
+    if (!t) return;
+    delete t.hiddenAt;
+    await this.putTake(t);
+  }
+
+  // 隠したまま残っている録画(元に戻す前にアプリが閉じた)を、本当に消す
+  async purgeHidden() {
+    const all = await wrap(this._tx('takes').getAll());
+    let n = 0;
+    for (const t of all) if (t.hiddenAt) { await this.deleteTake(t.id); n++; }
+    return n;
+  }
+
+  // アプリが落ちるなどで、終わりまでたどり着かなかった録画に「途中まで」の印を付ける(今の録画 keepId は除く)
+  async markPartials(keepId) {
+    const all = await wrap(this._tx('takes').getAll());
+    let n = 0;
+    for (const t of all) {
+      if (t.id === keepId || t.collectedAt || t.partial) continue;
+      const segs = await this.listByTake(t.id);
+      t.partial = true;
+      if (!t.stoppedAt) t.stoppedAt = segs.length ? Math.max(...segs.map((x) => x.t0 + x.durMs)) : t.startedAt;
+      await this.putTake(t);
+      n++;
+    }
+    return n;
+  }
+
   async deleteTake(id) {
     const segs = await this.listByTake(id);
     for (const s of segs) await this.delete(s.key);

@@ -10,9 +10,21 @@ const MIME_CANDIDATES = [
   'video/webm;codecs=vp8',
   'video/webm',
 ];
+// 音も録るときの組み合わせ(音が入らない形式は選ばない)
+const MIME_CANDIDATES_AUDIO = [
+  'video/webm;codecs=h264,opus',
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9,opus',
+];
 
-export function pickMimeA() {
+export function pickMimeA(withAudio = false) {
   if (typeof MediaRecorder === 'undefined') return '';
+  if (withAudio) {
+    for (const m of MIME_CANDIDATES_AUDIO) {
+      try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (err) { /* 次へ */ }
+    }
+  }
   for (const m of MIME_CANDIDATES) {
     try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (err) { /* 次へ */ }
   }
@@ -26,15 +38,18 @@ export function probeA() {
 
 export class RecorderA {
   // onSegment({ seq, blob, mime, t0, durMs, fps }), onError(message)
-  constructor(stream, { segMs = 60000, overlapMs = 1000, bitrate = 1000000, onSegment, onError, now = () => Date.now() } = {}) {
-    this.stream = stream;
+  // audioTrack: マイクの音のトラック(無ければ映像だけ)
+  constructor(stream, { segMs = 60000, overlapMs = 1000, bitrate = 1000000, audioTrack = null, onSegment, onError, now = () => Date.now() } = {}) {
+    this.stream = audioTrack ? new MediaStream([...stream.getVideoTracks(), audioTrack]) : stream;
+    this.audioTrack = audioTrack;
     this.segMs = segMs;
     this.overlapMs = Math.min(overlapMs, Math.floor(segMs / 4));
     this.bitrate = bitrate;
     this.onSegment = onSegment || (() => {});
     this.onError = onError || (() => {});
     this.now = now;
-    this.mime = pickMimeA();
+    this.mime = pickMimeA(!!audioTrack);
+    this.hasAudio = !!audioTrack && /opus|mp4a/.test(this.mime);
     this.running = false;
     this._active = new Map(); // seq -> { rec, chunks, t0, done: Promise }
     this._timers = [];
@@ -68,7 +83,7 @@ export class RecorderA {
   _begin(seq) {
     let rec;
     try {
-      rec = new MediaRecorder(this.stream, { mimeType: this.mime, videoBitsPerSecond: this.bitrate });
+      rec = new MediaRecorder(this.stream, { mimeType: this.mime, videoBitsPerSecond: this.bitrate, ...(this.hasAudio ? { audioBitsPerSecond: 96000 } : {}) });
     } catch (err) {
       this.onError(`録画を始められませんでした(${err && err.message ? err.message : err})`);
       return;

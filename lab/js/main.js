@@ -1,18 +1,31 @@
 // main.js: 長めの録画(試作)の画面と、既存のアプリ(js/app.js)との結び付け。試作用。
-// - 親機: 「録画開始」「終わり」、各カメラの様子、録画の一覧、全カメラを並べて見る画面
-// - 子機: 録画の様子(録画中・区切り・未送信・空き容量)と、止まったときの警報
+// 画面の考え方(claude/specs/long-recording-spec.md):
+// - 録画前: 状態の帯は LIVE のまま。操作ボタンの列に「録画」が1つ。押すとシートが開き、「録画を始める」
+// - 録画中: 帯が「REC 0:10」(赤地・白文字)。ボタンが「録画を終える」に替わる
+// - 集めている間: 帯が「集めています 60%」(グレー)
+// - 終わったら: 録画の一覧(1本ごとに 見る・保存・消す)
+// - 試験用の設定と数値は、シート「試験用」の中だけに置く
 // - 既存のVAR(直近30秒の写真方式)には手を入れない。接続とカメラの映像だけ window.kendoVarApp から借りる
 import { LabStore } from './store.js';
 import { LocalCapture, ChildAgent, ParentAgent, DEFAULTS, probeMethods, batteryPercent } from './agents.js';
 import { LabViewer } from './viewer.js';
+import { buildTakeFiles, deliverFiles } from './save.js';
+import { ensureMicPermission } from './audio-input.js';
 import { showToast } from '../../js/toast.js';
+import { attachPress } from '../../js/press-feedback.js';
+import { enableWakeLock } from '../../js/wake-lock.js';
 
 const PEER_PREFIX = 'kendo-var-room-';
+const UNDO_MS = 10000;
 const $ = (root, sel) => root.querySelector(sel);
 
-const fmtTime = (ms) => {
+const fmtDur = (ms) => {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}分${String(s % 60).padStart(2, '0')}秒`;
+};
+const fmtMS = (ms) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 const fmtClock = (ms) => {
   const d = new Date(ms);
@@ -20,7 +33,7 @@ const fmtClock = (ms) => {
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// ---- 警報(録画が止まったとき): 帯・音・振動 ----
+// ---- 警報(録画が止まったとき): 赤い帯・音・振動 ----
 let alarmEl = null;
 let audioCtx = null;
 function beep() {
@@ -60,9 +73,50 @@ document.addEventListener('visibilitychange', () => {
 
 const methodsPromise = probeMethods();
 
+// ---- 状態の帯に「REC」などを重ねる(js/state-band.js の部品はそのまま使う) ----
+// 帯が LIVE のときだけ文字と色を替える。リプレイ中・一時停止中は帯に触らず、小さい帯(サブ帯)に出す
+function createBandOverlay({ bandId, compute, subEl }) {
+  const band = document.getElementById(bandId);
+  if (!band) return { refresh() {} };
+  const text = band.querySelector('.state-band-text');
+  const normal = { live: 'LIVE', sending: '送信中' };
+  let mine = null; // いま自分が出している状態
+  let busy = false;
+  function refresh() {
+    if (busy) return;
+    busy = true;
+    try {
+      const want = compute(); // { state, text, sub } | null
+      const base = band.dataset.state;
+      const ownBase = base === 'live' || base === 'sending' || base === 'rec' || base === 'collect';
+      if (want && ownBase) {
+        if (band.dataset.state !== want.state) { band.dataset.state = want.state; band.classList.remove('band-enter'); void band.offsetWidth; band.classList.add('band-enter'); }
+        if (text.textContent !== want.text) text.textContent = want.text;
+        mine = { base: mine ? mine.base : base };
+        if (subEl) subEl.hidden = true;
+      } else {
+        if (mine && ownBase) {
+          band.dataset.state = mine.base;
+          text.textContent = normal[mine.base] || text.textContent;
+          mine = null;
+        } else if (mine && !ownBase) {
+          mine = null; // 帯は別の状態(リプレイなど)になった。元に戻す必要はない
+        }
+        if (subEl) {
+          if (want && !ownBase) { subEl.textContent = want.text; subEl.hidden = false; } else if (want && want.sub) { subEl.textContent = want.sub; subEl.hidden = false; } else subEl.hidden = true;
+        }
+      }
+    } finally { busy = false; }
+  }
+  new MutationObserver(() => refresh()).observe(band, { attributes: true, attributeFilter: ['data-state'], childList: true, subtree: true, characterData: true });
+  return { refresh };
+}
+
 // ===========================================================================
 async function initParent(app) {
   const store = await new LabStore('kendoVarLab').open();
+  await store.purgeHidden(); // 「元に戻す」の前にアプリが閉じた録画は、ここで本当に消す
+  await store.markPartials(null); // 終わりまでたどり着かなかった録画に「途中まで」の印を付ける
   const { cameraLink } = app;
   const capture = new LocalCapture({
     camKey: 'local', label: 'カメラ1', store, sentInit: 1,
@@ -79,99 +133,265 @@ async function initParent(app) {
     cameraLink.peer.on('connection', (conn) => parent.attachConn(conn));
   }, 300);
 
+  const monitorArea = document.getElementById('monitorArea');
+  const actions = monitorArea.querySelector('.primary-actions');
+  const bands = monitorArea.querySelector('.state-bands');
+
   const root = document.createElement('div');
   root.className = 'lab-root';
   root.innerHTML = `
-    <button class="lab-fab" type="button" data-fab>長めの録画</button>
-    <section class="lab-sheet" data-sheet hidden>
-      <header class="lab-head"><strong>長めの録画</strong><span class="lab-tag">試作です。</span><button type="button" data-close>閉じる</button></header>
-      <div class="lab-body">
-        <p class="lab-state" data-labstate></p>
-        <button type="button" class="lab-rec" data-rec>録画を始める</button>
-        <p class="lab-hint" data-hint></p>
-        <ul class="lab-cams" data-cams></ul>
-        <h4>録画した映像</h4>
-        <ul class="lab-takes" data-takes></ul>
-        <details class="lab-adv" data-adv>
-          <summary>試験用の設定と数値</summary>
-          <div class="lab-opts">
-            <label>録画のしかた<select data-method><option value="A">ふつう</option><option value="B">コマ送り重視(試験中)</option></select></label>
-            <label>動画の長さ<select data-seg><option value="10">10秒ごと</option><option value="30">30秒ごと</option><option value="60" selected>60秒ごと</option></select></label>
-            <label>最長<select data-max><option value="180">3分</option><option value="600" selected>10分</option><option value="1200">20分</option></select></label>
-          </div>
-          <p class="lab-note" data-support></p>
-          <table class="lab-table"><thead><tr><th>カメラ</th><th>動画の数</th><th>容量</th><th>通信(ms)</th><th>途切れ(ms)</th></tr></thead><tbody data-nums></tbody></table>
-          <div class="lab-actions">
-            <button type="button" data-measure-photo>写真のコマ送りを測る</button>
-            <button type="button" data-copy>数値をコピー</button>
-            <button type="button" data-clear data-confirm="本当に全部消す">記録をすべて消す</button>
-          </div>
-          <p class="lab-note" data-photo></p>
-          <textarea class="lab-text" data-text readonly rows="8" hidden></textarea>
-        </details>
+    <div id="labOverlay" class="help-overlay"></div>
+    <div id="labSheet" class="help-sheet lab-sheet" role="dialog" aria-label="長めの録画" aria-hidden="true">
+      <div class="help-sheet-handle"></div>
+      <h3>長めの録画</h3>
+      <button type="button" class="btn-hero lab-big" id="labStart">録画を始める</button>
+      <p class="lab-line" id="labLine" hidden></p>
+      <ul class="lab-takes" id="labTakes"></ul>
+      <div class="lab-foot">
+        <button type="button" class="lab-link" id="labOpenTest">試験用</button>
+        <button type="button" class="btn-hero lab-close" id="labCloseSheet">閉じる</button>
+      </div>
+    </div>
+    <div id="labTestSheet" class="help-sheet lab-sheet" role="dialog" aria-label="試験用" aria-hidden="true">
+      <div class="help-sheet-handle"></div>
+      <h3>試験用</h3>
+      <p class="lab-note">普通に使うときは開かなくて大丈夫です。</p>
+      <div class="lab-opts">
+        <label>録画のしかた<select id="optMethod"><option value="B">ふつう(MP4にまとめる)</option><option value="A">比べる用(ブラウザ標準の録画)</option></select></label>
+        <label>内部の区切り<select id="optSeg"><option value="10">10秒ごと</option><option value="30">30秒ごと</option><option value="60" selected>60秒ごと</option></select></label>
+        <label>最長<select id="optMax"><option value="180">3分</option><option value="600" selected>10分</option><option value="1200">20分</option></select></label>
+        <label>音<select id="optAudio"><option value="1" selected>録る</option><option value="0">録らない</option></select></label>
+        <label>見るときの音<select id="optAudioCam"><option value="auto" selected>自動</option></select></label>
+      </div>
+      <p class="lab-note">見るときの音は、自動だと「並べて見る形ではカメラ1、1つずつ見る形ではそのカメラ」になります。</p>
+      <p class="lab-note" id="labSupport"></p>
+      <table class="lab-table"><thead><tr><th>カメラ</th><th>状態</th><th>動画の数</th><th>容量</th><th>通信(ms)</th><th>途切れ(ms)</th><th>音</th></tr></thead><tbody id="labNums"></tbody></table>
+      <div class="lab-actions">
+        <button type="button" id="labMeasurePhoto">写真のコマ送りを測る</button>
+        <button type="button" id="labCopy">数値をコピー</button>
+        <button type="button" id="labClearAll">記録をすべて消す</button>
+      </div>
+      <p class="lab-note" id="labPhoto"></p>
+      <textarea class="lab-text" id="labText" readonly rows="8" hidden></textarea>
+      <button type="button" class="btn-hero lab-close" id="labBackSheet">戻る</button>
+    </div>
+    <section class="lab-viewer" id="labViewer" hidden aria-label="録画を見る">
+      <div class="lab-vhead">
+        <div class="state-band" data-state="paused"><span class="state-band-text" id="labVBand">録画</span></div>
+        <div class="lab-vtop">
+          <button type="button" class="lab-vbtn" id="labVGrid" hidden>並べる</button>
+          <button type="button" class="lab-vbtn" id="labVClose">閉じる</button>
+        </div>
+      </div>
+      <canvas id="labCanvas" class="lab-canvas"></canvas>
+      <div class="lab-vbar">
+        <div class="lab-vseek">
+          <input type="range" id="labSeek" min="0" max="1000" value="0" aria-label="見る場面">
+          <span class="time-readout" id="labTime">0:00 / 0:00</span>
+        </div>
+        <div class="lab-vrow">
+          <button type="button" class="speed-btn" data-v="back30" aria-label="30秒戻る">−30秒</button>
+          <button type="button" class="speed-btn step-btn" data-v="prev" aria-label="1コマ戻る"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5h2.4v14H6zM20 5v14L9.5 12z"/></svg></button>
+          <button type="button" class="icon-btn icon-btn-primary" data-v="play" id="labPlay" aria-label="再生"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>
+          <button type="button" class="speed-btn step-btn" data-v="next" aria-label="1コマ進む"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.6 5H18v14h-2.4zM4 5v14l10.5-7z"/></svg></button>
+          <button type="button" class="speed-btn" data-v="fwd30" aria-label="30秒進む">+30秒</button>
+        </div>
+        <p class="lab-vinfo" id="labVInfo" hidden></p>
       </div>
     </section>
-    <section class="lab-viewer" data-viewer hidden>
-      <canvas data-canvas class="lab-canvas"></canvas>
-      <button type="button" class="lab-vclose" data-v="close">閉じる</button>
-      <div class="lab-vbar">
-        <input type="range" data-seek min="0" max="1000" value="0" aria-label="見る場面">
-        <div class="lab-vrow">
-          <button type="button" data-v="back30">30秒戻る</button>
-          <button type="button" data-v="prev">◀ 1コマ</button>
-          <button type="button" data-v="play">再生</button>
-          <button type="button" data-v="next">1コマ ▶</button>
-          <button type="button" data-v="fwd30">30秒進む</button>
-        </div>
-        <p class="lab-vinfo" data-vinfo></p>
-      </div>
-    </section>`;
+    <div class="toast lab-undo" id="labUndo" role="status"><span id="labUndoText">消しました</span><button type="button" id="labUndoBtn">元に戻す</button></div>`;
   document.body.appendChild(root);
   const el = (s) => $(root, s);
 
-  const sheet = el('[data-sheet]');
-  el('[data-fab]').addEventListener('click', () => { sheet.hidden = !sheet.hidden; render(); });
-  el('[data-close]').addEventListener('click', () => { sheet.hidden = true; });
+  // 操作ボタンの列に「録画」を入れる(LIVEのとき N秒前VAR の隣に出る)
+  const recBtn = document.createElement('button');
+  recBtn.type = 'button';
+  recBtn.id = 'labRec';
+  recBtn.className = 'action-btn lab-rec-btn';
+  recBtn.textContent = '録画';
+  actions.appendChild(recBtn);
+  // 「REC 0:10」などを、リプレイ中にも見せるための小さい帯
+  const subBand = document.createElement('div');
+  subBand.className = 'state-band state-band-sub';
+  subBand.id = 'labSubBand';
+  subBand.hidden = true;
+  bands.appendChild(subBand);
+
+  [recBtn, el('#labStart'), el('#labCloseSheet'), el('#labBackSheet'), el('#labVClose'), el('#labVGrid'), el('#labPlay'), el('#labUndoBtn')].forEach((b) => attachPress(b, { vibrate: 30 }));
+
+  const sheet = el('#labSheet');
+  const testSheet = el('#labTestSheet');
+  const overlay = el('#labOverlay');
+  function setSheet(which) { // 'main' | 'test' | null
+    sheet.classList.toggle('open', which === 'main');
+    testSheet.classList.toggle('open', which === 'test');
+    sheet.setAttribute('aria-hidden', which === 'main' ? 'false' : 'true');
+    testSheet.setAttribute('aria-hidden', which === 'test' ? 'false' : 'true');
+    overlay.classList.toggle('open', !!which);
+    if (which === 'main') { takesSig = ''; render(); }
+    if (which === 'test') render();
+  }
+  overlay.addEventListener('click', () => setSheet(null));
+  el('#labCloseSheet').addEventListener('click', () => setSheet(null));
+  el('#labOpenTest').addEventListener('click', () => setSheet('test'));
+  el('#labBackSheet').addEventListener('click', () => setSheet('main'));
 
   methodsPromise.then((m) => {
-    el('[data-support]').textContent = `この端末で使える録画: ふつう ${m.A.ok ? `○(${m.A.mime})` : '×'} / コマ送り重視 ${m.B.ok ? `○(${m.B.codec})` : `×(${m.B.reason})`}`;
+    const a = m.A.ok ? `○(${m.A.mime})` : '×';
+    const b = m.B.ok ? `○(${m.B.codec}${m.B.audio ? ` + ${m.B.audio}` : '、音は使えません'})` : `×(${m.B.reason})`;
+    el('#labSupport').textContent = `この端末で使える録画: ふつう(MP4にまとめる) ${b} / 比べる用 ${a}`;
   });
 
-  el('[data-rec]').addEventListener('click', async () => {
-    if (parent.take && !parent.take.stoppedAt) { await parent.stopTake('user'); return; }
-    const u = await store.usage();
-    if (u && u.freeMB < DEFAULTS.minFreeMB * 2) { raiseAlarm(`空き容量が少ないため(あと約${Math.round(u.freeMB)}MB)、録画を始められません`); return; }
-    parent.startTake({
-      method: el('[data-method]').value, segSec: Number(el('[data-seg]').value), maxSec: Number(el('[data-max]').value),
-    });
+  // ---- 状態の帯 ----
+  const take = () => parent.take;
+  const isRecording = () => !!(take() && !take().stoppedAt);
+  const isCollecting = () => !!(take() && take().stoppedAt && !take().collectedAt && !take().gaveUp);
+  let saving = null; // { text } 保存中の表示
+  function collectPercent() {
+    const sum = parent.summary();
+    let got = 0; let want = 0;
+    for (const r of sum.rows) {
+      if (r.expected == null) return null;
+      got += Math.min(r.segs, r.expected); want += r.expected;
+    }
+    return want ? Math.round((got / want) * 100) : null;
+  }
+  function bandWant() {
+    if (isRecording()) return { state: 'rec', text: `REC ${fmtMS(Date.now() - take().startedAt)}` };
+    if (isCollecting()) { const p = collectPercent(); return { state: 'collect', text: p == null ? '集めています' : `集めています ${p}%` }; }
+    return null;
+  }
+  const overlayBand = createBandOverlay({ bandId: 'stateBand', compute: () => bandWant() });
+  // サブ帯: 保存中の知らせが先。なければ、リプレイ中などに「REC 0:10」を出す
+  function refreshSub() {
+    const main = document.getElementById('stateBand');
+    const st = main ? main.dataset.state : 'live';
+    const want = bandWant();
+    let text = '';
+    if (saving) text = saving.text;
+    else if (want && st !== 'live' && st !== 'rec' && st !== 'collect') text = want.text;
+    if (text) { if (subBand.textContent !== text) subBand.textContent = text; subBand.hidden = false; } else subBand.hidden = true;
+  }
+  new MutationObserver(refreshSub).observe(document.getElementById('stateBand'), { attributes: true, attributeFilter: ['data-state'] });
+
+  // ---- 録画を始める・終える ----
+  let starting = false;
+  async function startRec() {
+    if (starting || isRecording() || isCollecting()) return;
+    starting = true;
+    try {
+      const u = await store.usage();
+      if (u && u.freeMB < DEFAULTS.minFreeMB * 2) { raiseAlarm(`空き容量が少ないため(あと約${Math.round(u.freeMB)}MB)、録画を始められません`); return; }
+      setSheet(null);
+      const ok = await parent.startTake({
+        method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: Number(el('#optMax').value), audio: el('#optAudio').value === '1',
+      });
+      if (!ok) showToast('録画を始められませんでした');
+      else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
+      enableWakeLock({ quiet: true });
+    } finally { starting = false; render(); }
+  }
+  async function stopRec() {
+    if (!isRecording()) return;
+    await parent.stopTake('user');
+    render();
+  }
+  recBtn.addEventListener('click', () => {
+    if (isRecording()) { stopRec(); return; }
+    setSheet('main');
+  });
+  el('#labStart').addEventListener('click', startRec);
+
+  // ---- 録画の一覧: 消す(10秒は元に戻せる) ----
+  let pending = null; // { ids:[], timer }
+  async function commitPending() {
+    if (!pending) return;
+    const p = pending; pending = null;
+    clearTimeout(p.timer);
+    for (const id of p.ids) { try { await store.deleteTake(id); } catch (err) { /* 無視 */ } }
+  }
+  const undoEl = el('#labUndo');
+  function hideUndo() { undoEl.classList.remove('show'); }
+  async function removeTakes(ids, text = '消しました') {
+    await commitPending(); // 前の「消す」は、ここで確定する
+    for (const id of ids) await store.hideTake(id);
+    pending = { ids, timer: setTimeout(async () => { hideUndo(); await commitPending(); takesSig = ''; render(); }, UNDO_MS) };
+    el('#labUndoText').textContent = text;
+    undoEl.classList.add('show');
+    takesSig = ''; render();
+  }
+  el('#labUndoBtn').addEventListener('click', async () => {
+    if (!pending) return;
+    const p = pending; pending = null;
+    clearTimeout(p.timer);
+    for (const id of p.ids) await store.unhideTake(id);
+    hideUndo();
+    takesSig = ''; render();
   });
 
-  // ラベルを接続中のカメラの名前にそろえる
-  function syncLabels() {
-    for (const c of parent.children.values()) {
-      const cam = cameraLink.remoteCams.find((x) => x.id === c.camKey);
-      if (cam) c.label = cam.label;
+  // ---- 保存 ----
+  const savingIds = new Set();
+  let lastSave = null;
+  async function saveTake(t) {
+    if (savingIds.has(t.id)) return; // 二度押ししても、保存は1回だけ
+    savingIds.add(t.id);
+    takesSig = ''; render();
+    const started = performance.now();
+    try {
+      enableWakeLock({ quiet: true });
+      saving = { text: '保存中' };
+      refreshSub();
+      let res;
+      try {
+        res = await buildTakeFiles(store, t, { onProgress: ({ index, total }) => { saving = { text: total > 1 ? `保存中 ${Math.min(index + 1, total)}/${total}` : '保存中' }; refreshSub(); } });
+      } catch (err) {
+        showToast(err && err.message && /映像がありません/.test(err.message) ? err.message : '途中で止まりました。もう一度保存してください。');
+        return;
+      }
+      const how = await deliverFiles(res.files, { title: '剣道VAR 長めの録画' });
+      lastSave = { at: Date.now(), ms: Math.round(performance.now() - started), how, info: res.info, files: res.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) };
+      window.__lastSave = lastSave;
+      if (how === 'cancelled') showToast('保存をやめました');
+      else {
+        saving = { text: '保存しました' };
+        refreshSub();
+        if (res.note) showToast(res.note);
+        await new Promise((r) => setTimeout(r, 2200));
+      }
+    } finally {
+      saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; render();
     }
   }
 
-  const viewer = new LabViewer({ store, canvas: el('[data-canvas]'), onChange: () => renderViewer() });
-  const vEl = el('[data-viewer]');
-  const seek = el('[data-seek]');
+  // ---- 見る ----
+  const viewer = new LabViewer({ store, canvas: el('#labCanvas'), onChange: () => renderViewer() });
+  const vEl = el('#labViewer');
+  const seek = el('#labSeek');
   let seeking = false;
   function renderViewer() {
     if (vEl.hidden) return;
     const dur = viewer.durationMs || 1;
     if (!seeking) seek.value = String(Math.round(((viewer.t - viewer.tMin) / dur) * 1000));
-    const m = viewer.metrics;
-    const nums = el('[data-adv]').open ? `　離れた場面へ ${m.jumpMs ?? '-'}ms　コマ送り ${m.stepMs ?? '-'}ms　カメラ間のずれ ${m.spreadMs ?? '-'}ms` : '';
-    el('[data-vinfo]').textContent = `${fmtTime(viewer.t - viewer.tMin)} / ${fmtTime(dur)}${nums}`;
-    $(vEl, '[data-v="play"]').textContent = viewer.playing ? '止める' : '再生';
+    el('#labTime').textContent = `${fmtMS(viewer.t - viewer.tMin)} / ${fmtMS(dur)}`;
+    const play = el('#labPlay');
+    const icon = viewer.playing
+      ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+    if (play.dataset.icon !== (viewer.playing ? 'pause' : 'play')) { play.innerHTML = icon; play.dataset.icon = viewer.playing ? 'pause' : 'play'; play.setAttribute('aria-label', viewer.playing ? '止める' : '再生'); }
+    const f = viewer.focus ? viewer.tracks.find((tr) => tr.cam === viewer.focus) : null;
+    el('#labVBand').textContent = f ? f.label : '録画';
+    el('#labVGrid').hidden = !viewer.focus;
+    if (testSheet.classList.contains('open') || window.__labDebug) {
+      const m = viewer.metrics;
+      el('#labVInfo').hidden = false;
+      el('#labVInfo').textContent = `離れた場面へ ${m.jumpMs ?? '-'}ms　コマ送り ${m.stepMs ?? '-'}ms　カメラ間のずれ ${m.spreadMs ?? '-'}ms　音: ${viewer.audioCam ?? 'なし'}`;
+    } else el('#labVInfo').hidden = true;
   }
   seek.addEventListener('input', () => { seeking = true; viewer.pause(); viewer.seek(viewer.tMin + (Number(seek.value) / 1000) * viewer.durationMs).finally(() => { seeking = false; }); });
   vEl.addEventListener('click', async (e) => {
-    const act = e.target.dataset && e.target.dataset.v;
+    const b = e.target.closest && e.target.closest('[data-v]');
+    const act = b && b.dataset.v;
     if (!act) return;
-    if (act === 'close') { viewer.close(); vEl.hidden = true; sheet.hidden = false; render(); return; }
     if (act === 'play') { viewer.playing ? viewer.pause() : viewer.play(); renderViewer(); return; }
     if (act === 'prev') await viewer.step(-1);
     if (act === 'next') await viewer.step(1);
@@ -179,20 +399,35 @@ async function initParent(app) {
     if (act === 'fwd30') { viewer.pause(); await viewer.seek(viewer.t + 30000); }
     renderViewer();
   });
+  function closeViewer() { viewer.close(); vEl.hidden = true; setSheet('main'); }
+  el('#labVClose').addEventListener('click', closeViewer);
+  el('#labVGrid').addEventListener('click', () => { viewer.setFocus(null); renderViewer(); });
+  // 並べて見ているとき、映像をタップするとそのカメラを大きく見る(音もそのカメラになる)
+  el('#labCanvas').addEventListener('click', (e) => {
+    if (viewer.camCount < 2 || viewer.focus) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    const cam = viewer.camAt(e.clientX - r.left, e.clientY - r.top);
+    if (cam) { viewer.setFocus(cam); renderViewer(); }
+  });
   async function openViewer(takeId) {
     vEl.hidden = false;
-    sheet.hidden = true;
-    try { await viewer.open(takeId); } catch (err) { raiseAlarm(`再生できませんでした(${err && err.message ? err.message : err})`); vEl.hidden = true; return; }
+    setSheet(null);
+    viewer.audioCamSetting = el('#optAudioCam').value;
+    try { await viewer.open(takeId); } catch (err) { showToast('再生できませんでした'); window.__labViewerError = String(err && err.message ? err.message : err); vEl.hidden = true; setSheet('main'); return; }
     renderViewer();
+    viewer.draw();
   }
   window.__lab.viewer = viewer;
   window.__lab.openViewer = openViewer;
+  window.__lab.saveTake = (t) => saveTake(t);
+  window.__lab.removeTakes = removeTakes;
+  window.__lab.setSheet = setSheet;
 
   // ---- 写真方式(VARの直近30秒)で1コマを出す時間。動画との比べ用 ----
   let photoStepMs = null;
   async function measurePhoto() {
     const frames = app.recorder.getFrames(cameraLink.activeSource) || [];
-    if (frames.length < 10) { el('[data-photo]').textContent = '写真がまだたまっていません。少し待ってからもう一度押してください'; return; }
+    if (frames.length < 10) { el('#labPhoto').textContent = '写真がまだたまっていません。少し待ってからもう一度押してください'; return; }
     const cv = document.createElement('canvas');
     const g = cv.getContext('2d');
     const times = [];
@@ -207,164 +442,162 @@ async function initParent(app) {
       times.push(performance.now() - t0);
     }
     photoStepMs = { n, avg: Math.round(times.reduce((a, b) => a + b, 0) / n), max: Math.round(Math.max(...times)) };
-    el('[data-photo]').textContent = `写真1コマを出す時間: 平均${photoStepMs.avg}ms(最大${photoStepMs.max}ms)`;
+    el('#labPhoto').textContent = `写真1コマを出す時間: 平均${photoStepMs.avg}ms(最大${photoStepMs.max}ms)`;
   }
-  el('[data-measure-photo]').addEventListener('click', measurePhoto);
+  el('#labMeasurePhoto').addEventListener('click', measurePhoto);
 
   // ---- 数値のまとめ ----
   async function summaryText(takeId) {
-    const take = takeId ? await store.getTake(takeId) : parent.take;
-    if (!take) return '録画がまだありません';
-    const segs = await store.listByTake(take.id);
+    const tk = takeId ? await store.getTake(takeId) : parent.take;
+    if (!tk) return '録画がまだありません';
+    const segs = await store.listByTake(tk.id);
     const byCam = new Map();
     segs.forEach((s) => { const a = byCam.get(s.cam) || { label: s.label, n: 0, bytes: 0, role: s.origin === 'own' ? '親機' : '子機' }; a.n++; a.bytes += s.size; byCam.set(s.cam, a); });
-    const live = parent.take && parent.take.id === take.id ? parent.summary() : null;
+    const live = parent.take && parent.take.id === tk.id ? parent.summary() : null;
     const lines = [];
-    lines.push(`【録画の数値】${fmtClock(take.startedAt)} 録画のしかた:${take.method === 'B' ? 'コマ送り重視' : 'ふつう'} 動画の長さ${take.segSec}秒ごと 長さ${take.stoppedAt ? fmtTime(take.stoppedAt - take.startedAt) : '録画中'}`);
+    lines.push(`【録画の数値】${fmtClock(tk.startedAt)} 録画のしかた:${tk.method === 'B' ? 'ふつう(MP4にまとめる)' : '比べる用'} 内部の区切り${tk.segSec}秒 長さ${tk.stoppedAt ? fmtDur(tk.stoppedAt - tk.startedAt) : '録画中'}${tk.partial ? ' 途中まで' : ''}`);
     if (segs[0]) lines.push(`録画の形式: ${segs[0].mime}`);
     if (live && live.take.collectMs != null) lines.push(`終わり→全カメラの映像がそろうまで: ${(live.take.collectMs / 1000).toFixed(1)}秒`);
-    else if (take.collectedAt && take.stoppedAt) lines.push(`終わり→全カメラの映像がそろうまで: ${((take.collectedAt - take.stoppedAt) / 1000).toFixed(1)}秒`);
-    else if (take.stoppedAt) lines.push('終わり→全カメラの映像がそろうまで: まだそろっていません');
-    lines.push(`電池: ${take.bat0 ?? '-'}% → ${take.bat1 ?? '-'}%(熱さは手で触って記録してください)`);
+    else if (tk.collectedAt && tk.stoppedAt) lines.push(`終わり→全カメラの映像がそろうまで: ${((tk.collectedAt - tk.stoppedAt) / 1000).toFixed(1)}秒`);
+    else if (tk.stoppedAt) lines.push('終わり→全カメラの映像がそろうまで: まだそろっていません');
+    lines.push(`電池: ${tk.bat0 ?? '-'}% → ${tk.bat1 ?? '-'}%(熱さは手で触って記録してください)`);
     lines.push(`画面が隠れた回数・時間: ${hidden.count}回 ${Math.round(hidden.totalMs / 1000)}秒`);
     byCam.forEach((a, cam) => {
       const row = live && live.rows.find((r) => r.cam === cam);
       const exp = row && row.expected != null ? `/${row.expected}` : '';
       let extra = '';
-      if (row) extra = ` 欠け最大${row.maxGapMs ?? '-'}ms 往復${row.rtt ?? '-'}ms 時計差${row.offset ?? '-'}ms 未送信${row.unsent ?? '-'} 落としたコマ${row.dropped ?? '-'}${row.errors && row.errors.length ? ` 記録:${row.errors.join(' / ')}` : ''}`;
+      if (row) {
+        const au = row.audio;
+        const audioText = au ? (au.ok ? `音:${au.codec} ${au.sampleRate || ''}Hz 遅れ${au.latencyMs != null ? Math.round(au.latencyMs) : '-'}ms 設定${au.settings ? `エコー除去${au.settings.echoCancellation} 雑音抑制${au.settings.noiseSuppression} 自動音量${au.settings.autoGainControl}` : '-'}` : `音なし(${au.reason})`) : '音:-';
+        extra = ` 欠け最大${row.maxGapMs ?? '-'}ms 往復${row.rtt ?? '-'}ms 時計差${row.offset ?? '-'}ms 未送信${row.unsent ?? '-'} 落としたコマ${row.dropped ?? '-'} ${audioText}${row.errors && row.errors.length ? ` 記録:${row.errors.join(' / ')}` : ''}`;
+      }
       lines.push(`${a.label}(${a.role}): 動画${a.n}${exp} ${(a.bytes / 1048576).toFixed(1)}MB${extra}`);
     });
+    if (lastSave) {
+      lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);
+    }
     const m = viewer.metrics;
     if (m.seekMs != null) lines.push(`動画から見る: 離れた場面へ移る${m.jumpMs ?? '-'}ms 1コマ送り${m.stepMs ?? '-'}ms 画面上のカメラ間のずれ${m.spreadMs ?? '-'}ms`);
     if (photoStepMs != null) lines.push(`写真方式(VARの直近30秒): 1コマを出す${photoStepMs.avg}ms(最大${photoStepMs.max}ms、${photoStepMs.n}コマの平均)`);
     lines.push(`端末: ${navigator.userAgent}`);
     return lines.join('\n');
   }
-  el('[data-copy]').addEventListener('click', async () => {
-    const text = await summaryText();
-    const ta = el('[data-text]');
+  window.__lab.summaryText = summaryText;
+  el('#labCopy').addEventListener('click', async () => {
+    const list = await store.listTakes();
+    const latest = list.find((x) => !x.hiddenAt);
+    const text = await summaryText(latest && !(parent.take && parent.take.id === latest.id) ? latest.id : undefined);
+    const ta = el('#labText');
     ta.hidden = false; ta.value = text; ta.select();
-    try { await navigator.clipboard.writeText(text); } catch (err) { try { document.execCommand('copy'); } catch (e2) { /* 手でコピーしてもらう */ } }
+    try { await navigator.clipboard.writeText(text); showToast('コピーしました'); } catch (err) { try { document.execCommand('copy'); } catch (e2) { /* 手でコピーしてもらう */ } }
   });
-  // 消す操作は、1回目で「本当に消す」に変え、続けてもう1回押したときだけ実行する(確認のダイアログは使わない)
-  function confirmTap(btn, run) {
-    let armed = false;
-    let timer = null;
-    const label = btn.textContent;
-    const word = btn.dataset.confirm || '本当に消す';
-    btn.addEventListener('click', async () => {
-      if (!armed) {
-        armed = true; btn.textContent = word; btn.classList.add('is-armed');
-        timer = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove('is-armed'); }, 3500);
-        return;
-      }
-      clearTimeout(timer); armed = false; btn.textContent = label; btn.classList.remove('is-armed');
-      await run();
-    });
-  }
-  confirmTap(el('[data-clear]'), async () => {
-    if (parent.take && !parent.take.stoppedAt) return;
-    await store.clear();
-    renderTakes();
+  el('#labClearAll').addEventListener('click', async () => {
+    if (isRecording() || isCollecting()) { showToast('録画が終わってから消してください'); return; }
+    const ids = (await store.listTakes()).filter((x) => !x.hiddenAt).map((x) => x.id);
+    if (!ids.length) { showToast('消す録画はありません'); return; }
+    setSheet(null);
+    await removeTakes(ids, 'すべて消しました');
   });
-
-  // ---- スマホに保存(共有の画面が使えれば共有、使えなければダウンロード) ----
-  const pad2 = (n) => String(n).padStart(2, '0');
-  async function saveTake(take, index) {
-    const segs = (await store.listByTake(take.id)).sort((a, b) => String(a.label).localeCompare(String(b.label), 'ja') || a.t0 - b.t0); // カメラごとに、古い順
-    if (!segs.length) { showToast('保存できる映像がありません'); return; }
-    if (segs.some((sg) => !/^video\/(webm|mp4)/.test(sg.mime))) { showToast('この録画は「コマ送り重視」で録ったため、保存できません。「ふつう」で録り直してください'); return; }
-    const d = new Date(take.startedAt);
-    const stamp = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}`;
-    const counts = {};
-    const files = segs.map((sg) => {
-      counts[sg.cam] = (counts[sg.cam] || 0) + 1;
-      const ext = sg.mime.startsWith('video/mp4') ? 'mp4' : 'webm';
-      const num = (String(sg.label).match(/\d+/) || ['0'])[0];
-      return new File([sg.blob], `kendovar_${stamp}_take${index}_cam${num}_${pad2(counts[sg.cam])}.${ext}`, { type: sg.mime.split(';')[0] });
-    });
-    if (navigator.canShare && navigator.share && navigator.canShare({ files })) {
-      try { await navigator.share({ files, title: '剣道VAR 長めの録画' }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
-    }
-    for (const f of files) {
-      const url = URL.createObjectURL(f);
-      const a = document.createElement('a');
-      a.href = url; a.download = f.name;
-      a.style.display = 'none';
-      document.body.appendChild(a); a.click();
-      await new Promise((r) => setTimeout(r, 600));
-      a.remove(); URL.revokeObjectURL(url);
-    }
-    showToast(`${files.length}個の動画を保存しました(1分ごとに分かれています)`);
-  }
+  el('#optAudioCam').addEventListener('change', () => { viewer.audioCamSetting = el('#optAudioCam').value; });
 
   // ---- 画面の更新 ----
   let takesSig = '';
+  let renderBusy = false;
   async function renderTakes() {
-    const list = await store.listTakes();
-    // 一覧が変わっていないときは作り直さない(「本当に消す」の確認の途中でボタンが戻らないように)
-    const sig = JSON.stringify(list.map((t) => [t.id, t.stoppedAt, Object.keys(t.cams || {}).length]));
+    const list = (await store.listTakes()).filter((x) => !x.hiddenAt);
+    const cur = take();
+    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.partial, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting()]);
     if (sig === takesSig) return;
     takesSig = sig;
-    const ul = el('[data-takes]');
-    ul.innerHTML = list.length ? '' : '<li class="lab-empty">まだありません</li>';
-    list.forEach((t, i) => {
+    const ul = el('#labTakes');
+    ul.innerHTML = '';
+    list.forEach((t) => {
       const li = document.createElement('li');
-      const n = list.length - i;
+      li.dataset.take = t.id;
+      const collecting = !!(cur && cur.id === t.id && (!t.stoppedAt || isCollecting()));
       const cams = Object.keys(t.cams || {}).length;
-      li.innerHTML = `<span><b>${n}本目</b> ${fmtClock(t.startedAt)}<br>${t.stoppedAt ? fmtTime(t.stoppedAt - t.startedAt) : '録画中'} ・ ${cams}台</span>`;
-      const mkBtn = (text, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; if (fn) b.addEventListener('click', fn); return b; };
-      const view = mkBtn('見る', () => openViewer(t.id));
-      const save = mkBtn('保存', () => saveTake(t, n));
-      const del = mkBtn('消す');
-      confirmTap(del, async () => { await store.deleteTake(t.id); renderTakes(); });
-      li.append(view, save, del);
+      const info = document.createElement('div');
+      info.className = 'lab-take-info';
+      const dur = t.stoppedAt ? fmtDur(t.stoppedAt - t.startedAt) : '';
+      info.innerHTML = `<b>${esc(fmtClock(t.startedAt))}</b><span>${dur ? `${dur} ・ ` : ''}${cams}台</span>${t.partial ? '<em>途中まで</em>' : ''}`;
+      li.appendChild(info);
+      if (collecting) {
+        const p = document.createElement('div');
+        p.className = 'lab-take-wait';
+        p.textContent = !t.stoppedAt ? '録画中' : '集めています';
+        li.appendChild(p);
+      } else {
+        const row = document.createElement('div');
+        row.className = 'lab-take-btns';
+        const mk = (text, cls, fn, dis) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = cls; if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
+        row.append(
+          mk('見る', 'lab-act lab-act-main', () => openViewer(t.id)),
+          mk('保存', 'lab-act', () => saveTake(t), savingIds.has(t.id)),
+          mk('消す', 'lab-act', () => removeTakes([t.id])),
+        );
+        li.appendChild(row);
+      }
       ul.appendChild(li);
     });
   }
-  let renderBusy = false;
+  let openedFor = null;
   function render() {
-    syncLabels();
-    const recording = parent.take && !parent.take.stoppedAt;
-    const fab = el('[data-fab]');
-    fab.classList.toggle('is-rec', !!recording);
-    fab.textContent = recording ? `● 録画中 ${fmtTime(Date.now() - parent.take.startedAt)}` : '長めの録画';
-    if (sheet.hidden) return;
-    const sum = parent.summary();
-    const t = sum.take;
-    const connected = sum.rows.filter((r) => r.role === '親機' || r.connected).length;
-    const rec = el('[data-rec]');
-    rec.textContent = recording ? '録画を終える' : '録画を始める';
-    rec.classList.toggle('is-rec', !!recording);
-    ['[data-method]', '[data-seg]', '[data-max]'].forEach((q) => { el(q).disabled = !!recording; });
-    let state = '録画していません。';
-    let hint = '押すと、つながっているすべてのカメラが録画を始めます。';
-    if (recording) {
-      state = `● ${connected}台で録画中 ${fmtTime(Date.now() - t.startedAt)}`;
-      hint = '終えると、ほかのスマホの映像がこの端末に集まります。';
-    } else if (t && t.stoppedAt) {
-      if (t.collectMs != null) { state = '録画が終わりました。全カメラの映像が集まりました。'; hint = '下の一覧から見られます。'; }
-      else { state = '録画が終わりました。ほかのスマホの映像を集めています…'; hint = 'このままお待ちください。'; }
+    const recording = isRecording();
+    const collecting = isCollecting();
+    // 操作ボタン: 録画中だけ「録画を終える」。集めている間は出さない(今使える操作だけ)
+    recBtn.textContent = recording ? '録画を終える' : '録画';
+    recBtn.classList.toggle('is-recording', recording);
+    recBtn.hidden = collecting;
+    monitorArea.classList.toggle('lab-recording', recording);
+    overlayBand.refresh();
+    refreshSub();
+    // 集め終わったら、録画の一覧を自動で開く
+    if (take() && take().stoppedAt && take().collectedAt && openedFor !== take().id) { openedFor = take().id; if (vEl.hidden) setSheet('main'); }
+    // シートの中身
+    const open = sheet.classList.contains('open');
+    el('#labStart').hidden = recording || collecting;
+    const line = el('#labLine');
+    line.hidden = !(recording || collecting);
+    if (recording) line.textContent = '録画しています。終えるには、画面の下の「録画を終える」を押します。';
+    else if (collecting) {
+      const p = collectPercent();
+      line.textContent = `ほかのスマホの映像を集めています${p == null ? '' : ` ${p}%`}`;
     }
-    el('[data-labstate]').textContent = state;
-    el('[data-labstate]').classList.toggle('is-rec', !!recording);
-    el('[data-hint]').textContent = hint;
-    el('[data-cams]').innerHTML = sum.rows.map((r) => {
+    if (open && !renderBusy) { renderBusy = true; renderTakes().finally(() => { renderBusy = false; }); }
+    if (testSheet.classList.contains('open')) renderTest();
+  }
+  function renderTest() {
+    const sum = parent.summary();
+    el('#labNums').innerHTML = sum.rows.map((r) => {
       const child = parent.children.get(r.cam);
       const childRec = child && child.status && child.status.rec.recording;
-      let st = r.role === '親機' ? (capture.recording ? '録画中' : '待機中') : (r.connected ? (childRec ? '録画中' : '待機中') : 'つながっていません');
-      if (r.alarm) st = '止まりました';
-      if (r.unsent) st += `(送信待ち ${r.unsent})`;
-      return `<li class="${r.alarm ? 'is-alarm' : ''}"><span>${esc(r.label)}</span><span>${st}</span></li>`;
-    }).join('');
-    el('[data-nums]').innerHTML = sum.rows.map((r) => {
+      let st = r.role === '親機' ? (capture.recording ? '録画中' : '待機') : (r.connected ? (childRec ? '録画中' : '待機') : '切れている');
+      if (r.alarm) st = '止まった';
       const segs = r.expected != null ? `${r.segs}/${r.expected}` : `${r.segs}`;
-      return `<tr><td>${esc(r.label)}</td><td>${segs}</td><td>${r.mb.toFixed(1)}MB</td><td>${r.rtt ?? '-'}</td><td>${r.maxGapMs ?? '-'}</td></tr>`;
+      const au = r.audio ? (r.audio.ok ? r.audio.codec : `×${r.audio.reason}`) : '-';
+      return `<tr class="${r.alarm ? 'is-alarm' : ''}"><td>${esc(r.label)}</td><td>${st}${r.unsent ? `(未送信${r.unsent})` : ''}</td><td>${segs}</td><td>${r.mb.toFixed(1)}MB</td><td>${r.rtt ?? '-'}</td><td>${r.maxGapMs ?? '-'}</td><td>${esc(au)}</td></tr>`;
     }).join('');
-    if (!renderBusy) { renderBusy = true; renderTakes().finally(() => { renderBusy = false; }); }
+  }
+  // 音を出すカメラの選択肢を、つながっているカメラに合わせる
+  let camSig = '';
+  function syncLabels() {
+    for (const c of parent.children.values()) {
+      const cam = cameraLink.remoteCams.find((x) => x.id === c.camKey);
+      if (cam) c.label = cam.label;
+    }
+    const cams = [['local', 'カメラ1'], ...[...parent.children.values()].map((c) => [c.camKey, c.label])];
+    const sig = JSON.stringify(cams);
+    if (sig === camSig) return;
+    camSig = sig;
+    const sel = el('#optAudioCam');
+    const cur = sel.value;
+    sel.innerHTML = `<option value="auto">自動</option>${cams.map(([k, l]) => `<option value="${esc(k)}">${esc(l)}だけ</option>`).join('')}`;
+    sel.value = [...sel.options].some((o) => o.value === cur) ? cur : 'auto';
   }
 
-  setInterval(() => { parent.tick(); render(); }, 1000);
+  setInterval(() => { parent.tick(); syncLabels(); render(); }, 1000);
+  // 「集めるのをやめる」: 子機の映像がそろわないまま待ち続けないため(試験用の扱い。普通は自動でそろう)
+  window.__lab.giveUpCollect = () => { if (take() && take().stoppedAt && !take().collectedAt) { take().gaveUp = true; take().collectedAt = Date.now(); take().partial = true; parent._saveTake(); render(); } };
   render();
 }
 
@@ -379,6 +612,8 @@ async function initChild(app) {
     getConn: () => conn, onAlarm: raiseAlarm, onChange: () => render(),
   });
   window.__lab = { role: 'child', agent, store };
+  // マイクの許可は、この試作のページに入ったときに取っておく(録画の合図が来たときに止まらないように)
+  ensureMicPermission().then((r) => { if (!r.ok) showToast(`${r.reason}。音なしで録画します`); });
 
   function ensureConn() {
     if (conn && conn.open) return;
@@ -394,31 +629,36 @@ async function initChild(app) {
     conn.on('error', () => {});
   }
 
-  const root = document.createElement('div');
-  root.className = 'lab-root lab-child';
-  root.innerHTML = '<div class="lab-chip" data-chip>試作です。録画は、映像を見ている端末で操作します</div>';
-  document.body.appendChild(root);
-  const chip = $(root, '[data-chip]');
+  // 子機の帯は、白黒だけ(赤は録画を操作する端末の帯用)。録画中は「録画中 0:10」
+  const sub = document.getElementById('camSubBand');
+  let subPrev = { text: '', hidden: true };
+  const overlay = createBandOverlay({
+    bandId: 'camStateBand',
+    subEl: null,
+    compute: () => {
+      const st = agent.capture.status;
+      if (!st.recording) return null;
+      return { state: 'sending', text: `録画中 ${fmtMS(Date.now() - st.startedAt)}` };
+    },
+  });
   function render() {
-    const st = agent.capture.status;
     agent.setLabel(`カメラ${app.getCameraNumber()}`);
+    const st = agent.capture.status;
+    overlay.refresh();
     const connected = conn && conn.open;
-    chip.classList.toggle('is-rec', st.recording);
-    chip.classList.toggle('is-alarm', !!st.alarm && !st.recording);
-    const waiting = Number(chip.dataset.unsent || 0);
-    const parts = [];
-    if (st.recording) parts.push(waiting ? `● 録画中(送信待ち ${waiting})` : '● 録画中');
-    else parts.push('試作です。録画は、映像を見ている端末で操作します');
-    if (!connected) parts.push('見ている端末とつながっていません');
-    if (st.alarm && !st.recording) parts.push('録画が止まりました');
-    if (st.recording && agent.free != null) parts.push(`空き${agent.free}MB`);
-    chip.textContent = parts.join(' ・ ');
+    if (sub) {
+      if (st.recording && !connected) {
+        if (!sub.dataset.lab) { subPrev = { text: sub.textContent, hidden: sub.hidden }; sub.dataset.lab = '1'; }
+        sub.textContent = '見ている端末とつながっていません'; sub.hidden = false;
+      } else if (sub.dataset.lab) { // つながったら、元の表示(カメラの番号)に戻す
+        sub.textContent = subPrev.text; sub.hidden = subPrev.hidden; delete sub.dataset.lab;
+      }
+    }
   }
   const timer = setInterval(() => {
-    if (app.getRole() !== 'camera') { clearInterval(timer); agent.stopRecording('left'); root.remove(); window.__lab = null; labState.child = false; return; }
+    if (app.getRole() !== 'camera') { clearInterval(timer); agent.stopRecording('left'); window.__lab = null; labState.child = false; return; }
     ensureConn();
     agent.tick();
-    agent.sender.unsentCount().then((n) => { chip.dataset.unsent = String(n); });
     render();
   }, 1000);
   render();
@@ -437,3 +677,4 @@ function boot(app) {
 
 if (window.kendoVarApp) boot(window.kendoVarApp);
 else document.addEventListener('kendovar-app-ready', () => boot(window.kendoVarApp), { once: true });
+void batteryPercent;
