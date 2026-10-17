@@ -9,7 +9,7 @@
 import { LabStore } from './store.js';
 import { LocalCapture, ChildAgent, ParentAgent, DEFAULTS, probeMethods, batteryPercent } from './agents.js';
 import { LabViewer } from './viewer.js';
-import { buildTakeFiles, deliverFiles, fileStamp } from './save.js';
+import { buildTakeFiles, deliverFiles, fileStamp, resolveSaveMode } from './save.js';
 import { composeTake, QUALITY } from './compose.js';
 import { ensureMicPermission } from './audio-input.js';
 import { showToast } from '../../js/toast.js';
@@ -163,6 +163,7 @@ async function initParent(app) {
         <label>最長<select id="optMax"><option value="180">3分</option><option value="600" selected>10分</option><option value="1200">20分</option></select></label>
         <label>音<select id="optAudio"><option value="1" selected>録る</option><option value="0">録らない</option></select></label>
         <label>見るときの音<select id="optAudioCam"><option value="auto" selected>自動</option></select></label>
+        <label>保存のしかた<select id="optSave"><option value="auto" selected>自動</option><option value="share">共有の画面</option><option value="download">ダウンロード</option></select></label>
         <label>まとめ動画の画質<select id="optQuality"><option value="low" selected>低(幅960・15コマ)</option><option value="std">標準(幅1280・30コマ)</option></select></label>
       </div>
       <p class="lab-note">見るときの音とまとめ動画の音は、自動だと「カメラ1」(1つずつ見る形ではそのカメラ)になります。</p>
@@ -383,12 +384,14 @@ async function initParent(app) {
     refreshSub();
     const deliver = async () => {
       hideMake();
-      const how = await deliverFiles([file], { title: '剣道VAR 長めの録画(まとめ)' });
+      const how = await deliverFiles([file], { title: '剣道VAR 長めの録画(まとめ)', mode: el('#optSave').value });
       if (how === 'cancelled') showToast('保存をやめました');
       else { saving = { text: '保存しました' }; refreshSub(); setTimeout(() => { saving = null; refreshSub(); }, 2200); }
     };
     window.__lab.deliverMake = deliver;
-    showMake('まとめができました', '保存', deliver, 120000);
+    // ダウンロードなら、押した操作が要らないので、できたらそのまま保存する。共有の画面は押した直後でないと出せない端末があるため、「保存」を押してもらう
+    if (resolveSaveMode(el('#optSave').value) === 'download') deliver();
+    else showMake('まとめができました', '保存', deliver, 120000);
     window.__lastMake.performanceNote = `${Math.round(performance.now() - started)}ms`;
   }
 
@@ -411,7 +414,7 @@ async function initParent(app) {
         showToast(err && err.message && /映像がありません/.test(err.message) ? err.message : '途中で止まりました。もう一度保存してください。');
         return;
       }
-      const how = await deliverFiles(res.files, { title: '剣道VAR 長めの録画' });
+      const how = await deliverFiles(res.files, { title: '剣道VAR 長めの録画', mode: el('#optSave').value });
       lastSave = { at: Date.now(), ms: Math.round(performance.now() - started), how, info: res.info, files: res.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) };
       window.__lastSave = lastSave;
       if (how === 'cancelled') showToast('保存をやめました');

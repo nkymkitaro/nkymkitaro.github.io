@@ -1,5 +1,5 @@
 // save.js: 録画を端末に保存する。カメラごとに1本の動画(MP4)を作り、共有の画面(「ファイルに保存」やギャラリー)に出す。
-// - 共有の画面が使えない端末は、ダウンロードにする
+// - iPhone・iPad は共有の画面、それ以外はダウンロード(試験用で変えられる)。共有の画面が使えないときもダウンロード
 // - 1分ごとの区切りは内部の仕組みで、保存するファイルには出さない
 // - MP4にまとめられない録画(圧縮が使えない端末の「ふつう」の録画)だけ、区切りごとのファイルになる(その旨を伝える)
 import { buildCameraMp4 } from './mux.js';
@@ -49,9 +49,18 @@ export async function buildTakeFiles(store, take, { onProgress = () => {}, shoul
   return { files, info, split, note: split ? 'この端末では1本にまとめられないため、区切りごとのファイルになりました' : '' };
 }
 
-// 共有の画面に出す。出せなければダウンロード。戻り値: 'shared' | 'downloaded' | 'cancelled'
-export async function deliverFiles(files, { title = '剣道VAR' } = {}) {
-  if (navigator.canShare && navigator.share) {
+// 保存のしかた。'auto' は、iPhone・iPad だけ共有の画面(「ビデオを保存」で写真に入れられる唯一の道)、それ以外はダウンロード
+// (Androidの共有の画面は「保存」ではなく送り先の一覧になるため)。'share' / 'download' は試験用で選べる
+export function resolveSaveMode(pref = 'auto') {
+  if (pref === 'share' || pref === 'download') return pref;
+  const ua = navigator.userAgent || '';
+  const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  return ios ? 'share' : 'download';
+}
+
+// 端末に出す。戻り値: 'shared' | 'downloaded' | 'cancelled'
+export async function deliverFiles(files, { title = '剣道VAR', mode = 'auto' } = {}) {
+  if (resolveSaveMode(mode) === 'share' && navigator.canShare && navigator.share) {
     try {
       if (navigator.canShare({ files })) {
         await navigator.share({ files, title });
