@@ -119,7 +119,8 @@ export class LocalCapture {
       if (this.now() - last > segSec * 1000 * 1.6 + 6000) this._alarm('録画が止まっているようです(区切りが保存されていません)');
     }, 2000);
     // 親機の「終わり」が届かなくても止まるように(想定の長さ+15秒)
-    this._autoStop = setTimeout(() => { if (this.status.recording) { this._error(`最長${Math.round(maxSec / 60)}分に達したため録画を止めました`); this.stop(); } }, (maxSec + 15) * 1000);
+    // 最長(0 は「制限なし」)。親機の「録画停止」が届かなくても止まるように、想定の長さ+15秒で止める
+    if (maxSec > 0) this._autoStop = setTimeout(() => { if (this.status.recording) { this._error(`最長${Math.round(maxSec / 60)}分に達したため録画を止めました`); this.stop(); } }, (maxSec + 15) * 1000);
     this.onChange();
     return true;
   }
@@ -237,6 +238,12 @@ export class ChildAgent {
       if (!ok) this._send({ op: 'ALARM', cam: this.camKey, msg: this.capture.status.alarm });
     } else if (msg.op === 'REC-STOP') {
       await this.stopRecording(msg.reason);
+    } else if (msg.op === 'SEND-PAUSE') {
+      // 見ている端末が受信を中止した録画は、送るのを止める(映像は消さない。「続きを受信」で再開する)
+      this.sender.paused.add(msg.take);
+    } else if (msg.op === 'SEND-RESUME') {
+      this.sender.paused.delete(msg.take);
+      this.sender.flush();
     } else if (msg.op === 'PONG') {
       const t2 = this.now();
       const rtt = t2 - msg.t1;
@@ -301,9 +308,11 @@ export class ChildAgent {
 
 // ---------------------------------------------------------------------------
 export class ParentAgent {
-  constructor({ store, capture, log = () => {}, onAlarm, onChange, now = () => Date.now() }) {
+  constructor({ store, capture, log = () => {}, onAlarm, onMaxReached, onChange, now = () => Date.now() }) {
     this.store = store;
     this.capture = capture; // 親機自身のカメラ
+    this.onMaxReached = onMaxReached || null;
+    this.pausedTakes = new Set(); // 受信を中止した録画(子機に送るのを止めてもらう)
     this.log = log;
     this.onAlarm = onAlarm || (() => {});
     this.onChange = onChange || (() => {});
@@ -335,6 +344,7 @@ export class ParentAgent {
     if (msg.op === 'HELLO') {
       const c = this._child(msg.cam);
       c.conn = conn; c.connected = true; c.label = msg.label || c.label; c.lastSeen = this.now();
+      for (const id of this.pausedTakes) { try { conn.send({ k: 'LAB', op: 'SEND-PAUSE', take: id }); } catch (err) { /* 次回 */ } }
       this._syncChild(c, msg.recording, msg.take);
     } else if (msg.op === 'PING') {
       try { conn.send({ k: 'LAB', op: 'PONG', t1: msg.t1, tp: this.now() }); } catch (err) { /* 次回 */ }
@@ -413,6 +423,34 @@ export class ParentAgent {
     }
   }
 
+  // 受信を中止する: 届いている分で区切り、子機には送るのを止めてもらう(子機の映像は消さない)
+  async cancelReceive() {
+    const take = this.take;
+    if (!take || !take.stoppedAt || take.collectedAt) return null;
+    const missing = [...this.children.values()].filter((c) => !(c.stopped && c.expected != null && c.recv >= c.expected)).map((c) => c.label);
+    take.gaveUp = true; take.partial = true; take.missing = missing; take.collectedAt = this.now(); take.cancelledAt = this.now();
+    this.pausedTakes.add(take.id);
+    for (const c of this.children.values()) if (c.conn) { try { c.conn.send({ k: 'LAB', op: 'SEND-PAUSE', take: take.id }); } catch (err) { /* 切れている */ } }
+    await this._saveTake();
+    this.onChange();
+    return missing;
+  }
+
+  // 「続きを受信」: 子機に送るのを再開してもらう。今の録画なら、受信中の表示に戻して、そろったら終わる
+  async resumeReceive(takeId) {
+    this.pausedTakes.delete(takeId);
+    for (const c of this.children.values()) if (c.conn) { try { c.conn.send({ k: 'LAB', op: 'SEND-RESUME', take: takeId }); } catch (err) { /* 切れている */ } }
+    const take = this.take;
+    if (take && take.id === takeId) {
+      take.gaveUp = false; take.partial = false; take.missing = null; take.collectedAt = 0; take.resumedAt = this.now();
+      await this._saveTake();
+      this._checkCollected();
+      this.onChange();
+      return true;
+    }
+    return false;
+  }
+
   async _saveTake() {
     const t = this.take;
     if (!t) return;
@@ -426,7 +464,13 @@ export class ParentAgent {
   async tick() {
     const t = this.now();
     if (this.take && !this.take.stoppedAt) {
-      if (t - this.take.startedAt >= this.take.maxSec * 1000) { this.onAlarm(`最長${Math.round(this.take.maxSec / 60)}分に達したため、録画を終わりました`); await this.stopTake('max'); return; }
+      if (this.take.maxSec > 0 && t - this.take.startedAt >= this.take.maxSec * 1000) {
+        // 最長に達したのは異常ではないので、警報にしない(画面側でトーストと振動1回)
+        const sec = this.take.maxSec;
+        await this.stopTake('max');
+        if (this.onMaxReached) this.onMaxReached(sec); else this.onAlarm(`最長${Math.round(sec / 60)}分に達したため、録画を終わりました`);
+        return;
+      }
       if (!this.capture.recording && this.capture.status.alarm) { /* 親機自身の録画が止まった。知らせは出済み */ }
     }
     if (t - this._lastStorage > STORAGE_EVERY_MS) {

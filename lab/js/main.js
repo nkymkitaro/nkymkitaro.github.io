@@ -1,9 +1,9 @@
-// main.js: 長めの録画(試作)の画面と、既存のアプリ(js/app.js)との結び付け。試作用。
-// 画面の考え方(claude/specs/long-recording-spec.md):
-// - 録画前: 状態の帯は LIVE のまま。操作ボタンの列に「録画」が1つ。押すとシートが開き、「録画を始める」
-// - 録画中: 帯が「REC 0:10」(赤地・白文字)。ボタンが「停止」に替わる
-// - 集めている間: 帯が「集めています 60%」(グレー)
-// - 終わったら: 録画の一覧(1本ごとに 見る・保存・消す)
+// main.js: 録画(試作。開発側の呼び名は「長めの録画」)の画面と、既存のアプリ(js/app.js)との結び付け。試作用。
+// 画面の考え方(claude/specs/long-recording-spec.md、画面の絵 claude/design-samples/Rec-*.dc.html):
+// - 録画前: 状態の帯は LIVE のまま。下の操作は「VAR」「録画」(同じ大きさ)。「録画」でシートが開き、最長を選んで「録画開始」
+// - 録画中: 帯が「REC 0:10」(赤地・白文字)。下は「録画停止」「VAR」
+// - 映像受信中: 帯が「映像受信中 あと2分」(グレー)と進み具合のバー。下は「中止」
+// - 終わったら: 録画の一覧(1本ごとに 見る・保存・消す のアイコン)。保存のあと「まとめ中 40%」と「中止」
 // - 試験用の設定と数値は、シート「試験用」の中だけに置く
 // - 既存のVAR(直近30秒の写真方式)には手を入れない。接続とカメラの映像だけ window.kendoVarApp から借りる
 import { LabStore } from './store.js';
@@ -17,6 +17,31 @@ import { attachPress } from '../../js/press-feedback.js';
 import { enableWakeLock } from '../../js/wake-lock.js';
 
 const PEER_PREFIX = 'kendo-var-room-';
+
+// ---- アイコン(仕様2-2、画面の絵のSVGをそのまま使う)。録画・録画停止・VARは塗りつぶし、ほかは線 ----
+const svgFill = (inner) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${inner}</svg>`;
+const svgLine = (inner) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+const ICON = {
+  rec: svgFill('<circle cx="12" cy="12" r="9"/>'),
+  stop: svgFill('<rect x="5" y="5" width="14" height="14" rx="3"/>'),
+  var: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M12 6v12l-9-6z"/><path d="M21 6v12l-9-6z"/></svg>',
+  play: svgFill('<path d="M8 5l11 7-11 7z"/>'),
+  save: svgLine('<path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/>'),
+  trash: svgLine('<path d="M5 7h14"/><path d="M10 7V4h4v3"/><path d="M7 7l1 13h8l1-13"/>'),
+  undo: svgLine('<path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 0 1 0 10h-3"/>'),
+  cancel: svgLine('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
+};
+const iconText = (icon, text) => `${icon}<span>${text}</span>`;
+
+// ---- 録画の最長(仕様7-2)。0 は「制限なし」。選んだ値は端末に覚える ----
+const MAX_OPTIONS = [[300, '5分'], [600, '10分'], [1800, '30分'], [3600, '60分'], [0, '制限なし']];
+const MAX_KEY = 'kendo-var-lab-max';
+const MB_PER_MIN = 7.5; // 1台1Mbpsで約7.5MB/分(実機の値で調整する)
+function loadMax() {
+  try { const v = Number(localStorage.getItem(MAX_KEY)); if (MAX_OPTIONS.some(([s]) => s === v) && localStorage.getItem(MAX_KEY) !== null) return v; } catch (err) { /* 覚えられない環境 */ }
+  return 600;
+}
+function saveMax(v) { try { localStorage.setItem(MAX_KEY, String(v)); } catch (err) { /* 覚えられない環境 */ } }
 const UNDO_MS = 10000;
 const $ = (root, sel) => root.querySelector(sel);
 
@@ -30,8 +55,10 @@ const fmtMS = (ms) => {
 };
 const fmtClock = (ms) => {
   const d = new Date(ms);
-  return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return d.toDateString() === new Date().toDateString() ? hm : `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
 };
+const fmtEta = (ms) => (ms < 60000 ? `あと${Math.max(10, Math.round(ms / 10000) * 10)}秒` : `あと${Math.ceil(ms / 60000)}分`);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---- 警報(録画が止まったとき): 赤い帯・音・振動 ----
@@ -124,7 +151,11 @@ async function initParent(app) {
     getStream: () => cameraLink.localMonitorVideo.srcObject,
     onAlarm: raiseAlarm, onChange: () => render(),
   });
-  const parent = new ParentAgent({ store, capture, onAlarm: raiseAlarm, onChange: () => render() });
+  const parent = new ParentAgent({
+    store, capture, onAlarm: raiseAlarm, onChange: () => render(),
+    // 最長に達したときは警報にしない。トーストと振動1回(仕様7章)
+    onMaxReached: (sec) => { showToast(`最長の${Math.round(sec / 60)}分に達したので、終わりました。`); try { navigator.vibrate && navigator.vibrate(200); } catch (err) { /* 無視 */ } },
+  });
   window.__lab = { role: 'parent', parent, store, capture };
 
   // 子機が張ってくる専用の通信路を受け入れる(PeerJS の接続が用意できてから)
@@ -143,11 +174,20 @@ async function initParent(app) {
   root.className = 'lab-root';
   root.innerHTML = `
     <div id="labOverlay" class="help-overlay"></div>
-    <div id="labSheet" class="help-sheet lab-sheet" role="dialog" aria-label="長めの録画" aria-hidden="true">
+    <div id="labSheet" class="help-sheet lab-sheet" role="dialog" aria-label="録画" aria-hidden="true">
       <div class="help-sheet-handle"></div>
-      <h3>長めの録画</h3>
-      <button type="button" class="btn-hero lab-big" id="labStart">録画を始める</button>
-      <p class="lab-line" id="labLine" hidden></p>
+      <div class="lab-startbox" id="labStartBox">
+        <div class="lab-startleft">
+          <p class="lab-cap" id="labMaxCap">最長</p>
+          <div class="lab-sel" id="labMax" role="radiogroup" aria-labelledby="labMaxCap">${MAX_OPTIONS.map(([s, l]) => `<button type="button" class="lab-opt" role="radio" data-max="${s}">${l}</button>`).join('')}</div>
+          <p class="lab-note" id="labMaxNote" hidden></p>
+        </div>
+        <div class="lab-startright">
+          <p class="lab-remain" id="labRemain" hidden></p>
+          <button type="button" class="lab-big" id="labStart">${iconText(ICON.rec, '録画開始')}</button>
+        </div>
+      </div>
+      <p class="lab-note" id="labListNote" hidden>映像はこの端末の中にあります。</p>
       <ul class="lab-takes" id="labTakes"></ul>
       <div class="lab-foot">
         <button type="button" class="lab-link" id="labOpenTest">試験用</button>
@@ -161,7 +201,6 @@ async function initParent(app) {
       <div class="lab-opts">
         <label>録画のしかた<select id="optMethod"><option value="B">ふつう(MP4にまとめる)</option><option value="A">比べる用(ブラウザ標準の録画)</option></select></label>
         <label>内部の区切り<select id="optSeg"><option value="10">10秒ごと</option><option value="30">30秒ごと</option><option value="60" selected>60秒ごと</option></select></label>
-        <label>最長<select id="optMax"><option value="180">3分</option><option value="600" selected>10分</option><option value="1200">20分</option></select></label>
         <label>音<select id="optAudio"><option value="1" selected>録る</option><option value="0">録らない</option></select></label>
         <label>見るときの音<select id="optAudioCam"><option value="auto" selected>自動</option></select></label>
         <label>保存のしかた<select id="optSave"><option value="auto" selected>自動</option><option value="share">共有の画面</option><option value="download">ダウンロード</option></select></label>
@@ -203,27 +242,40 @@ async function initParent(app) {
         <p class="lab-vinfo" id="labVInfo" hidden></p>
       </div>
     </section>
-    <div class="toast lab-undo" id="labUndo" role="status"><span id="labUndoText">消しました</span><button type="button" id="labUndoBtn">元に戻す</button></div>
-    <div class="toast lab-undo lab-make" id="labMake" role="status"><span id="labMakeText">まとめができました</span><button type="button" id="labMakeBtn">保存</button></div>`;
+    <div class="toast lab-undo" id="labUndo" role="status"><span id="labUndoText">消しました</span><button type="button" id="labUndoBtn">${iconText(ICON.undo, '元に戻す')}</button></div>
+    <div class="toast lab-undo lab-make" id="labMake" role="status"><span id="labMakeText">まとめができました</span><button type="button" id="labMakeBtn">${iconText(ICON.save, '保存')}</button></div>`;
   document.body.appendChild(root);
   const el = (s) => $(root, s);
 
-  // 操作ボタンの列に「録画」を入れる(LIVEのとき N秒前VAR の隣に出る。見た目は lab.css)
+  // 下の操作の列: 「VAR」と「録画」を同じ大きさで並べる。録画中は「録画停止」と「VAR」。映像受信中・まとめ中は「中止」だけ(見た目は lab.css)
   const recBtn = document.createElement('button');
   recBtn.type = 'button';
   recBtn.id = 'labRec';
   recBtn.className = 'action-btn lab-rec-btn';
-  const REC_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="4.6" fill="currentColor"/></svg>';
-  const STOP_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5" fill="currentColor"/></svg>';
-  recBtn.innerHTML = `${REC_SVG}<span class="lab-rec-label">録画</span>`;
+  recBtn.innerHTML = iconText(ICON.rec, '録画');
   actions.appendChild(recBtn);
-  // VARのボタンは「VAR」だけにする(戻る秒数は設定で決まっているので、ボタンには出さない)。本番のコードが秒数入りの文字に書き戻すので、そのたびに直す(試作のページだけ)
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.id = 'labCancel';
+  cancelBtn.className = 'action-btn lab-cancel-btn';
+  cancelBtn.innerHTML = iconText(ICON.cancel, '中止');
+  cancelBtn.hidden = true;
+  actions.appendChild(cancelBtn);
+  // VARのボタン(本番の部品)は、この試作のページでだけ、言葉を「VAR」、アイコンを早戻しにする。本番のコードが秒数入りの文字に書き戻すので、そのたびに直す
+  const rewindBtn = document.getElementById('btnRewind');
   const rewindLabel = document.getElementById('btnRewindLabel');
+  if (rewindBtn) { const old = rewindBtn.querySelector('svg'); if (old) old.outerHTML = ICON.var; }
   if (rewindLabel) {
     const fix = () => { if (rewindLabel.textContent !== 'VAR') rewindLabel.textContent = 'VAR'; };
     fix();
     new MutationObserver(fix).observe(rewindLabel, { childList: true, characterData: true, subtree: true });
   }
+  // 映像受信中・まとめ中の進み具合のバー(映像の下の端)
+  const progress = document.createElement('div');
+  progress.className = 'lab-progress';
+  progress.hidden = true;
+  progress.innerHTML = '<i></i>';
+  bands.parentElement.appendChild(progress);
   // 「REC 0:10」などを、リプレイ中にも見せるための小さい帯
   const subBand = document.createElement('div');
   subBand.className = 'state-band state-band-sub';
@@ -231,12 +283,14 @@ async function initParent(app) {
   subBand.hidden = true;
   bands.appendChild(subBand);
 
-  [recBtn, el('#labStart'), el('#labCloseSheet'), el('#labBackSheet'), el('#labVClose'), el('#labVGrid'), el('#labPlay'), el('#labUndoBtn'), el('#labMakeBtn')].forEach((b) => attachPress(b, { vibrate: 30 }));
+  [recBtn, cancelBtn, el('#labStart'), el('#labCloseSheet'), el('#labBackSheet'), el('#labVClose'), el('#labVGrid'), el('#labPlay'), el('#labUndoBtn'), el('#labMakeBtn')].forEach((b) => attachPress(b, { vibrate: 30 }));
 
   const sheet = el('#labSheet');
   const testSheet = el('#labTestSheet');
   const overlay = el('#labOverlay');
-  function setSheet(which) { // 'main' | 'test' | null
+  let listOnly = false; // 受信が終わって自動で開いたときは、一覧だけを見せる(画面の絵の6)。「録画」から開いたときは、最長と「録画開始」も
+  function setSheet(which, { list = false } = {}) { // 'main' | 'test' | null
+    if (which === 'main') listOnly = list;
     sheet.classList.toggle('open', which === 'main');
     testSheet.classList.toggle('open', which === 'test');
     sheet.setAttribute('aria-hidden', which === 'main' ? 'false' : 'true');
@@ -248,7 +302,7 @@ async function initParent(app) {
   overlay.addEventListener('click', () => setSheet(null));
   el('#labCloseSheet').addEventListener('click', () => setSheet(null));
   el('#labOpenTest').addEventListener('click', () => setSheet('test'));
-  el('#labBackSheet').addEventListener('click', () => setSheet('main'));
+  el('#labBackSheet').addEventListener('click', () => setSheet('main', { list: listOnly }));
 
   methodsPromise.then((m) => {
     const a = m.A.ok ? `○(${m.A.mime})` : '×';
@@ -260,7 +314,32 @@ async function initParent(app) {
   const take = () => parent.take;
   const isRecording = () => !!(take() && !take().stoppedAt);
   const isCollecting = () => !!(take() && take().stoppedAt && !take().collectedAt && !take().gaveUp);
-  let saving = null; // { text } 保存中の表示
+  let saving = null; // { text } 保存中の表示(小さい帯)
+  let making = null; // { pct, remainMs, replay, cancel } まとめ中
+  // 映像受信中の残り時間: 受け取った量の増え方から計算する
+  const recvSamples = [];
+  function recvEtaMs() {
+    const sum = parent.summary();
+    let remBytes = 0; let total = 0;
+    for (const r of sum.rows) {
+      if (r.role === '親機') continue;
+      const c = parent.children.get(r.cam);
+      if (!c) continue;
+      total += c.recvBytes;
+      const s = c.status;
+      const avg = c.recv ? c.recvBytes / c.recv : (s && s.rec.segs ? s.rec.bytes / s.rec.segs : 0);
+      const remSegs = c.expected != null ? Math.max(0, c.expected - c.recv) : (s && s.unsent) || 0;
+      remBytes += remSegs * avg;
+    }
+    const now = Date.now();
+    recvSamples.push([now, total]);
+    while (recvSamples.length && now - recvSamples[0][0] > 15000) recvSamples.shift();
+    if (recvSamples.length < 3 || remBytes <= 0) return null;
+    const [t0, b0] = recvSamples[0];
+    const rate = (total - b0) / Math.max(1, now - t0); // バイト/ミリ秒
+    if (rate <= 0) return null;
+    return remBytes / rate;
+  }
   function collectPercent() {
     const sum = parent.summary();
     let got = 0; let want = 0;
@@ -270,10 +349,18 @@ async function initParent(app) {
     }
     return want ? Math.round((got / want) * 100) : null;
   }
+  let lastEta = null;
   function bandWant() {
     if (isRecording()) return { state: 'rec', text: `REC ${fmtMS(Date.now() - take().startedAt)}` };
-    if (isCollecting()) { const p = collectPercent(); return { state: 'collect', text: p == null ? '集めています' : `集めています ${p}%` }; }
+    if (isCollecting()) return { state: 'collect', text: lastEta != null && lastEta >= 10000 ? `映像受信中　${fmtEta(lastEta)}` : '映像受信中' };
+    if (making) return { state: 'collect', text: `まとめ中 ${making.pct}%${making.replay && making.remainMs ? `　${fmtEta(making.remainMs)}` : ''}` };
     return null;
+  }
+  function refreshProgress() {
+    let f = null;
+    if (isCollecting()) { const p = collectPercent(); f = p == null ? 0 : p / 100; } else if (making) f = making.pct / 100;
+    progress.hidden = f == null;
+    if (f != null) progress.firstChild.style.width = `${Math.round(f * 100)}%`;
   }
   const overlayBand = createBandOverlay({ bandId: 'stateBand', compute: () => bandWant() });
   // サブ帯: 保存中の知らせが先。なければ、リプレイ中などに「REC 0:10」を出す
@@ -298,13 +385,73 @@ async function initParent(app) {
       if (u && u.freeMB < DEFAULTS.minFreeMB * 2) { raiseAlarm(`空き容量が少ないため(あと約${Math.round(u.freeMB)}MB)、録画を始められません`); return; }
       setSheet(null);
       const ok = await parent.startTake({
-        method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: Number(el('#optMax').value), audio: el('#optAudio').value === '1',
+        method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: maxSel, audio: el('#optAudio').value === '1',
       });
-      if (!ok) showToast('録画を始められませんでした');
+      if (ok && parent.take) { parent.take.remainMin = remainMin; parent._saveTake(); }
+      if (!ok) showToast('録画を開始できませんでした');
       else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
       enableWakeLock({ quiet: true });
     } finally { starting = false; render(); }
   }
+  // ---- 最長の選択と「あと約◯分録れます」(仕様7-2) ----
+  let maxSel = loadMax();
+  let remainMin = null; // 全端末のうち、いちばん少ない空きで計算した残り(分)
+  let remainAt = 0;
+  async function updateRemain() {
+    if (Date.now() - remainAt < 4000) return;
+    remainAt = Date.now();
+    const u = await store.usage();
+    if (!u) { remainMin = null; return; }
+    const kids = [...parent.children.values()].filter((c) => c.connected);
+    let min = (u.freeMB - DEFAULTS.minFreeMB) / (MB_PER_MIN * (1 + kids.length)); // 親機は全台ぶんを持つ
+    for (const c of kids) if (c.status && c.status.free != null) min = Math.min(min, (c.status.free - DEFAULTS.minFreeMB) / MB_PER_MIN);
+    remainMin = Math.max(0, Math.floor(min));
+  }
+  function renderStartBox() {
+    el('#labMax').querySelectorAll('.lab-opt').forEach((b) => { const on = Number(b.dataset.max) === maxSel; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+    const note = el('#labMaxNote');
+    note.hidden = !(maxSel === 0 || maxSel >= 1800);
+    note.textContent = maxSel === 0 ? '停止を押すまで録ります。空きが足りなくなると止まります。' : '長い録画は、空きが足りなくなったり、熱くなったりすることがあります。';
+    const r = el('#labRemain');
+    r.hidden = remainMin == null;
+    if (remainMin != null) {
+      const short = maxSel === 0 || remainMin < maxSel / 60;
+      r.textContent = short ? `あと約${remainMin}分で止まります` : `あと約${remainMin}分録れます`;
+      r.classList.toggle('is-warn', short);
+    }
+  }
+  el('#labMax').addEventListener('click', (e) => {
+    const b = e.target.closest('.lab-opt');
+    if (!b || isRecording()) return;
+    maxSel = Number(b.dataset.max); saveMax(maxSel); renderStartBox();
+  });
+  el('#labMax').querySelectorAll('.lab-opt').forEach((b) => attachPress(b, { vibrate: 12 }));
+  // 録画中の知らせ: 空きの残りが5分と1分になったとき、1回ずつ
+  const spaceWarned = new Set();
+  function checkSpaceWarn() {
+    if (!isRecording() || remainMin == null) return;
+    const left = remainMin; // 録画中も空きを測り直しているので、今の残り
+    for (const n of [5, 1]) if (left <= n && !spaceWarned.has(`${take().id}:${n}`)) { spaceWarned.add(`${take().id}:${n}`); showToast(`空きが少なくなっています。あと約${Math.max(1, left)}分で止まります。`); break; }
+  }
+
+  // ---- 映像受信の中止と、続きを受信(仕様7-3) ----
+  async function cancelReceive() {
+    if (!isCollecting()) return;
+    await parent.cancelReceive();
+    openedFor = take().id;
+    render();
+    if (vEl.hidden) setSheet('main', { list: true });
+  }
+  async function resumeReceive(t) {
+    const current = await parent.resumeReceive(t.id);
+    if (current) { openedFor = null; setSheet(null); } else showToast('続きを受信します。届いた分から見られます。');
+    takesSig = ''; render();
+  }
+  cancelBtn.addEventListener('click', () => {
+    if (making) { making.cancel = true; return; }
+    cancelReceive();
+  });
+
   async function stopRec() {
     if (!isRecording()) return;
     await parent.stopTake('user');
@@ -347,61 +494,57 @@ async function initParent(app) {
   const makeEl = el('#labMake');
   let makeTimer = 0;
   let makeAct = null;
-  function showMake(text, btn, act, hideAfterMs = 0) {
+  function showMake(text, act, hideAfterMs = 0) {
     clearTimeout(makeTimer);
     el('#labMakeText').textContent = text;
-    el('#labMakeBtn').textContent = btn;
     makeAct = act;
     makeEl.classList.add('show');
     if (hideAfterMs) makeTimer = setTimeout(hideMake, hideAfterMs);
   }
   function hideMake() { clearTimeout(makeTimer); makeEl.classList.remove('show'); makeAct = null; }
   el('#labMakeBtn').addEventListener('click', () => { if (makeAct) makeAct(); });
-  const fmtRemain = (ms) => (ms < 60000 ? `あと${Math.max(1, Math.round(ms / 1000))}秒` : `あと約${Math.round(ms / 60000)}分`);
 
   async function makeCombined(t) {
-    let cancel = false;
     const started = performance.now();
     const stamp = fileStamp(t.startedAt);
-    saving = { text: 'まとめを作っています 0%' };
-    refreshSub();
-    showMake('まとめを作っています', 'やめる', () => { cancel = true; });
+    // まとめ中: 帯「まとめ中 40%」、映像の下の端にバー、下の操作は「中止」だけ(画面の絵の7)
+    making = { pct: 0, remainMs: 0, replay: false, cancel: false };
+    saving = null;
+    render();
     let out;
     try {
       out = await composeTake(store, t, {
         quality: el('#optQuality').value,
         audioCam: el('#optAudioCam').value,
-        shouldCancel: () => cancel,
+        shouldCancel: () => !!(making && making.cancel),
         onProgress: ({ fraction, remainMs, replay }) => {
-          const pct = Math.round(fraction * 100);
-          saving = { text: `まとめを作っています ${pct}%${replay ? `(${fmtRemain(remainMs)})` : ''}` };
-          el('#labMakeText').textContent = saving.text; // 縦の画面では状態の帯がシートに隠れるので、「やめる」の横にも出す
-          refreshSub();
+          making.pct = Math.round(fraction * 100); making.remainMs = remainMs; making.replay = !!replay;
+          overlayBand.refresh(); refreshProgress(); refreshSub();
         },
       });
     } catch (err) {
-      hideMake();
+      making = null; render();
       window.__lastMakeError = String(err && err.message ? err.message : err);
-      if (err && err.cancelled) showToast('まとめをやめました。カメラごとの動画は保存済みです');
+      if (err && err.cancelled) showToast('まとめを中止しました。カメラごとの動画は保存済みです');
       else if (err && err.unsupported) showToast('この端末では、まとめ動画は作れません');
       else showToast('まとめを作れませんでした。カメラごとの動画は保存済みです');
       return;
     }
+    making = null;
+    render();
     const file = new File([out.blob], `kendovar_${stamp}_まとめ.${out.ext}`, { type: out.mime });
     lastSave.make = { mode: out.mode, ms: out.ms, bytes: file.size, width: out.width, height: out.height, fps: out.fps, frames: out.frames, videoCodec: out.videoCodec, audioCodec: out.audioCodec, hasAudio: out.hasAudio, audioCam: out.audioCam, name: file.name, quality: el('#optQuality').value };
     window.__lastMake = { file, ...lastSave.make };
-    saving = null;
-    refreshSub();
     const deliver = async () => {
       hideMake();
-      const how = await deliverFiles([file], { title: '剣道VAR 長めの録画(まとめ)', mode: el('#optSave').value });
+      const how = await deliverFiles([file], { title: '剣道VAR 録画(まとめ)', mode: el('#optSave').value });
       if (how === 'cancelled') showToast('保存をやめました');
       else { saving = { text: '保存しました' }; refreshSub(); setTimeout(() => { saving = null; refreshSub(); }, 2200); }
     };
     window.__lab.deliverMake = deliver;
     // ダウンロードなら、押した操作が要らないので、できたらそのまま保存する。共有の画面は押した直後でないと出せない端末があるため、「保存」を押してもらう
     if (resolveSaveMode(el('#optSave').value) === 'download') deliver();
-    else showMake('まとめができました', '保存', deliver, 120000);
+    else showMake('まとめができました', deliver, 120000);
     window.__lastMake.performanceNote = `${Math.round(performance.now() - started)}ms`;
   }
 
@@ -411,6 +554,7 @@ async function initParent(app) {
   async function saveTake(t) {
     if (savingIds.has(t.id)) return; // 二度押ししても、保存は1回だけ
     savingIds.add(t.id);
+    setSheet(null); // 帯と下の「中止」が見えるように、シートを閉じる(画面の絵の7)
     takesSig = ''; render();
     const started = performance.now();
     try {
@@ -424,7 +568,7 @@ async function initParent(app) {
         showToast(err && err.message && /映像がありません/.test(err.message) ? err.message : '途中で止まりました。もう一度保存してください。');
         return;
       }
-      const how = await deliverFiles(res.files, { title: '剣道VAR 長めの録画', mode: el('#optSave').value });
+      const how = await deliverFiles(res.files, { title: '剣道VAR 録画', mode: el('#optSave').value });
       lastSave = { at: Date.now(), ms: Math.round(performance.now() - started), how, info: res.info, files: res.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) };
       window.__lastSave = lastSave;
       if (how === 'cancelled') showToast('保存をやめました');
@@ -478,7 +622,7 @@ async function initParent(app) {
     if (act === 'fwd30') { viewer.pause(); await viewer.seek(viewer.t + 30000); }
     renderViewer();
   });
-  function closeViewer() { viewer.close(); vEl.hidden = true; setSheet('main'); }
+  function closeViewer() { viewer.close(); vEl.hidden = true; setSheet('main', { list: listOnly }); }
   el('#labVClose').addEventListener('click', closeViewer);
   el('#labVGrid').addEventListener('click', () => { viewer.setFocus(null); renderViewer(); });
   // 並べて見ているとき、映像をタップするとそのカメラを大きく見る(音もそのカメラになる)
@@ -492,7 +636,7 @@ async function initParent(app) {
     vEl.hidden = false;
     setSheet(null);
     viewer.audioCamSetting = el('#optAudioCam').value;
-    try { await viewer.open(takeId); } catch (err) { showToast('再生できませんでした'); window.__labViewerError = String(err && err.message ? err.message : err); vEl.hidden = true; setSheet('main'); return; }
+    try { await viewer.open(takeId); } catch (err) { showToast('再生できませんでした'); window.__labViewerError = String(err && err.message ? err.message : err); vEl.hidden = true; setSheet('main', { list: listOnly }); return; }
     renderViewer();
     viewer.draw();
   }
@@ -534,11 +678,13 @@ async function initParent(app) {
     segs.forEach((s) => { const a = byCam.get(s.cam) || { label: s.label, n: 0, bytes: 0, role: s.origin === 'own' ? '親機' : '子機' }; a.n++; a.bytes += s.size; byCam.set(s.cam, a); });
     const live = parent.take && parent.take.id === tk.id ? parent.summary() : null;
     const lines = [];
-    lines.push(`【録画の数値】${fmtClock(tk.startedAt)} 録画のしかた:${tk.method === 'B' ? 'ふつう(MP4にまとめる)' : '比べる用'} 内部の区切り${tk.segSec}秒 長さ${tk.stoppedAt ? fmtDur(tk.stoppedAt - tk.startedAt) : '録画中'}${tk.partial ? ' 途中まで' : ''}`);
+    lines.push(`【録画の数値】${new Date(tk.startedAt).toLocaleString('ja-JP')} 録画のしかた:${tk.method === 'B' ? 'ふつう(MP4にまとめる)' : '比べる用'} 内部の区切り${tk.segSec}秒 長さ${tk.stoppedAt ? fmtDur(tk.stoppedAt - tk.startedAt) : '録画中'}${tk.partial ? ' 途中まで' : ''}`);
     if (segs[0]) lines.push(`録画の形式: ${segs[0].mime}`);
-    if (live && live.take.collectMs != null) lines.push(`終わり→全カメラの映像がそろうまで: ${(live.take.collectMs / 1000).toFixed(1)}秒`);
-    else if (tk.collectedAt && tk.stoppedAt) lines.push(`終わり→全カメラの映像がそろうまで: ${((tk.collectedAt - tk.stoppedAt) / 1000).toFixed(1)}秒`);
-    else if (tk.stoppedAt) lines.push('終わり→全カメラの映像がそろうまで: まだそろっていません');
+    const recvSec = live && live.take.collectMs != null ? live.take.collectMs / 1000 : (tk.collectedAt && tk.stoppedAt ? (tk.collectedAt - tk.stoppedAt) / 1000 : null);
+    if (tk.gaveUp) lines.push(`録画停止→映像受信: ${recvSec != null ? recvSec.toFixed(1) : '-'}秒で中止(届いていないカメラ: ${(tk.missing || []).join('・') || 'なし'})`);
+    else if (recvSec != null) lines.push(`録画停止→映像受信の完了まで: ${recvSec.toFixed(1)}秒${tk.resumedAt ? '(中止のあと続きを受信)' : ''}`);
+    else if (tk.stoppedAt) lines.push('録画停止→映像受信の完了まで: まだ受信中');
+    lines.push(`最長: ${tk.maxSec ? `${Math.round(tk.maxSec / 60)}分` : '制限なし'}${tk.stopReason === 'max' ? '(最長で終了)' : ''} 録画前の「あと約◯分」: ${tk.remainMin ?? '-'}分`);
     lines.push(`電池: ${tk.bat0 ?? '-'}% → ${tk.bat1 ?? '-'}%(熱さは手で触って記録してください)`);
     lines.push(`画面が隠れた回数・時間: ${hidden.count}回 ${Math.round(hidden.totalMs / 1000)}秒`);
     byCam.forEach((a, cam) => {
@@ -589,36 +735,47 @@ async function initParent(app) {
   async function renderTakes() {
     const list = (await store.listTakes()).filter((x) => !x.hiddenAt);
     const cur = take();
-    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.partial, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting()]);
+    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.partial, !!t.gaveUp, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting(), !!making]);
     if (sig === takesSig) return;
     takesSig = sig;
+    const sizes = new Map();
+    for (const t of list) sizes.set(t.id, (await store.listByTake(t.id)).reduce((a, s) => a + (s.size || 0), 0));
     const ul = el('#labTakes');
     ul.innerHTML = '';
+    el('#labListNote').hidden = !list.length;
     list.forEach((t) => {
       const li = document.createElement('li');
       li.dataset.take = t.id;
-      const collecting = !!(cur && cur.id === t.id && (!t.stoppedAt || isCollecting()));
-      const cams = Object.keys(t.cams || {}).length;
-      const info = document.createElement('div');
+      const busy = !!(cur && cur.id === t.id && (!t.stoppedAt || isCollecting()));
+      const durMs = t.stoppedAt ? t.stoppedAt - t.startedAt : 0;
+      const mb = Math.max(1, Math.round((sizes.get(t.id) || 0) / 1048576));
+      const info = document.createElement('p');
       info.className = 'lab-take-info';
-      const dur = t.stoppedAt ? fmtDur(t.stoppedAt - t.startedAt) : '';
-      info.innerHTML = `<b>${esc(fmtClock(t.startedAt))}</b><span>${dur ? `${dur} ・ ` : ''}${cams}台</span>${t.partial ? '<em>途中まで</em>' : ''}`;
+      const part = t.partial ? `<em>${t.missing && t.missing.length ? `${esc(t.missing.join('・'))}は途中まで` : '途中まで'}</em>` : '';
+      info.innerHTML = `<b>${esc(fmtClock(t.startedAt))}</b> <span>${durMs ? `${fmtDur(durMs)} ・ ` : ''}${mb}MB</span>${part}`;
       li.appendChild(info);
-      if (collecting) {
-        const p = document.createElement('div');
+      if (busy) {
+        const p = document.createElement('p');
         p.className = 'lab-take-wait';
-        p.textContent = !t.stoppedAt ? '録画中' : '集めています';
+        p.textContent = !t.stoppedAt ? '録画中' : '映像受信中';
         li.appendChild(p);
       } else {
+        if (durMs >= 30 * 60000) { const n = document.createElement('p'); n.className = 'lab-note'; n.textContent = '保存に時間がかかります。'; li.appendChild(n); }
         const row = document.createElement('div');
         row.className = 'lab-take-btns';
-        const mk = (text, cls, fn, dis) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.className = cls; if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
+        const mk = (icon, label, fn, dis) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'lab-act'; b.innerHTML = icon; b.setAttribute('aria-label', label); if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
         row.append(
-          mk('見る', 'lab-act lab-act-main', () => openViewer(t.id)),
-          mk('保存', 'lab-act', () => saveTake(t), savingIds.has(t.id)),
-          mk('消す', 'lab-act', () => removeTakes([t.id])),
+          mk(ICON.play, '見る', () => openViewer(t.id)),
+          mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making),
+          mk(ICON.trash, '消す', () => removeTakes([t.id])),
         );
         li.appendChild(row);
+        if (t.gaveUp) {
+          const r = document.createElement('button');
+          r.type = 'button'; r.className = 'lab-resume'; r.innerHTML = iconText(ICON.save, '続きを受信');
+          r.addEventListener('click', () => resumeReceive(t)); attachPress(r, { vibrate: 30 });
+          li.appendChild(r);
+        }
       }
       ul.appendChild(li);
     });
@@ -627,28 +784,28 @@ async function initParent(app) {
   function render() {
     const recording = isRecording();
     const collecting = isCollecting();
-    // 操作ボタン: 録画中だけ「停止」。集めている間は出さない(今使える操作だけ)
+    const busy = collecting || !!making;
+    // 下の操作: 録画前「VAR」「録画」、録画中「録画停止」「VAR」、映像受信中・まとめ中は「中止」だけ(今使える操作だけ)
     if (recBtn.dataset.rec !== String(recording)) {
       recBtn.dataset.rec = String(recording);
-      recBtn.innerHTML = `${recording ? STOP_SVG : REC_SVG}<span class="lab-rec-label">${recording ? '停止' : '録画'}</span>`;
+      recBtn.innerHTML = recording ? iconText(ICON.stop, '録画停止') : iconText(ICON.rec, '録画');
     }
     recBtn.classList.toggle('is-recording', recording);
-    recBtn.hidden = collecting;
+    recBtn.hidden = busy;
+    cancelBtn.hidden = !busy;
     monitorArea.classList.toggle('lab-recording', recording);
+    monitorArea.classList.toggle('lab-busy', busy);
+    if (collecting) lastEta = recvEtaMs(); else { lastEta = null; recvSamples.length = 0; }
     overlayBand.refresh();
     refreshSub();
-    // 集め終わったら、録画の一覧を自動で開く
-    if (take() && take().stoppedAt && take().collectedAt && openedFor !== take().id) { openedFor = take().id; if (vEl.hidden) setSheet('main'); }
-    // シートの中身
+    refreshProgress();
+    // 受信が終わったら、録画の一覧を自動で開く
+    if (take() && take().stoppedAt && take().collectedAt && openedFor !== take().id) { openedFor = take().id; if (vEl.hidden) setSheet('main', { list: true }); }
+    // シートの中身: 録画前だけ、最長の選択と「録画開始」
     const open = sheet.classList.contains('open');
-    el('#labStart').hidden = recording || collecting;
-    const line = el('#labLine');
-    line.hidden = !(recording || collecting);
-    if (recording) line.textContent = '録画しています。止めるには、画面の下の「停止」を押します。';
-    else if (collecting) {
-      const p = collectPercent();
-      line.textContent = `ほかのスマホの映像を集めています${p == null ? '' : ` ${p}%`}`;
-    }
+    el('#labStartBox').hidden = recording || busy || listOnly;
+    if (open && !recording && !busy && !listOnly) { updateRemain().then(renderStartBox); renderStartBox(); }
+    if (recording) updateRemain().then(checkSpaceWarn);
     if (open && !renderBusy) { renderBusy = true; renderTakes().finally(() => { renderBusy = false; }); }
     if (testSheet.classList.contains('open')) renderTest();
   }
@@ -682,8 +839,8 @@ async function initParent(app) {
   }
 
   setInterval(() => { parent.tick(); syncLabels(); render(); }, 1000);
-  // 「集めるのをやめる」: 子機の映像がそろわないまま待ち続けないため(試験用の扱い。普通は自動でそろう)
-  window.__lab.giveUpCollect = () => { if (take() && take().stoppedAt && !take().collectedAt) { take().gaveUp = true; take().collectedAt = Date.now(); take().partial = true; parent._saveTake(); render(); } };
+  window.__lab.cancelReceive = cancelReceive;
+  window.__lab.resumeReceive = resumeReceive;
   render();
 }
 

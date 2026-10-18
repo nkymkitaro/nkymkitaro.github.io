@@ -18,6 +18,7 @@ export class SegmentSender {
     this.onProgress = onProgress || (() => {});
     this.log = log;
     this.busy = false;
+    this.paused = new Set(); // 送るのを止めている録画(見ている端末が受信を中止したもの)
     this._acks = new Map(); // id -> resolve
     this.stats = { sent: 0, failed: 0, lastSendMs: 0, maxSendMs: 0, totalBytes: 0 };
   }
@@ -35,7 +36,7 @@ export class SegmentSender {
     if (this.busy) { this._again = true; return; } // 送っている間に新しい区切りができたら、終わりしだい続けて送る
     this.busy = true;
     try {
-      const list = (await this.store.listUnsent()).sort((a, b) => a.t0 - b.t0);
+      const list = (await this.store.listUnsent()).filter((r) => !this.paused.has(r.take)).sort((a, b) => a.t0 - b.t0);
       for (const rec of list) {
         const conn = this.getConn();
         if (!conn || !conn.open) break;
