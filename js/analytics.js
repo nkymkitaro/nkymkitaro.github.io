@@ -37,7 +37,8 @@ function isProductionHost() {
   // 試作ページ(lab/)は <html data-lab> を付けてあり、本番のドメインでも何も送らない
   // try { if (document.documentElement.hasAttribute('data-lab')) return false; } catch (err) { return false; }
   // try { return ALLOWED_HOSTNAMES.includes(window.location.hostname); } catch (err) { return false; }
-  return true;
+  try { return ALLOWED_HOSTNAMES.includes(window.location.hostname); } catch (err) { return false; }
+  // return true;
 }
 
 // 解析を始める。本番のドメイン以外では何もしない。呼び出しは1回でよい
