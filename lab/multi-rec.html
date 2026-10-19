@@ -192,6 +192,7 @@
   <div id="cameraArea">
     <!-- ① 参加する前 -->
     <div class="join-view" id="joinView">
+      <button id="btnJoinBack" class="join-back" type="button" aria-label="最初の画面に戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
       <h2 class="join-title">カメラで参加</h2>
       <p class="join-guide">はじめた端末の画面に出ている番号を入れてください</p>
       <div class="code-input" id="codeInput">
@@ -235,6 +236,8 @@
 
     <!-- 映像の下端に重ねる: カメラの切り替え(2台以上のとき)と「カメラを追加」。横向きでは右の列に入る -->
     <div class="cam-dock">
+      <!-- 最初の画面に戻る。他のカメラがつながっていない・録画していないときだけ出る(css/style.css の .back-start) -->
+      <button id="btnBackStart" class="back-start" type="button" aria-label="最初の画面に戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
       <div class="cam-selector" id="camSelector"></div>
       <button id="btnAddCamera" class="add-cam" type="button" aria-label="カメラを追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="add-cam-label">カメラを追加</span></button>
     </div>
@@ -258,6 +261,9 @@
       <input type="range" id="seekBar" min="0" max="0" value="0" step="1" disabled>
       <div class="time-readout" id="timeReadout">LIVE</div>
     </div>
+
+    <!-- 最初のVARを押すまでの間だけ出す一言(js/app.js)。映像には重ねず、VARボタンの上に置く -->
+    <p class="var-hint" id="varHint" hidden>押すと直前を見返せます</p>
 
     <div class="controls-row primary-actions">
       <button id="btnRewind" class="btn-replay action-btn">
@@ -296,10 +302,13 @@
       <div class="qr-overlay-img" id="qrBig"></div>
       <div class="qr-overlay-side">
         <h2 class="qr-overlay-title" id="qrTitle">カメラを追加</h2>
-        <p class="qr-overlay-note">カメラにするスマホで読み取る</p>
+        <p class="qr-overlay-note"><span class="nowrap">カメラにする</span><span class="nowrap">スマホで読み取る</span></p>
         <p class="qr-overlay-code">接続ID <strong id="qrBigCode"></strong></p>
-        <p class="qr-overlay-wifi">同じ<span class="nowrap">Wi-Fi</span>か、このスマホの<span class="nowrap">テザリング</span>につないでください。</p>
-        <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
+        <p class="qr-overlay-wifi"><span class="nowrap">同じWi-Fiか、</span><span class="nowrap">このスマホの</span><span class="nowrap">テザリングに</span><span class="nowrap">つないでください。</span></p>
+        <div class="qr-overlay-actions">
+          <button type="button" id="btnQrShare" class="qr-overlay-share">リンクを送る</button>
+          <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
+        </div>
       </div>
     </div>
   </div>
@@ -342,7 +351,7 @@
     <p>会場でこの画面を操作する端末です。1台で使うときは、そのままお使いいただけます。この端末のカメラは「カメラ1」です。映像が縦向きの画面で横長になるときは、スマホを横にすると大きく映ります。</p>
 
     <h4>📷 カメラで参加</h4>
-    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。はじめた端末の「カメラを追加」を押すと、QRと接続IDが出ます。QRを読み取るか、接続IDを入力すると、その映像が届きます。参加したカメラは「カメラ2」から順に呼ばれ、同じIDに最大3台まで同時に参加できます。できれば同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
+    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。はじめた端末の「カメラを追加」を押すと、QRと接続IDが出ます。QRを読み取るか、接続IDを入力すると、その映像が届きます。「リンクを送る」を押すと、LINEなどで参加用のリンクを送ることもできます。参加したカメラは「カメラ2」から順に呼ばれ、同じIDに最大3台まで同時に参加できます。できれば同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
 
     <h4>📶 会場でつながらないとき</h4>
     <p>はじめた端末でテザリング(iPhoneでは「インターネット共有」)をオンにし、「カメラで参加」する端末を、そのWi-Fiにつないでください。iPhoneは「設定」→「インターネット共有」、Androidは「設定」→「ネットワーク」→「テザリング」で設定できます。機種によって名前や場所が異なる場合は、「テザリング」で探してください。映像ははじめた端末とカメラの間で直接やり取りされるため、携帯の通信量はほとんど使いません。ただし、番号を受け渡すために、インターネットにはつながっている必要があります。会場のWi-Fiは、端末どうしの通信を遮断していることがあり、その場合は、同じWi-Fiにつないでもつながりません。</p>

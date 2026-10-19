@@ -5,6 +5,7 @@
 // - 新しいカメラがつながったら、大きい表示は自動で閉じる(app.js から closeJoinQr。同じカメラの再接続では閉じない)
 // - QRを作れなかった・読み込めなかったときは、QRを出さないだけで、接続IDでの参加は今までどおり使える
 import { attachPress } from './press-feedback.js';
+import { showToast } from './toast.js';
 
 // QRの行き先。どの端末・どのURLで開いていても、本番のドメインに向ける
 export const JOIN_BASE_URL = 'https://kendovar.jp/';
@@ -17,9 +18,20 @@ const ERROR_CORRECTION = 'M';
 // LINEのQR読み取りで読んだときも、LINEの中ではなく標準ブラウザで開くようにする(LINEの仕様。js/in-app-browser.js と同じ名前)
 const EXTERNAL_PARAM = 'openExternalBrowser=1';
 
-// 参加用のURL
-export function buildJoinUrl(code) {
-  return `${JOIN_BASE_URL}?${JOIN_PARAM}=${encodeURIComponent(code)}&${EXTERNAL_PARAM}`;
+// 参加用のURL。via: 'share' は「リンクを送る」で送ったもの(解析用。参加のしかたを 'link' と数える)
+const VIA_PARAM = 'via';
+const VIA_SHARE = 'share';
+export function buildJoinUrl(code, via) {
+  return `${JOIN_BASE_URL}?${JOIN_PARAM}=${encodeURIComponent(code)}&${EXTERNAL_PARAM}${via === VIA_SHARE ? `&${VIA_PARAM}=${VIA_SHARE}` : ''}`;
+}
+
+// 開いたURLから、参加のしかたを決める('link' = 送られたリンク / 'qr' = QR)
+export function parseJoinMethod(search) {
+  try {
+    return new URLSearchParams(search).get(VIA_PARAM) === VIA_SHARE ? 'link' : 'qr';
+  } catch (err) {
+    return 'qr';
+  }
 }
 
 // 「?join=1234」から番号を取り出す。4桁の数字でなければ null(普通に開いたときと同じにする)
@@ -38,6 +50,7 @@ export function removeJoinParam() {
     const url = new URL(window.location.href);
     if (!url.searchParams.has(JOIN_PARAM)) return;
     url.searchParams.delete(JOIN_PARAM);
+    url.searchParams.delete(VIA_PARAM);
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
   } catch (err) { /* 消せなくても、参加には影響しない */ }
 }
@@ -109,4 +122,55 @@ export async function initJoinQr(code) {
   attachPress(closeBtn, { vibrate: 0 });
   closeBtn.addEventListener('click', closeJoinQr);
   overlay.addEventListener('click', closeJoinQr); // どこを押しても閉じる
+  const shareBtn = overlay.querySelector('#btnQrShare');
+  if (shareBtn) {
+    attachPress(shareBtn, { vibrate: 12 });
+    shareBtn.addEventListener('click', (event) => {
+      event.stopPropagation(); // ここを押しても、大きい表示は閉じない(送り終わってから閉じる/そのまま使えるように)
+      shareJoinLink(code);
+    });
+  }
+}
+
+// 送る文面。言葉はデザインポリシー 11章に合わせている(「子機」「参加する」の代わりに、受け取る人が分かる言い方)
+const SHARE_TEXT = '稽古を別の角度から撮りたいので、2台目として参加してもらえますか。\n'
+  + '同じWi-Fiか、私のスマホのテザリングにつないでから、下のリンクを開いてください。';
+
+// 「リンクを送る」: OSの共有画面(LINEなどを選べる)を開く。使えない端末(PCなど)では、文面とリンクをコピーする。
+// 送る前にこちらからは通信しない。リンクに入るのは接続IDだけ(映像・個人情報は含まない)
+export async function shareJoinLink(code) {
+  const message = `${SHARE_TEXT}\n${buildJoinUrl(code, VIA_SHARE)}`;
+  if (navigator.share) {
+    try {
+      await navigator.share({ text: message });
+      return;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // 共有画面を閉じただけ
+      // 共有画面を開けなかったときは、コピーに切り替える
+    }
+  }
+  const copied = await copyText(message);
+  showToast(copied ? 'コピーしました。' : 'コピーできませんでした。');
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) { /* 下の方法を試す */ }
+  try {
+    const area = document.createElement('textarea');
+    area.value = text;
+    area.setAttribute('readonly', '');
+    area.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
+  } catch (err) {
+    return false;
+  }
 }

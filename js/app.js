@@ -15,7 +15,7 @@ import { initInstallPrompt } from './install-prompt.js';
 import { createReplayUi } from './replay-ui.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
-import { initJoinQr, closeJoinQr, parseJoinParam, removeJoinParam } from './join-qr.js';
+import { initJoinQr, closeJoinQr, parseJoinParam, parseJoinMethod, removeJoinParam } from './join-qr.js';
 import { initStartScreen, rememberRole } from './start-screen.js';
 import { initPrepPage, openPrep } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
@@ -27,9 +27,19 @@ const inApp = window.kendoInApp || { leaving: false, blocked: false };
 
 // 利用状況の計測(analytics.js)。本番のドメイン以外では何も送らない。失敗してもアプリは普通に動く。
 // 標準ブラウザへ開き直す前は送らない(開き直した先で1回だけ数える)
+// 「最初の画面に戻る」で読み込み直したときは、同じ人の使い続けなので数えない(印は1回で消す)
+function takeReturnedFlag() {
+  try {
+    const returned = sessionStorage.getItem(RETURNED_KEY) === '1';
+    sessionStorage.removeItem(RETURNED_KEY);
+    return returned;
+  } catch (err) { return false; }
+}
+const RETURNED_KEY = 'kendo-var-returned-to-start';
 if (!inApp.leaving) {
+  const returned = takeReturnedFlag();
   initAnalytics({ userRole: getSavedRole() });
-  track('app_open', { display_mode: getDisplayMode() });
+  if (!returned) track('app_open', { display_mode: getDisplayMode() });
 }
 
 const cameraLink = new CameraLink();
@@ -198,7 +208,7 @@ function updateCameraBand() {
 }
 
 // 4桁そろったら自動でつなぐ。失敗したら番号を消さずに理由を出し、入れ直せばまたつなぐ
-// method: 参加のしかた('code' = 4桁を入れて / 'qr' = QRを読んで開いた)。解析用で、つなぎ方は同じ
+// method: 参加のしかた('code' = 4桁を入れて / 'qr' = QRを読んで開いた / 'link' = 送られたリンクを開いた)。解析用で、つなぎ方は同じ
 let joining = false;
 async function connectToMonitor(targetId, method = 'code') {
   if (joining) return;
@@ -209,7 +219,7 @@ async function connectToMonitor(targetId, method = 'code') {
   joining = false;
   cameraStatusEl.textContent = '';
   codeInput.setBusy(false);
-  if (method === 'qr') removeJoinParam(); // 結果が出たら、URLから ?join= を消す(再読み込みで古い番号につなぎに行かないように)
+  if (method !== 'code') removeJoinParam(); // 結果が出たら、URLから ?join= を消す(再読み込みで古い番号につなぎに行かないように)
   if (result.ok) {
     track('camera_join_result', { result: 'success', method });
   } else if (result.reason !== 'cancelled') {
@@ -219,7 +229,7 @@ async function connectToMonitor(targetId, method = 'code') {
     if (result.reason !== 'cancelled') {
       const long = result.reason === 'unreachable';
       showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout, long ? { duration: LONG_TOAST_MS } : undefined);
-      if (method === 'qr') codeInput.focus(); // 番号の枠で入れ直せるように
+      if (method !== 'code') codeInput.focus(); // 番号の枠で入れ直せるように
     }
     return;
   }
@@ -477,9 +487,35 @@ if (qrJoinCode && !inApp.blocked && !inApp.leaving) {
   document.documentElement.classList.remove('needs-prep');
   startCamera({ focus: false });
   codeInput.fill(qrJoinCode);
-  connectToMonitor(qrJoinCode, 'qr');
+  connectToMonitor(qrJoinCode, parseJoinMethod(window.location.search));
 }
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
+
+// --- 最初の画面に戻る(はじめた端末・カメラで参加の「参加する前」) ---
+// 画面の状態(カメラ・通信・録画・画面を消さない設定)をひとつずつ片付けると取りこぼしやすいので、
+// 開き直して最初の画面から始める。表示するのは「他のカメラがつながっていない・録画していない」ときだけ(css/style.css の .back-start)
+function backToStartScreen() {
+  try { sessionStorage.setItem(RETURNED_KEY, '1'); } catch (err) { /* 数え直すだけ */ }
+  window.location.replace(window.location.pathname);
+}
+['btnBackStart', 'btnJoinBack'].forEach((id) => {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  attachPress(btn, { vibrate: 12 });
+  btn.addEventListener('click', backToStartScreen);
+});
+
+// --- 最初のVARの前の一言(「押すと直前を見返せます」)。最初のVARを押したら、その端末では出さない ---
+const VAR_USED_KEY = 'kendo-var-var-used';
+const varHint = document.getElementById('varHint');
+function hasUsedVar() {
+  try { return localStorage.getItem(VAR_USED_KEY) === '1'; } catch (err) { return false; } // 読めない端末では毎回出す
+}
+function markVarUsed() {
+  if (varHint) varHint.hidden = true;
+  try { localStorage.setItem(VAR_USED_KEY, '1'); } catch (err) { /* 保存できなくても使える */ }
+}
+if (varHint && !hasUsedVar()) varHint.hidden = false;
 
 const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
@@ -618,6 +654,7 @@ document.getElementById('btnRewind').addEventListener('click', () => {
     return;
   }
   dismissRoleSurvey(); // 立場の問いが開いたまま次のVARに入ったら、閉じる
+  markVarUsed();
   track('var_open', { cameras: cameraLink.getAllSources().filter((src) => src.connected).length });
   hideBackToReplay();
   enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)

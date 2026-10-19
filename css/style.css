@@ -303,7 +303,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   text-align: center;
   text-wrap: balance;
   box-shadow: 0 6px 24px rgba(0,0,0,0.5);
-  z-index: 80;
+  z-index: 88; /* 「カメラを追加」の大きい表示(85)の上にも出す(「コピーしました。」)。立場の問い(90)よりは下 */
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-spring);
@@ -495,10 +495,11 @@ body.mode-monitor h1 { display: none; }
 .qr-overlay-img { width: min(100%, calc(100dvh - 330px), 520px); aspect-ratio: 1; }
 .qr-overlay-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .qr-overlay-title { margin: 0 0 4px; font-size: 1.5rem; font-weight: 900; }
-.qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; }
-.qr-overlay-wifi { margin: 4px 0 0; max-width: 300px; font-size: 0.9rem; font-weight: 500; line-height: 1.6; }
+.qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; text-wrap: balance; }
+.qr-overlay-wifi { margin: 4px 0 0; max-width: 300px; font-size: 0.9rem; font-weight: 500; line-height: 1.6; text-wrap: balance; }
 .qr-overlay-code { margin: 0; font-size: 1rem; font-weight: 800; }
 .qr-overlay-code strong { font-size: 2rem; letter-spacing: 0.12em; }
+.qr-overlay-share,
 .qr-overlay-close {
   min-width: 140px;
   min-height: 48px;
@@ -511,11 +512,17 @@ body.mode-monitor h1 { display: none; }
   font: inherit;
   font-weight: 900;
 }
+/* 「リンクを送る」は黒地(主な操作)、「閉じる」は白地の枠 */
+.qr-overlay-share { background: #000; color: #fff; }
+.qr-overlay-actions { display: flex; flex-direction: column; align-items: center; gap: 0; }
 @media (orientation: landscape) {
   .qr-overlay-body { flex-direction: row; justify-content: center; gap: 28px; }
   .qr-overlay-img { width: min(calc(100dvh - 32px), 52vw); flex: 0 0 auto; }
   .qr-overlay-wifi { max-width: 360px; }
   .qr-overlay-side { align-items: flex-start; }
+  /* 横向きは高さが足りないので、2つのボタンを横に並べる */
+  .qr-overlay-actions { flex-direction: row; gap: 8px; }
+  .qr-overlay-share, .qr-overlay-close { min-width: 0; padding: 0 12px; white-space: nowrap; }
 }
 
 /* 「ホーム画面に追加」ボタン: 追加できる端末(主にAndroid)でだけ出す */
@@ -1781,4 +1788,77 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
     height: clamp(56px, 18dvh, 96px);
     min-height: 56px;
   }
+}
+
+/* =========================================================
+   最初の画面に戻るボタンと、最初のVARの前の一言(2026-10-19。依頼: 2026-10-19-to-coder-first-use-hint-and-share-link.md、中山さんの追加の指示)
+   - 戻るボタン(親機): 映像の左下、「カメラを追加」の左。他のカメラがつながっていない・録画していない・リプレイ中でないときだけ出す
+     (つながっているカメラや録画を、押し間違いで切らないため)
+   - 戻るボタン(カメラで参加の「参加する前」): 左上
+   - 一言: 最初のVARを押すまで、VARボタンの上に1行
+   ========================================================= */
+.back-start, .join-back {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(40, 40, 42, 0.88);
+  color: var(--text);
+}
+.back-start svg, .join-back svg { width: 22px; height: 22px; }
+body.mode-monitor #monitorArea:not(.replaying):not(.has-children):not(.lab-recording):not(.lab-busy) .back-start { display: flex; }
+body.mode-monitor #monitorArea:not(.replaying) .cam-dock { justify-content: flex-start; }
+.join-back {
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  z-index: 5;
+}
+body.mode-camera:not(.camera-sending) .join-back { display: flex; }
+.var-hint { display: none; margin: 0; }
+body.mode-monitor #monitorArea:not(.replaying) .var-hint {
+  display: block;
+  grid-area: hint;
+  padding: 8px 12px 0;
+  background: #000;
+  color: var(--text-dim);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  text-wrap: balance;
+}
+body.mode-monitor #monitorArea:not(.replaying) .var-hint[hidden] { display: none; }
+body.mode-monitor #monitorArea:not(.replaying) {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-areas: "video" "hint" "actions";
+}
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) {
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "video head"
+      "video cams"
+      "video ."
+      "video hint"
+      "video actions";
+  }
+  body.mode-monitor #monitorArea:not(.replaying) .var-hint { padding: 4px 0 6px; background: none; text-align: left; font-size: 13px; text-wrap: balance; }
+  /* 右の列は高さに余裕がない(試作はVARと録画が2段)ので、戻るボタンは映像の左下に置く(縦向きと同じ位置) */
+  body.mode-monitor #monitorArea:not(.replaying) .back-start {
+    position: absolute;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 3;
+  }
+}
+/* 高さが340px以下の横向き(568×320など)で、カメラが2台以上のときは、右の列に収まらないので一言は出さない */
+@media (orientation: landscape) and (max-height: 340px) {
+  body.mode-monitor #monitorArea.has-children:not(.replaying) .var-hint { display: none; }
 }
