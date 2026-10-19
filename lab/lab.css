@@ -37,6 +37,16 @@ body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn {
 body.mode-monitor #monitorArea.replaying.lab-recording .lab-rec-btn svg { width: 24px; height: 24px; }
 body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(env(safe-area-inset-top) + 76px); }
 
+/* 横向きの撮影画面では、下のボタンは右の列(幅144px)に縦に並べる(css/style.css の「親機の撮影画面(LIVE中)」)。同じ段のボタンは同じ大きさ */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn,
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-cancel-btn {
+    flex: 0 0 auto; width: 100%; height: clamp(56px, 18dvh, 96px); min-height: 56px; padding: 0 4px; gap: 6px;
+  }
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > * svg { width: 28px; height: 28px; }
+}
+
 /* ---- 映像受信中・まとめ中の進み具合(映像の下の端の白いバー) ---- */
 .lab-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; z-index: 3; pointer-events: none; background: rgba(255,255,255,0.15); }
 .lab-progress[hidden] { display: none; }

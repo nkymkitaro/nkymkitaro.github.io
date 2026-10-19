@@ -461,11 +461,6 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
 /* 誤って「LIVEに戻る」を押した直後だけ出す取り消しボタン */
 .undo-btn { display: none; }
 .undo-btn.show { display: flex; }
-/* 子機がつながったら、またはリプレイ中は、接続IDの説明はもう要らない */
-#monitorArea.has-children #idHelp,
-#monitorArea.replaying #idHelp { display: none; }
-/* 縦向きのLIVE中だけ、横向きにすると見やすいことを案内する */
-.rotate-hint { display: none; }
 /* リプレイ中の映像のタップ・なぞり・2本指は js/replay-ui.js が受け持つ(下の「VARリプレイの全画面」) */
 #displayCanvas { touch-action: manipulation; }
 /* 操作中はタイトルより映像と操作を優先する */
@@ -480,26 +475,8 @@ body.mode-monitor h1 { display: none; }
 #monitorArea.replaying .rec-status { display: none; }
 
 /* --- 参加用のQR(js/join-qr.js) ---
-   はじめた端末に、番号と並べて出す。押すと白地いっぱいに大きく出る(離れたスマホのカメラで読むため)。
-   子機がつながったあとは、映像を広く使えるよう小さな目印にして、押せば大きく出せるようにしておく */
-.join-row { display: flex; align-items: center; justify-content: center; gap: 14px; }
-.join-qr {
-  flex: 0 0 auto;
-  width: 132px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: #fff;
-  overflow: hidden;
-  line-height: 0;
-  cursor: pointer;
-}
-.join-qr[hidden] { display: none; }
-.join-qr-img { display: block; }
-.join-qr-img svg, .qr-overlay-img svg { display: block; width: 100%; height: auto; }
-#monitorArea.has-children .join-qr { width: 56px; }
-#monitorArea.replaying .join-qr { display: none; }
+   撮影中の画面には常時出さず、「カメラを追加」を押したときだけ、白地いっぱいに大きく出す(離れたスマホのカメラで読むため)。
+   ボタンの置き場所は、下の「親機の撮影画面(LIVE中)」 */
 
 .qr-overlay {
   position: fixed;
@@ -515,9 +492,11 @@ body.mode-monitor h1 { display: none; }
 }
 .qr-overlay[hidden] { display: none; }
 .qr-overlay-body { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
-.qr-overlay-img { width: min(100%, calc(100dvh - 200px), 520px); aspect-ratio: 1; }
+.qr-overlay-img { width: min(100%, calc(100dvh - 330px), 520px); aspect-ratio: 1; }
 .qr-overlay-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.qr-overlay-title { margin: 0 0 4px; font-size: 1.5rem; font-weight: 900; }
 .qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; }
+.qr-overlay-wifi { margin: 4px 0 0; max-width: 300px; font-size: 0.9rem; font-weight: 500; line-height: 1.6; }
 .qr-overlay-code { margin: 0; font-size: 1rem; font-weight: 800; }
 .qr-overlay-code strong { font-size: 2rem; letter-spacing: 0.12em; }
 .qr-overlay-close {
@@ -535,6 +514,7 @@ body.mode-monitor h1 { display: none; }
 @media (orientation: landscape) {
   .qr-overlay-body { flex-direction: row; justify-content: center; gap: 28px; }
   .qr-overlay-img { width: min(calc(100dvh - 32px), 52vw); flex: 0 0 auto; }
+  .qr-overlay-wifi { max-width: 360px; }
   .qr-overlay-side { align-items: flex-start; }
 }
 
@@ -547,7 +527,6 @@ body.mode-monitor .help-fab { display: none; }
 body.mode-monitor .help-inline { display: flex; }
 
 @media (orientation: portrait) {
-  #monitorArea:not(.replaying) .rotate-hint { display: block; }
   /* 縦向き: 画面の高さちょうどに収め、よく押すボタンは一番下(片手で持ったとき親指が届く位置)に置く。
      映像は残りの高さをすべて使う(リプレイ中は操作が増えるぶん小さくなる) */
   body.mode-monitor {
@@ -627,19 +606,12 @@ body.mode-monitor .help-inline { display: flex; }
     gap: 10px 12px;
   }
   body.mode-monitor .monitor-head { grid-area: head; }
-  body.mode-monitor .monitor-head .help-text { display: none; } /* 同じ説明はヘルプにもある */
   body.mode-monitor .monitor-head .status-row {
     justify-content: flex-end; /* たまにしか使わない操作は右上に寄せる */
     gap: 10px;
     flex-wrap: wrap;
   }
   body.mode-monitor .monitor-head .status-row .icon-btn { margin: 0; }
-  body.mode-monitor .id-line { text-align: left; margin-top: 4px; font-size: 0.85rem; color: var(--text-dim); }
-  body.mode-monitor #myIdDisplay { font-size: 1.1rem !important; }
-  body.mode-monitor .join-row { justify-content: flex-start; gap: 10px; margin-top: 4px; }
-  body.mode-monitor .join-qr { width: clamp(88px, 13vw, 120px); }
-  body.mode-monitor #monitorArea.has-children .join-qr { width: 48px; }
-  body.mode-monitor .join-row .id-line { margin-top: 0; }
   body.mode-monitor .rec-status { text-align: left; margin-top: 8px; }
   body.mode-monitor .rec-cams { justify-content: flex-start; }
 
@@ -670,9 +642,6 @@ body.mode-monitor .help-inline { display: flex; }
     padding: 8px;
     font-size: 0.95rem;
   }
-  /* LIVE中は「N秒前VAR」だけになるので、空いた分だけ大きくして押しやすくする */
-  body.mode-monitor #monitorArea:not(.replaying) #btnRewind { min-height: 96px; font-size: 1.1rem; }
-  body.mode-monitor #monitorArea:not(.replaying) .undo-btn.show { min-height: 96px; }
   body.mode-monitor .save-row { grid-area: save; margin: 0; }
   body.mode-monitor .save-btn { margin: 0; min-height: 52px; }
 
@@ -1605,5 +1574,211 @@ body.mode-monitor #monitorArea.replaying.grid-view::after { display: none; }
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+/* =========================================================
+   親機の撮影画面(LIVE中): 映像を画面いっぱいにする(2026-10-19、中山さんの指示「とにかく映像を大きく」。
+   見え方の絵: claude/design-samples/Host-Video-Larger.html)
+   - 角丸の枠と、上の積み重ね(QR・接続ID・案内文・カメラ切り替え)をやめる。映像は上から、下のボタンの上まで。
+   - 上の行(一時停止・設定・ヘルプ)と、状態の帯・「あと◯秒で戻れます」は映像の上に重ねる(リプレイの全画面と同じ考え方)。
+   - QRと接続IDは常時は出さない。「カメラを追加」(高さ48px、映像の左下)を押すと、大きい表示が開く(js/join-qr.js)。
+   - 2台以上つながったら、カメラの切り替えが左下に並び、「カメラを追加」は丸い「+」だけになる。
+   - 下のボタンは、縦向きは幅いっぱい(今までと同じ大きさ)。横向きは右の列(幅144px)に縦に並べる。
+   - 押せる範囲は高さ48px以上。文字は13px以上。
+   ========================================================= */
+body.mode-monitor #monitorArea:not(.replaying) {
+  position: fixed;
+  inset: 0;
+  z-index: 30; /* ヘルプ・設定・立場の問い・トースト(55以上)より下 */
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "video" "actions";
+  gap: 0;
+  width: auto;
+  max-width: none;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  overflow: hidden;
+}
+/* 映像: 残りの高さをすべて使う。映像の縦横比は変えず、枠の中に収める(canvas の object-fit: contain) */
+body.mode-monitor #monitorArea:not(.replaying) .stage-video {
+  grid-area: video;
+  position: relative;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+body.mode-monitor #monitorArea:not(.replaying) #displayCanvas { width: 100%; height: 100%; border-radius: 0; }
+/* 状態の帯と「あと◯秒で戻れます」: 左上。長い文は映像の上端に重なっても読めるよう、地を濃くする */
+body.mode-monitor #monitorArea:not(.replaying) .state-bands { top: calc(env(safe-area-inset-top) + 8px); left: env(safe-area-inset-left); gap: 12px; } /* 上の行のボタン(右上、下端は上から56px)と重ならない高さ */
+.state-bands .rec-status {
+  order: 10;
+  margin: 0 0 0 8px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(20, 20, 22, 0.9);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.4;
+  text-align: left;
+}
+.state-bands .rec-status:empty { display: none; }
+.state-bands .rec-status .rec-cams { display: none; } /* カメラごとの録画の状態は、切り替えのボタン(切断は「(切断)」)と上の帯で分かる */
+/* 上の行: 右上。映像のじゃまにならないよう、地は半透明の濃いグレー */
+body.mode-monitor #monitorArea:not(.replaying) .monitor-head { display: contents; }
+body.mode-monitor #monitorArea:not(.replaying) .status-row {
+  grid-area: video;
+  align-self: start;
+  justify-self: end;
+  z-index: 3;
+  gap: 8px;
+  margin: calc(env(safe-area-inset-top) + 8px) max(8px, env(safe-area-inset-right)) 0 0;
+}
+body.mode-monitor #monitorArea:not(.replaying) .status-row .icon-btn {
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  background: rgba(40, 40, 42, 0.88);
+}
+body.mode-monitor #monitorArea:not(.replaying) .status-row .icon-btn svg { width: 20px; height: 20px; }
+/* カメラの切り替えと「カメラを追加」: 映像の左下(縦向き)。親指が届く */
+body.mode-monitor #monitorArea:not(.replaying) .cam-dock {
+  grid-area: video;
+  align-self: end;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 max(12px, env(safe-area-inset-right)) 12px max(12px, env(safe-area-inset-left));
+  pointer-events: none; /* 映像のタップを邪魔しない。ボタンだけが受ける */
+}
+body.mode-monitor #monitorArea:not(.replaying) .cam-dock > * { pointer-events: auto; }
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: 8px;
+  margin: 0 !important;
+  min-width: 0;
+}
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 48px;
+  margin: 0;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(40, 40, 42, 0.92);
+  color: var(--text);
+  white-space: nowrap;
+}
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button.btn-active { background: var(--text) !important; color: #000 !important; }
+.add-cam {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  margin: 0;
+  padding: 0 18px 0 12px;
+  border: 2px solid var(--text);
+  border-radius: 24px;
+  background: rgba(0, 0, 0, 0.72);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.add-cam svg { width: 22px; height: 22px; flex: none; }
+/* 2台以上つながったら、丸い「+」だけ(押すと同じ表示が開く) */
+#monitorArea.has-children .add-cam { width: 48px; padding: 0; margin-left: auto; }
+#monitorArea.has-children .add-cam-label { display: none; }
+/* 下のボタン(縦向き): 幅いっぱい。大きさは今までと同じ */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions {
+  grid-area: actions;
+  display: flex;
+  justify-self: center;
+  width: 100%;
+  max-width: 720px;
+  margin: 0;
+  padding: 10px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  background: #000;
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+body.mode-monitor #monitorArea:not(.replaying) .save-row,
+body.mode-monitor #monitorArea:not(.replaying) .player-toolbar,
+body.mode-monitor #monitorArea:not(.replaying) .seek-row,
+body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: none; }
+
+/* 横向き: 映像を左いっぱいに。右の列(幅144px)に、上から 一時停止・設定・ヘルプ、カメラの切り替えと「カメラを追加」、下のボタン */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) {
+    grid-template-columns: minmax(0, 1fr) 144px;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "video head"
+      "video cams"
+      "video ."
+      "video actions";
+    column-gap: 8px;
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+  body.mode-monitor #monitorArea:not(.replaying) .stage-video { padding-right: 0; }
+  body.mode-monitor #monitorArea:not(.replaying) .status-row {
+    grid-area: head;
+    align-self: start;
+    justify-self: stretch;
+    justify-content: space-between;
+    gap: 0;
+    margin: 8px 0 0;
+  }
+  body.mode-monitor #monitorArea:not(.replaying) .cam-dock {
+    grid-area: cams;
+    align-self: start;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 0 0;
+  }
+  /* カメラの切り替えのボタンを、そのまま2列に並べる(1台だけのときは、JSが入れた display:none で隠れる) */
+  body.mode-monitor #monitorArea:not(.replaying) .cam-selector { display: contents; }
+  body.mode-monitor #monitorArea:not(.replaying) .cam-selector button { width: 100%; padding: 0 4px; }
+  .add-cam { grid-column: 1 / -1; width: 100%; padding: 0 8px; }
+  #monitorArea.has-children .add-cam { grid-column: auto; width: 100%; margin-left: 0; }
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions {
+    flex-direction: column;
+    justify-self: stretch;
+    width: auto;
+    max-width: none;
+    padding: 0 0 max(0px, env(safe-area-inset-bottom));
+    background: none;
+  }
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .action-btn,
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .undo-btn.show {
+    flex: 0 0 auto;
+    width: 100%;
+    height: clamp(56px, 18dvh, 96px);
+    min-height: 56px;
   }
 }

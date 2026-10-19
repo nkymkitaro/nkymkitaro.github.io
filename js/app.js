@@ -246,12 +246,13 @@ function leaveCameraSending() {
 }
 
 // 接続中カメラの一覧が変わった(増えた/切断された)たびに呼ばれる
-let lastConnectedCount = 1;
+const knownCamIds = new Set(); // 今までにつながったカメラ。同じカメラの再接続では、大きい表示を閉じない
 function handleCamsChanged(sources) {
-  // 子機がつながったら、参加用QRの大きい表示はもう要らないので閉じる
-  const connectedCount = sources.filter((src) => src.connected).length;
-  if (connectedCount > lastConnectedCount) closeJoinQr();
-  lastConnectedCount = connectedCount;
+  // 新しいカメラがつながったら、「カメラを追加」の大きい表示はもう要らないので閉じる
+  const connectedIds = sources.filter((src) => src.connected).map((src) => src.id);
+  const hasNewCamera = connectedIds.some((id) => !knownCamIds.has(id));
+  connectedIds.forEach((id) => knownCamIds.add(id));
+  if (hasNewCamera && knownCamIds.size > 1) closeJoinQr();
   sources.forEach((src) => {
     if (!recorder.listCameraIds().includes(src.id)) {
       recorder.registerCamera(src.id, src.label, () => src.videoEl);

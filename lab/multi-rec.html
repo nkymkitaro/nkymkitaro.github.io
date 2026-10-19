@@ -231,17 +231,13 @@
       </button>
       <button id="btnHelpInline" class="icon-btn help-inline" aria-label="使い方を見る">?</button>
     </div>
-    <div class="join-row">
-      <!-- 参加用のQR(js/join-qr.js)。押すと大きく出す。作れなかったときは出ない -->
-      <button id="btnJoinQr" class="join-qr" type="button" aria-label="QRコードを大きく表示" hidden><span class="join-qr-img" id="joinQrThumb"></span></button>
-      <div class="id-line">接続ID: <strong id="myIdDisplay" style="color:#fff; font-size:1.8rem; letter-spacing: 3px;">....</strong></div>
-    </div>
-    <div class="rec-status" id="recStatus" aria-live="polite"></div>
-    <p class="help-text" id="idHelp">ほかの端末は、この端末と同じ<span class="nowrap">Wi-Fi</span>か、この端末の<span class="nowrap">テザリング</span>につないでから番号を入れてください。</p>
-    <p class="help-text rotate-hint">横向きにすると、映像を大きく表示できます。</p>
     </div>
 
-    <div class="cam-selector" id="camSelector" style="margin-top: 10px;"></div>
+    <!-- 映像の下端に重ねる: カメラの切り替え(2台以上のとき)と「カメラを追加」。横向きでは右の列に入る -->
+    <div class="cam-dock">
+      <div class="cam-selector" id="camSelector"></div>
+      <button id="btnAddCamera" class="add-cam" type="button" aria-label="カメラを追加"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="add-cam-label">カメラを追加</span></button>
+    </div>
 
     <div class="stage-video">
       <canvas id="displayCanvas" width="480" height="360"></canvas>
@@ -251,6 +247,8 @@
         <!-- リプレイ中に、いま見ているカメラを常に出す(操作を隠しても消えない。js/app.js の renderCamSelector) -->
         <div class="cam-badge" id="camBadge"></div>
         <div class="state-band state-band-sub" id="stateSubBand" hidden></div>
+        <!-- 何秒前まで戻れるか(常に見える状態の表示)。js/app.js の renderRecStatus が書く -->
+        <div class="rec-status" id="recStatus"></div>
       </div>
       <!-- リプレイ中に拡大しているとき、右上に倍率を出す(js/replay-ui.js) -->
       <div class="zoom-badge" id="zoomBadge" aria-live="polite"></div>
@@ -293,12 +291,14 @@
   </div>
 
   <!-- 参加用QRの大きい表示。白地いっぱいに出して、離れたスマホのカメラでも読めるようにする(js/join-qr.js) -->
-  <div id="qrOverlay" class="qr-overlay" hidden role="dialog" aria-modal="true" aria-label="参加用のQRコード">
+  <div id="qrOverlay" class="qr-overlay" hidden role="dialog" aria-modal="true" aria-labelledby="qrTitle">
     <div class="qr-overlay-body">
       <div class="qr-overlay-img" id="qrBig"></div>
       <div class="qr-overlay-side">
+        <h2 class="qr-overlay-title" id="qrTitle">カメラを追加</h2>
         <p class="qr-overlay-note">カメラにするスマホで読み取る</p>
         <p class="qr-overlay-code">接続ID <strong id="qrBigCode"></strong></p>
+        <p class="qr-overlay-wifi">同じ<span class="nowrap">Wi-Fi</span>か、このスマホの<span class="nowrap">テザリング</span>につないでください。</p>
         <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
       </div>
     </div>
@@ -339,10 +339,10 @@
     <button id="btnOpenPrep" class="link-btn prep-link" type="button">はじめる前に</button>
 
     <h4>📺 はじめる</h4>
-    <p>会場でこの画面を操作する端末です。起動すると4桁のIDが表示されます。1台で使うときは、そのままお使いいただけます。この端末のカメラは「カメラ1」です。</p>
+    <p>会場でこの画面を操作する端末です。1台で使うときは、そのままお使いいただけます。この端末のカメラは「カメラ1」です。映像が縦向きの画面で横長になるときは、スマホを横にすると大きく映ります。</p>
 
     <h4>📷 カメラで参加</h4>
-    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。はじめた端末に表示されているIDを入力すると、その映像が届きます。参加したカメラは「カメラ2」から順に呼ばれ、同じIDに最大3台まで同時に参加できます。できれば同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
+    <p>別アングルを追加したいときに、他のスマホで「カメラで参加」を選びます。はじめた端末の「カメラを追加」を押すと、QRと接続IDが出ます。QRを読み取るか、接続IDを入力すると、その映像が届きます。参加したカメラは「カメラ2」から順に呼ばれ、同じIDに最大3台まで同時に参加できます。できれば同じWi-Fiに繋いでおくと、接続が安定し、モバイル通信量も節約できます。横向きで撮影する場合は、端末の画面の回転をオンにしてください。</p>
 
     <h4>📶 会場でつながらないとき</h4>
     <p>はじめた端末でテザリング(iPhoneでは「インターネット共有」)をオンにし、「カメラで参加」する端末を、そのWi-Fiにつないでください。iPhoneは「設定」→「インターネット共有」、Androidは「設定」→「ネットワーク」→「テザリング」で設定できます。機種によって名前や場所が異なる場合は、「テザリング」で探してください。映像ははじめた端末とカメラの間で直接やり取りされるため、携帯の通信量はほとんど使いません。ただし、番号を受け渡すために、インターネットにはつながっている必要があります。会場のWi-Fiは、端末どうしの通信を遮断していることがあり、その場合は、同じWi-Fiにつないでもつながりません。</p>

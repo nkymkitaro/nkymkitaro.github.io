@@ -55,7 +55,6 @@ export class CameraLink {
   // 親機として起動: 自分のカメラを取得し、子機からの着信も受け付ける(最大3台まで)
   async startAsMonitor(onLocalStreamReady) {
     this.myId = CameraLink.generateShortId();
-    document.getElementById('myIdDisplay').textContent = this.myId;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({

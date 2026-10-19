@@ -1,9 +1,9 @@
 // join-qr.js: 「QRコードを読むだけで、カメラとして参加」のQRを、はじめた端末(親機)に出す部品。
 // - 中身は https://kendovar.jp/?join=1234&openExternalBrowser=1 の形(番号はその時の4桁)。番号の表示も残す(QRが読めないとき用)
 // - QRを作る処理は js/vendor/qrcode.mjs(リポジトリ内。外部サービス・CDNは使わない)。使うときに初めて読み込む
-// - 親機の画面に小さく出し、押すと白地いっぱいに大きく出す(離れたスマホのカメラで読むには、大きいほどよい)
-// - 子機がつながったら、大きい表示は自動で閉じる(app.js から closeJoinQr)
-// - QRを作れなかった・読み込めなかったときは、QRを出さないだけで、番号での参加は今までどおり使える
+// - 親機の撮影画面には常時は出さず、「カメラを追加」を押したときだけ、白地いっぱいに大きく出す(離れたスマホのカメラで読むには、大きいほどよい。2026-10-19 に変更)
+// - 新しいカメラがつながったら、大きい表示は自動で閉じる(app.js から closeJoinQr。同じカメラの再接続では閉じない)
+// - QRを作れなかった・読み込めなかったときは、QRを出さないだけで、接続IDでの参加は今までどおり使える
 import { attachPress } from './press-feedback.js';
 
 // QRの行き先。どの端末・どのURLで開いていても、本番のドメインに向ける
@@ -91,17 +91,17 @@ export function closeJoinQr() {
   isOpen = false;
 }
 
-// 親機の画面にQRを出す。code は親機の4桁の番号
+// 「カメラを追加」を押すと、QRと接続IDを大きく出す。code は親機の4桁の番号
+// QRを作れなかったときも、接続IDと案内は出す(番号で参加できる)
 export async function initJoinQr(code) {
-  const button = document.getElementById('btnJoinQr');
+  const button = document.getElementById('btnAddCamera');
   overlay = document.getElementById('qrOverlay');
   if (!button || !overlay) return;
-  const svg = await createJoinQrSvg(code);
-  if (!svg) return; // QRなし。番号だけで使える
-  document.getElementById('joinQrThumb').innerHTML = svg;
-  document.getElementById('qrBig').innerHTML = svg;
   document.getElementById('qrBigCode').textContent = code;
-  button.hidden = false;
+  const svg = await createJoinQrSvg(code);
+  const big = document.getElementById('qrBig');
+  if (svg) big.innerHTML = svg;
+  else big.hidden = true; // QRなし。接続IDだけで使える
 
   attachPress(button, { vibrate: 12 });
   button.addEventListener('click', openOverlay);
