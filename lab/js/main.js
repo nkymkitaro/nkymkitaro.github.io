@@ -533,7 +533,7 @@ async function initParent(app) {
     making = null;
     render();
     const file = new File([out.blob], `kendovar_${stamp}_まとめ.${out.ext}`, { type: out.mime });
-    lastSave.make = { mode: out.mode, ms: out.ms, bytes: file.size, width: out.width, height: out.height, fps: out.fps, frames: out.frames, videoCodec: out.videoCodec, audioCodec: out.audioCodec, hasAudio: out.hasAudio, audioCam: out.audioCam, name: file.name, quality: el('#optQuality').value };
+    lastSave.make = { mode: out.mode, ms: out.ms, bytes: file.size, width: out.width, height: out.height, fps: out.fps, frames: out.frames, videoCodec: out.videoCodec, audioCodec: out.audioCodec, hasAudio: out.hasAudio, audioCam: out.audioCam, name: file.name, quality: el('#optQuality').value, diag: out.diag || null };
     window.__lastMake = { file, ...lastSave.make };
     const deliver = async () => {
       hideMake();
@@ -701,6 +701,8 @@ async function initParent(app) {
     if (lastSave && lastSave.make) {
       const m = lastSave.make;
       lines.push(`まとめ: ${m.mode === 'fast' ? '読み出して作り直し' : '再生しながら録り直し'} ${m.quality === 'std' ? '標準' : '低'} ${m.width}x${m.height} ${m.fps}コマ ${(m.bytes / 1048576).toFixed(1)}MB 作成${(m.ms / 1000).toFixed(1)}秒 映像${m.videoCodec} 音${m.hasAudio ? `${m.audioCodec}(${m.audioCam})` : 'なし'}`);
+      // まとめの内訳(動画処理コーダーの計測、2026-10-20)。回路=prefer-hardware で通るか
+      if (m.diag) { const d = m.diag; const yn = (v) => (v === true ? '可' : v === false ? '不可' : '不明'); lines.push(`まとめの内訳: 設定 ${d.encCfg} / 回路 ${yn(d.hw['prefer-hardware'])}・ソフト ${yn(d.hw['prefer-software'])} / 読み出し${(d.readMs / 1000).toFixed(1)}秒(うち待ち${(d.readWaitMs / 1000).toFixed(1)}秒) 並べる${(d.drawMs / 1000).toFixed(1)}秒 圧縮待ち${(d.encWaitMs / 1000).toFixed(1)}秒 その他${(d.otherMs / 1000).toFixed(1)}秒 / 待ち行列 読み出し平均${d.decodeQ.avg}・最大${d.decodeQ.max} 圧縮平均${d.encodeQ.avg}・最大${d.encodeQ.max} / 1秒あたり${d.outFps}コマ`); }
     }
     if (lastSave) {
       lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);

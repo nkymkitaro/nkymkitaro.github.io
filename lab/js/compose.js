@@ -24,6 +24,25 @@ const even = (n) => Math.max(2, Math.floor(n / 2) * 2);
 const tick = () => new Promise((r) => setTimeout(r, 0));
 const cancelled = () => Object.assign(new Error('中止しました'), { cancelled: true });
 
+// 計測(試験用の「数値をコピー」に出す。動きは変えない。動画処理コーダー、2026-10-20)
+// 時間の内訳(ミリ秒の合計)と、待ち行列の長さ(平均・最大)を、まとめ1回ぶん集める
+function newDiag() {
+  const d = { t: { read: 0, readWait: 0, draw: 0, encWait: 0 }, q: {} };
+  d.add = (k, ms) => { d.t[k] += ms; };
+  d.qs = (k, v) => { const s = d.q[k] || (d.q[k] = { n: 0, sum: 0, max: 0 }); s.n++; s.sum += v; if (v > s.max) s.max = v; };
+  return d;
+}
+
+// 選んだ圧縮の設定が、端末の回路(ハードウェア)で動くか。prefer-hardware で通らなければ、ソフトウェアで動いている見込みが高い
+async function probeHardware(cfg) {
+  const out = {};
+  for (const hw of ['prefer-hardware', 'prefer-software']) {
+    try { const r = await VideoEncoder.isConfigSupported({ ...cfg, hardwareAcceleration: hw }); out[hw] = !!(r && r.supported); }
+    catch (err) { out[hw] = null; }
+  }
+  return out;
+}
+
 function fromBase64(b64) {
   if (!b64) return undefined;
   const s = atob(b64);
@@ -106,7 +125,10 @@ class ExportTrack {
       this.fed++;
       while (this.decoder.decodeQueueSize > 12) await new Promise((r) => setTimeout(r, 1));
     }
+    if (this.diag) this.diag.qs('decode', this.decoder.decodeQueueSize);
+    const w0 = performance.now();
     await this._waitOut(this.fed);
+    if (this.diag) this.diag.add('readWait', performance.now() - w0);
     if (this.error) throw this.error;
     let pick = null;
     for (const f of this.frames) if (f.timestamp <= target && (!pick || f.timestamp > pick.timestamp)) pick = f;
@@ -164,6 +186,8 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
   const tMin = Math.min(...all.map((s) => s.t0));
   const tMax = Math.max(...all.map((s) => s.t0 + s.durMs));
   const tracks = cams.map((l) => new ExportTrack(l[0].cam, l[0].label, l));
+  const diag = newDiag();
+  tracks.forEach((tr) => { tr.diag = diag; });
   const closeAll = () => tracks.forEach((tr) => tr.close());
   let encoder = null;
   try {
@@ -179,6 +203,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     const cfg = await pickEncoder(W, H, q.bitrate, q.fps);
     if (!cfg) throw new Error('まとめ動画に使える圧縮方式がありません');
     const vKind = cfg.codec.startsWith('avc') ? 'avc' : 'vp9';
+    const hw = await probeHardware(cfg);
 
     // 音: 選んだ1台の、圧縮済みの音をそのまま入れる
     const aCam = pickAudioCam(cams, audioCam);
@@ -213,7 +238,10 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
       g.fillRect(0, 0, W, H);
       for (let i = 0; i < tracks.length; i++) {
         const tr = tracks[i];
+        const r0 = performance.now();
         const f = await tr.frameAt(t + 500 / q.fps); // 出力のコマの真ん中の時刻に一番近い元のコマを使う(コマの間隔による遅れを半分にする)
+        const d0 = performance.now();
+        diag.add('read', d0 - r0);
         const x0 = (i % lay.cols) * cellW;
         const y0 = Math.floor(i / lay.cols) * cellH;
         if (f) {
@@ -231,12 +259,16 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
         g.fillRect(x0, y0, bw, fs * 1.9);
         g.fillStyle = '#fff';
         g.fillText(label, x0 + fs * 0.6, y0 + fs * 0.95);
+        diag.add('draw', performance.now() - d0);
       }
       const vf = new VideoFrame(cv, { timestamp: Math.round(k * frameUs), duration: Math.round(frameUs) });
       encoder.encode(vf, { keyFrame: k % (q.fps * 2) === 0 });
       vf.close();
       drawn++;
+      diag.qs('encode', encoder.encodeQueueSize);
+      const e0 = performance.now();
       while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 1));
+      diag.add('encWait', performance.now() - e0);
       if (k % 5 === 0) {
         const el = performance.now() - started;
         onProgress({ fraction: Math.min(0.97, (k + 1) / total), remainMs: Math.max(0, (el / (k + 1)) * (total - k - 1)) });
@@ -267,7 +299,19 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     muxer.finalize();
     onProgress({ fraction: 1, remainMs: 0 });
     const blob = new Blob([target.buffer], { type: 'video/mp4' });
-    return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms: Math.round(performance.now() - started) };
+    const ms = Math.round(performance.now() - started);
+    const avg = (k) => (diag.q[k] ? +(diag.q[k].sum / diag.q[k].n).toFixed(1) : 0);
+    const mx = (k) => (diag.q[k] ? diag.q[k].max : 0);
+    const r = (v) => Math.round(v);
+    // 試験用の数値に出す内訳。read は readWait を含む。残り(other)は、進み具合の表示・音・MP4の仕上げなど
+    const diagOut = {
+      hw, encCfg: `${cfg.codec} ${W}x${H} ${q.fps}コマ ${Math.round(q.bitrate / 1000)}kbps`,
+      readMs: r(diag.t.read), readWaitMs: r(diag.t.readWait), drawMs: r(diag.t.draw), encWaitMs: r(diag.t.encWait),
+      otherMs: r(ms - diag.t.read - diag.t.draw - diag.t.encWait),
+      decodeQ: { avg: avg('decode'), max: mx('decode') }, encodeQ: { avg: avg('encode'), max: mx('encode') },
+      outFps: +(drawn / (ms / 1000)).toFixed(1),
+    };
+    return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms, diag: diagOut };
   } finally {
     if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (err) { /* 無視 */ } }
     closeAll();
