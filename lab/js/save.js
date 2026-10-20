@@ -23,9 +23,9 @@ async function buildCameraMp4WithRetry(store, list, opts) {
   let lastErr = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      // 先に、全部の区切りが読めるか確かめる(1バイトずつ)
+      // 先に、全部の区切りが最後まで読めるか確かめる(読んだ中身は捨てる)
       for (const s of cur) {
-        try { await s.blob.slice(0, 1).arrayBuffer(); await s.blob.slice(Math.max(0, s.blob.size - 1)).arrayBuffer(); }
+        try { await s.blob.arrayBuffer(); }
         catch (err) { throw Object.assign(new Error(`${s.label || s.cam} の ${s.seq} 番目の区切り(${(s.blob.size / 1048576).toFixed(1)}MB)が読めません: ${err && err.name ? err.name : err}`), { name: err && err.name, unreadable: true }); }
       }
       return await buildCameraMp4(cur, opts);

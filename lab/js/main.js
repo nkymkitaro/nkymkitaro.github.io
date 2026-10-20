@@ -719,6 +719,7 @@ async function initParent(app) {
     if (lastSave) {
       lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);
     }
+    lines.push('版: 保存の読み直しあり(2026-10-21 b)');
     if (window.__lastSaveError) lines.push(`保存の失敗: ${window.__lastSaveError}`);
     if (window.__lastPrebuildError) lines.push(`先に作る分の失敗: ${window.__lastPrebuildError}`);
     const m = viewer.metrics;
