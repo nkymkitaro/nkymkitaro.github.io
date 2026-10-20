@@ -575,6 +575,8 @@ async function initParent(app) {
       try {
         res = await buildTakeFiles(store, t, { onProgress: ({ index, total }) => { saving = { text: total > 1 ? `保存中 ${Math.min(index + 1, total)}/${total}` : '保存中' }; refreshSub(); } });
       } catch (err) {
+        // 原因を試験用の数値に残す(動画処理コーダー、2026-10-21)
+        window.__lastSaveError = `${err && err.name ? err.name + ': ' : ''}${err && err.message ? err.message : String(err)}`;
         showToast(err && err.message && /映像がありません/.test(err.message) ? err.message : '途中で止まりました。もう一度保存してください。');
         return;
       }
@@ -717,6 +719,8 @@ async function initParent(app) {
     if (lastSave) {
       lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);
     }
+    if (window.__lastSaveError) lines.push(`保存の失敗: ${window.__lastSaveError}`);
+    if (window.__lastPrebuildError) lines.push(`先に作る分の失敗: ${window.__lastPrebuildError}`);
     const m = viewer.metrics;
     if (m.seekMs != null) lines.push(`動画から見る: 離れた場面へ移る${m.jumpMs ?? '-'}ms 1コマ送り${m.stepMs ?? '-'}ms 画面上のカメラ間のずれ${m.spreadMs ?? '-'}ms`);
     if (photoStepMs != null) lines.push(`写真方式(VARの直近30秒): 1コマを出す${photoStepMs.avg}ms(最大${photoStepMs.max}ms、${photoStepMs.n}コマの平均)`);
