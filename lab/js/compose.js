@@ -99,6 +99,17 @@ export function batchFrames() {
   return BATCH_DEFAULT;
 }
 
+// 読み出し(デコーダー)をどこで動かすか。実機の計測で、読み出しと圧縮が同じ専用処理部を使って足し算になっていた疑いがあるため、
+// 読み出しをCPUに回して並行させられるか試す。URL に ?dec=cpu(CPUで読み出す) / ?dec=hw(専用処理部で読み出す) / なし(端末まかせ・従来)
+export function decodeHardware() {
+  try {
+    const v = new URLSearchParams(location.search).get('dec');
+    if (v === 'cpu') return 'prefer-software';
+    if (v === 'hw') return 'prefer-hardware';
+  } catch (err) { /* 無視 */ }
+  return null;
+}
+
 // 前から順に読み出すだけの、書き出し用の読み取り役(見る画面の TrackB より単純。飛ぶ動きはない)
 // 必要なコマが出てくるまでだけ待ち、その先 aheadFrames() コマは待たずに読み出しへ渡しておく
 class ExportTrack {
@@ -142,6 +153,11 @@ class ExportTrack {
     dec.ondequeue = () => this._wakeAll();
     const conf = { codec: cfg.codec, codedWidth: cfg.codedWidth, codedHeight: cfg.codedHeight };
     if (cfg.description) conf.description = fromBase64(cfg.description);
+    const hwPref = decodeHardware();
+    if (hwPref) {
+      try { const r = await VideoDecoder.isConfigSupported({ ...conf, hardwareAcceleration: hwPref }); if (r && r.supported) conf.hardwareAcceleration = hwPref; } catch (err) { /* 端末まかせ */ }
+    }
+    this.decHw = conf.hardwareAcceleration || 'default';
     dec.configure(conf);
   }
 
@@ -391,7 +407,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
       otherMs: r(ms - diag.t.read - diag.t.draw - diag.t.encWait),
       decodeQ: { avg: avg('decode'), max: mx('decode') }, encodeQ: { avg: avg('encode'), max: mx('encode') },
       outFps: +(drawn / (ms / 1000)).toFixed(1),
-      ahead: tracks[0].ahead, batch: batchFrames(), hiddenMs: r(diag.hiddenMs),
+      ahead: tracks[0].ahead, batch: batchFrames(), dec: tracks.map((t) => t.decHw).join('/'), hiddenMs: r(diag.hiddenMs),
     };
     return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms, diag: diagOut };
   } finally {
