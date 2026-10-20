@@ -27,7 +27,7 @@ const cancelled = () => Object.assign(new Error('中止しました'), { cancell
 // 計測(試験用の「数値をコピー」に出す。動きは変えない。動画処理コーダー、2026-10-20)
 // 時間の内訳(ミリ秒の合計)と、待ち行列の長さ(平均・最大)を、まとめ1回ぶん集める
 function newDiag() {
-  const d = { t: { read: 0, readWait: 0, draw: 0, encWait: 0 }, q: {} };
+  const d = { t: { read: 0, readWait: 0, draw: 0, encWait: 0 }, q: {}, hiddenMs: 0 };
   d.add = (k, ms) => { d.t[k] += ms; };
   d.qs = (k, v) => { const s = d.q[k] || (d.q[k] = { n: 0, sum: 0, max: 0 }); s.n++; s.sum += v; if (v > s.max) s.max = v; };
   return d;
@@ -73,20 +73,45 @@ function pickSegment(segs, t) {
   return best;
 }
 
+// 先読みするコマ数: いま必要なコマの先まで、動画の読み出し(デコーダー)に渡しておく数。
+// 1コマ渡しては出てくるのを待つ作りだと、端末の専用処理部の待ち時間がそのまま積み上がるため(実機の計測で、まとめの時間の84%が待ちだった)。
+// 多いほど速いが、出てきたコマを持ち続ける分、端末の専用処理部のバッファとメモリを使う。URL に ?ahead=数 を付けると、端末で試せる
+const AHEAD_DEFAULT = 4;
+const DECODE_QUEUE_MAX = 12;
+export function aheadFrames() {
+  try {
+    const raw = new URLSearchParams(location.search).get('ahead');
+    const v = Number(raw);
+    if (raw !== null && raw !== '' && Number.isFinite(v) && v >= 0 && v <= 30) return Math.floor(v);
+  } catch (err) { /* 無視 */ }
+  return AHEAD_DEFAULT;
+}
+
 // 前から順に読み出すだけの、書き出し用の読み取り役(見る画面の TrackB より単純。飛ぶ動きはない)
+// 必要なコマが出てくるまでだけ待ち、その先 aheadFrames() コマは待たずに読み出しへ渡しておく
 class ExportTrack {
   constructor(cam, label, segs) {
     this.cam = cam; this.label = label; this.segs = segs;
     this.idx = -1; this.parsed = null; this.decoder = null;
-    this.frames = []; this.fed = 0; this.outCount = 0; this.next = 0; this.cur = null; this.error = null;
+    this.frames = []; this.fed = 0; this.outCount = 0; this.next = 0; this.need = 0; this.cur = null; this.error = null;
     this.w = 0; this.h = 0;
+    this.ahead = aheadFrames();
+    this._wait = null; this._room = null;
   }
 
   _dropFrames() { this.frames.forEach((f) => f.close()); this.frames = []; this.cur = null; }
 
+  _wakeAll() {
+    const w = this._wait;
+    if (w && (this.outCount >= w.n || this.error || !this.decoder)) { this._wait = null; clearTimeout(w.timer); w.resolve(); }
+    const r = this._room;
+    if (r) { this._room = null; clearTimeout(r.timer); r.resolve(); }
+  }
+
   _closeDecoder() {
     if (this.decoder && this.decoder.state !== 'closed') { try { this.decoder.close(); } catch (err) { /* 無視 */ } }
     this.decoder = null;
+    this._wakeAll();
   }
 
   async _open(idx) {
@@ -96,19 +121,27 @@ class ExportTrack {
     this.parsed = await parseContainer(this.segs[idx].blob);
     const cfg = this.parsed.meta.config;
     this.w = cfg.codedWidth; this.h = cfg.codedHeight;
-    this.fed = 0; this.outCount = 0; this.next = 0;
-    this.decoder = new VideoDecoder({
-      output: (f) => { this.frames.push(f); this.outCount++; },
-      error: (e) => { this.error = e; },
+    this.fed = 0; this.outCount = 0; this.next = 0; this.need = 0;
+    const dec = new VideoDecoder({
+      output: (f) => { if (this.decoder !== dec) { f.close(); return; } this.frames.push(f); this.outCount++; this._wakeAll(); },
+      error: (e) => { this.error = e; this._wakeAll(); },
     });
+    this.decoder = dec;
+    dec.ondequeue = () => this._wakeAll();
     const conf = { codec: cfg.codec, codedWidth: cfg.codedWidth, codedHeight: cfg.codedHeight };
     if (cfg.description) conf.description = fromBase64(cfg.description);
-    this.decoder.configure(conf);
+    dec.configure(conf);
   }
 
-  async _waitOut(n) {
-    const until = performance.now() + 5000;
-    while (this.outCount < n && !this.error && performance.now() < until) await new Promise((r) => setTimeout(r, 2));
+  // 出てきたコマが n 個になるまで待つ(出たらすぐ進む。5秒たっても出ないときは先へ進む)
+  _waitOut(n) {
+    if (this.outCount >= n || this.error || !this.decoder) return Promise.resolve();
+    return new Promise((resolve) => { this._wait = { n, resolve, timer: setTimeout(() => { this._wait = null; resolve(); }, 5000) }; });
+  }
+
+  // 読み出しの待ち行列に空きができるまで待つ(dequeue が来なくても、5ミリ秒で見に戻る)
+  _waitRoom() {
+    return new Promise((resolve) => { this._room = { resolve, timer: setTimeout(() => { this._room = null; resolve(); }, 5) }; });
   }
 
   // その時刻の1コマ(なければ null)。時刻は前へ進む順に呼ぶ
@@ -119,15 +152,19 @@ class ExportTrack {
     const seg = this.segs[idx];
     const target = (t - seg.t0) * 1000 + this.parsed.meta.firstTs;
     const chunks = this.parsed.chunks;
-    while (this.next < chunks.length && (chunks[this.next].ts <= target || this.fed === 0)) {
+    // この時刻までに出ているべきコマの数(最低1)と、読み出しへ渡しておく数
+    while (this.need < chunks.length && chunks[this.need].ts <= target) this.need++;
+    const need = Math.max(1, this.need);
+    const goal = Math.min(chunks.length, need + this.ahead);
+    while (this.next < goal) {
       const c = chunks[this.next++];
       this.decoder.decode(new EncodedVideoChunk({ type: c.type, timestamp: c.ts, duration: c.dur, data: c.data }));
       this.fed++;
-      while (this.decoder.decodeQueueSize > 12) await new Promise((r) => setTimeout(r, 1));
+      while (this.decoder.decodeQueueSize > DECODE_QUEUE_MAX && !this.error) await this._waitRoom();
     }
     if (this.diag) this.diag.qs('decode', this.decoder.decodeQueueSize);
     const w0 = performance.now();
-    await this._waitOut(this.fed);
+    await this._waitOut(need);
     if (this.diag) this.diag.add('readWait', performance.now() - w0);
     if (this.error) throw this.error;
     let pick = null;
@@ -188,6 +225,13 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
   const tracks = cams.map((l) => new ExportTrack(l[0].cam, l[0].label, l));
   const diag = newDiag();
   tracks.forEach((tr) => { tr.diag = diag; });
+  // まとめを作っている間に、画面が隠れていた時間(隠れている間はブラウザが処理を遅くするため、時間の見方に必要)
+  let hiddenSince = typeof document !== 'undefined' && document.hidden ? performance.now() : 0;
+  const onVis = () => {
+    if (document.hidden) hiddenSince = performance.now();
+    else if (hiddenSince) { diag.hiddenMs += performance.now() - hiddenSince; hiddenSince = 0; }
+  };
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVis);
   const closeAll = () => tracks.forEach((tr) => tr.close());
   let encoder = null;
   try {
@@ -300,6 +344,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     onProgress({ fraction: 1, remainMs: 0 });
     const blob = new Blob([target.buffer], { type: 'video/mp4' });
     const ms = Math.round(performance.now() - started);
+    if (hiddenSince) { diag.hiddenMs += performance.now() - hiddenSince; hiddenSince = 0; }
     const avg = (k) => (diag.q[k] ? +(diag.q[k].sum / diag.q[k].n).toFixed(1) : 0);
     const mx = (k) => (diag.q[k] ? diag.q[k].max : 0);
     const r = (v) => Math.round(v);
@@ -310,11 +355,13 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
       otherMs: r(ms - diag.t.read - diag.t.draw - diag.t.encWait),
       decodeQ: { avg: avg('decode'), max: mx('decode') }, encodeQ: { avg: avg('encode'), max: mx('encode') },
       outFps: +(drawn / (ms / 1000)).toFixed(1),
+      ahead: tracks[0].ahead, hiddenMs: r(diag.hiddenMs),
     };
     return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms, diag: diagOut };
   } finally {
     if (encoder && encoder.state !== 'closed') { try { encoder.close(); } catch (err) { /* 無視 */ } }
     closeAll();
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVis);
   }
 }
 
