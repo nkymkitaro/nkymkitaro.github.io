@@ -11,6 +11,7 @@ import { LocalCapture, ChildAgent, ParentAgent, DEFAULTS, probeMethods, batteryP
 import { LabViewer } from './viewer.js';
 import { buildTakeFiles, deliverFiles, fileStamp, resolveSaveMode } from './save.js';
 import { composeTake, QUALITY } from './compose.js';
+import { Prebuilder } from './prebuild.js';
 import { ensureMicPermission } from './audio-input.js';
 import { showToast } from '../../js/toast.js';
 import { attachPress } from '../../js/press-feedback.js';
@@ -156,7 +157,13 @@ async function initParent(app) {
     // 最長に達したときは警報にしない。トーストと振動1回(仕様7章)
     onMaxReached: (sec) => { showToast(`最長の${Math.round(sec / 60)}分に達したので、終わりました。`); try { navigator.vibrate && navigator.vibrate(200); } catch (err) { /* 無視 */ } },
   });
-  window.__lab = { role: 'parent', parent, store, capture };
+  // 録画の最中に、まとめを区間ごとに先に作っておく(録画・VARが最優先。VARを開いている間とまとめを作っている間は動かさない)
+  const prebuilder = new Prebuilder({
+    store,
+    canRun: () => !!vEl.hidden && !making,
+    getDropped: () => { try { return parent.summary().rows.reduce((a, r) => a + (Number(r.dropped) || 0), 0); } catch (err) { return 0; } },
+  });
+  window.__lab = { role: 'parent', parent, store, capture, prebuilder };
 
   // 子機が張ってくる専用の通信路を受け入れる(PeerJS の接続が用意できてから)
   const hook = setInterval(() => {
@@ -388,6 +395,8 @@ async function initParent(app) {
         method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: maxSel, audio: el('#optAudio').value === '1',
       });
       if (ok && parent.take) { parent.take.remainMin = remainMin; parent._saveTake(); }
+      // 録画の最中にまとめを先に作る(試験用。URL に ?pre=1 を付けたときだけ)
+      if (ok && parent.take && new URLSearchParams(location.search).get('pre') === '1') prebuilder.start(parent.take.id, el('#optQuality').value);
       if (!ok) showToast('録画を開始できませんでした');
       else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
       enableWakeLock({ quiet: true });
@@ -516,6 +525,7 @@ async function initParent(app) {
       out = await composeTake(store, t, {
         quality: el('#optQuality').value,
         audioCam: el('#optAudioCam').value,
+        prebuilder,
         shouldCancel: () => !!(making && making.cancel),
         onProgress: ({ fraction, remainMs, replay }) => {
           making.pct = Math.round(fraction * 100); making.remainMs = remainMs; making.replay = !!replay;
@@ -702,7 +712,7 @@ async function initParent(app) {
       const m = lastSave.make;
       lines.push(`まとめ: ${m.mode === 'fast' ? '読み出して作り直し' : '再生しながら録り直し'} ${m.quality === 'std' ? '標準' : '低'} ${m.width}x${m.height} ${m.fps}コマ ${(m.bytes / 1048576).toFixed(1)}MB 作成${(m.ms / 1000).toFixed(1)}秒 映像${m.videoCodec} 音${m.hasAudio ? `${m.audioCodec}(${m.audioCam})` : 'なし'}`);
       // まとめの内訳(動画処理コーダーの計測、2026-10-20)。専用処理部=prefer-hardware で通るか
-      if (m.diag) { const d = m.diag; const yn = (v) => (v === true ? '可' : v === false ? '不可' : '不明'); lines.push(`まとめの内訳: 設定 ${d.encCfg} / 専用処理部 ${yn(d.hw['prefer-hardware'])}・CPU ${yn(d.hw['prefer-software'])} / 読み出し${(d.readMs / 1000).toFixed(1)}秒(うち待ち${(d.readWaitMs / 1000).toFixed(1)}秒) 並べる${(d.drawMs / 1000).toFixed(1)}秒 圧縮待ち${(d.encWaitMs / 1000).toFixed(1)}秒 その他${(d.otherMs / 1000).toFixed(1)}秒 / 待ち行列 読み出し平均${d.decodeQ.avg}・最大${d.decodeQ.max} 圧縮平均${d.encodeQ.avg}・最大${d.encodeQ.max} / 1秒あたり${d.outFps}コマ / 先読み${d.ahead}コマ・交互${d.batch || 0}コマ・読み出し${d.dec || '-'}・描く場所${d.cvCpu ? 'CPU' : '従来'}・まとめ中に画面が隠れた${(d.hiddenMs / 1000).toFixed(1)}秒`); }
+      if (m.diag) { const d = m.diag; const yn = (v) => (v === true ? '可' : v === false ? '不可' : '不明'); lines.push(`まとめの内訳: 設定 ${d.encCfg} / 専用処理部 ${yn(d.hw['prefer-hardware'])}・CPU ${yn(d.hw['prefer-software'])} / 読み出し${(d.readMs / 1000).toFixed(1)}秒(うち待ち${(d.readWaitMs / 1000).toFixed(1)}秒) 並べる${(d.drawMs / 1000).toFixed(1)}秒 圧縮待ち${(d.encWaitMs / 1000).toFixed(1)}秒 その他${(d.otherMs / 1000).toFixed(1)}秒 / 待ち行列 読み出し平均${d.decodeQ.avg}・最大${d.decodeQ.max} 圧縮平均${d.encodeQ.avg}・最大${d.encodeQ.max} / 1秒あたり${d.outFps}コマ / 先読み${d.ahead}コマ・まとめ中に画面が隠れた${(d.hiddenMs / 1000).toFixed(1)}秒`); if (d.pre) lines.push(`先に作った分: ${d.pre.pieces}区間(${d.pre.builtFrames}コマ)・止めたあとに作った${d.pre.restFrames}コマ・先に作るのに使った${(d.pre.busyMs / 1000).toFixed(1)}秒・録画のコマ落ちで止めた${d.pre.drops}回・失敗${d.pre.errors}回${d.pre.lastError ? ' ' + d.pre.lastError : ''}`); }
     }
     if (lastSave) {
       lines.push(`保存: ${lastSave.how === 'shared' ? '共有の画面' : lastSave.how === 'downloaded' ? 'ダウンロード' : 'やめた'} ${lastSave.ms}ms ${lastSave.info.map((i) => (i.kind === 'one' ? `${i.cam}:${i.ext}(映像${i.videoCodec} 音${i.hasAudio ? i.audioCodec : 'なし'}) ${(i.bytes / 1048576).toFixed(1)}MB` : `${i.cam}:${i.parts}個に分かれた`)).join(' / ')}`);
@@ -841,6 +851,7 @@ async function initParent(app) {
   }
 
   setInterval(() => { parent.tick(); syncLabels(); render(); }, 1000);
+  setInterval(() => { if (parent.take) prebuilder.tick().catch(() => {}); }, 2000);
   window.__lab.cancelReceive = cancelReceive;
   window.__lab.resumeReceive = resumeReceive;
   render();
