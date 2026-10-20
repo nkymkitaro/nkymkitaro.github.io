@@ -15,6 +15,34 @@ export function fileStamp(startedAt) {
 
 const camName = (label) => String(label || 'カメラ').replace(/[\\/:*?"<>|\s]+/g, '');
 
+
+// 保存してある映像のファイルが一時的に読めないことがある(NotReadableError)ため、読めなかったら記録を取り直して読み直す(最大2回)。
+// それでも読めないときは、どのカメラの何番目の区切りかをエラーに入れる(試験用の数値の「保存の失敗」に出る)
+async function buildCameraMp4WithRetry(store, list, opts) {
+  let cur = list;
+  let lastErr = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      // 先に、全部の区切りが読めるか確かめる(1バイトずつ)
+      for (const s of cur) {
+        try { await s.blob.slice(0, 1).arrayBuffer(); await s.blob.slice(Math.max(0, s.blob.size - 1)).arrayBuffer(); }
+        catch (err) { throw Object.assign(new Error(`${s.label || s.cam} の ${s.seq} 番目の区切り(${(s.blob.size / 1048576).toFixed(1)}MB)が読めません: ${err && err.name ? err.name : err}`), { name: err && err.name, unreadable: true }); }
+      }
+      return await buildCameraMp4(cur, opts);
+    } catch (err) {
+      lastErr = err;
+      const readErr = err && (err.unreadable || err.name === 'NotReadableError');
+      if (!readErr || (err && err.cancelled) || attempt === 2) break;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+      const fresh = [];
+      for (const s of cur) { const r = await store.get(s.key); if (r && r.blob) fresh.push(r); }
+      if (fresh.length === cur.length) cur = fresh.sort((a, b) => a.t0 - b.t0);
+    }
+  }
+  if (lastErr && lastErr.unreadable) lastErr.message += `(${3}回読み直しても読めませんでした)`;
+  throw lastErr;
+}
+
 // 録画1本ぶんのファイルを作る。戻り値: { files: File[], note: string, info: [...] }
 // onProgress({ index, total, label, fraction })。shouldCancel() が true なら中止する
 export async function buildTakeFiles(store, take, { onProgress = () => {}, shouldCancel = () => false } = {}) {
@@ -32,7 +60,7 @@ export async function buildTakeFiles(store, take, { onProgress = () => {}, shoul
     const name = camName(list[0].label);
     onProgress({ index: i, total: cams.length, label: list[0].label, fraction: i / cams.length });
     if (list.every((s) => s.mime === B_MIME)) {
-      const out = await buildCameraMp4(list, { shouldCancel, onProgress: (f) => onProgress({ index: i, total: cams.length, label: list[0].label, fraction: (i + f) / cams.length }) });
+      const out = await buildCameraMp4WithRetry(store, list, { shouldCancel, onProgress: (f) => onProgress({ index: i, total: cams.length, label: list[0].label, fraction: (i + f) / cams.length }) });
       files.push(new File([out.blob], `kendovar_${stamp}_${name}.${out.ext}`, { type: out.mime }));
       info.push({ cam: list[0].label, kind: 'one', ext: out.ext, hasAudio: out.hasAudio, videoCodec: out.videoCodec, audioCodec: out.audioCodec, bytes: out.blob.size, frames: out.frames });
     } else {
