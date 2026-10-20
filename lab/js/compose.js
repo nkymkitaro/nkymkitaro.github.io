@@ -110,6 +110,12 @@ export function decodeHardware() {
   return null;
 }
 
+// 絵を描く場所。実機の計測で、読み出し・圧縮のどちらを変えても時間が変わらず、画像用メモリ(GPU)の往復が共通の詰まりと疑われるため、
+// 描く場所をCPU側のメモリにできるか試す。URL に ?cv=cpu(CPU側で描く) / なし(従来)
+export function canvasOnCpu() {
+  try { return new URLSearchParams(location.search).get('cv') === 'cpu'; } catch (err) { return false; }
+}
+
 // 前から順に読み出すだけの、書き出し用の読み取り役(見る画面の TrackB より単純。飛ぶ動きはない)
 // 必要なコマが出てくるまでだけ待ち、その先 aheadFrames() コマは待たずに読み出しへ渡しておく
 class ExportTrack {
@@ -297,7 +303,8 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     encoder.configure(cfg);
 
     const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
-    const g = cv.getContext('2d');
+    const ctxOpt = canvasOnCpu() ? { willReadFrequently: true } : undefined;
+    const g = cv.getContext('2d', ctxOpt);
     const total = Math.max(1, Math.floor(((tMax - tMin) / 1000) * q.fps));
     const frameUs = 1e6 / q.fps;
     const fontPx = 15;
@@ -307,7 +314,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     const surfaces = [{ cv, g }];
     for (let j = 1; j < B; j++) {
       const c2 = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
-      surfaces.push({ cv: c2, g: c2.getContext('2d') });
+      surfaces.push({ cv: c2, g: c2.getContext('2d', ctxOpt) });
     }
     const renderFrame = async (k, g2) => {
       const t = tMin + (k * 1000) / q.fps;
@@ -407,7 +414,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
       otherMs: r(ms - diag.t.read - diag.t.draw - diag.t.encWait),
       decodeQ: { avg: avg('decode'), max: mx('decode') }, encodeQ: { avg: avg('encode'), max: mx('encode') },
       outFps: +(drawn / (ms / 1000)).toFixed(1),
-      ahead: tracks[0].ahead, batch: batchFrames(), dec: tracks.map((t) => t.decHw).join('/'), hiddenMs: r(diag.hiddenMs),
+      ahead: tracks[0].ahead, batch: batchFrames(), cvCpu: canvasOnCpu(), dec: tracks.map((t) => t.decHw).join('/'), hiddenMs: r(diag.hiddenMs),
     };
     return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms, diag: diagOut };
   } finally {
