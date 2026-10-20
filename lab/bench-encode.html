@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>圧縮の速さを測る(試作)</title>
+  <style>
+    html, body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; gap: 16px; padding: 16px; box-sizing: border-box; min-height: 100%; }
+    button { font-size: 20px; font-weight: 800; padding: 14px 28px; min-height: 56px; border-radius: 10px; border: 1px solid #666; background: #333; color: #fff; }
+    button:disabled { opacity: 0.5; }
+    p { margin: 0; color: #aaa; font-size: 14px; line-height: 1.6; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.5; color: #ddd; }
+  </style>
+</head>
+<body>
+  <!-- まとめ動画の「圧縮」が遅い原因を、端末で切り分けるための測定用ページ。映像は使わず、描いた絵だけを圧縮する。何も送らず、何も保存しない。試作です。 -->
+  <p>まとめ動画を作るときの「圧縮」の速さを、いくつかの条件で測ります。約1分かかります。測っている間は、ほかのアプリに切り替えず、画面を点けたままにしてください。</p>
+  <button id="go" type="button">測る</button>
+  <button id="copy" type="button" disabled>結果をコピー</button>
+  <pre id="out"></pre>
+  <script type="module">
+    const out = document.getElementById('out');
+    const goBtn = document.getElementById('go');
+    const copyBtn = document.getElementById('copy');
+    const lines = [];
+    const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const fmt = (n) => (Math.round(n * 10) / 10).toFixed(1);
+
+    const CODECS = [{ codec: 'avc1.42001f', avc: { format: 'avc' } }, { codec: 'avc1.420028', avc: { format: 'avc' } }, { codec: 'vp09.00.10.08' }];
+
+    function makeSource(w, h) {
+      const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+      const g = cv.getContext('2d');
+      return {
+        cv,
+        draw(i) {
+          const t = i / 15;
+          g.fillStyle = `hsl(${(t * 20) % 360},40%,35%)`; g.fillRect(0, 0, w, h);
+          for (let y = 0; y < h; y += 16) for (let x = 0; x < w; x += 16) {
+            const v = (Math.sin(x * 0.05 + t * 2) + Math.cos(y * 0.07 - t * 1.5)) * 60 + 128;
+            g.fillStyle = `rgb(${v | 0},${(255 - v) | 0},${(v / 2) | 0})`;
+            if (((x + y) / 16 + i) % 3 === 0) g.fillRect(x, y, 8, 8);
+          }
+          g.fillStyle = '#fff'; g.beginPath(); g.arc(w / 2 + Math.sin(t * 3) * w * 0.3, h / 2 + Math.cos(t * 2) * h * 0.3, h * 0.1, 0, 7); g.fill();
+        },
+      };
+    }
+
+    async function pick(w, h, fps, bitrate, hw, latency) {
+      for (const cand of CODECS) {
+        const cfg = { ...cand, width: w, height: h, bitrate, framerate: fps, latencyMode: latency, hardwareAcceleration: hw };
+        try { const r = await VideoEncoder.isConfigSupported(cfg); if (r && r.supported) return { ...cfg, ...(r.config || {}) }; } catch (e) { /* 次へ */ }
+      }
+      return null;
+    }
+
+    // 1つの圧縮器に n コマを流して、全部出るまでの時間を測る。makeFrame(i) が VideoFrame を返す
+    async function runOne(cfg, n, makeFrame, fps) {
+      let outN = 0; let err = null;
+      const enc = new VideoEncoder({ output: () => { outN++; }, error: (e) => { err = e; } });
+      enc.configure(cfg);
+      const t0 = performance.now();
+      for (let i = 0; i < n; i++) {
+        if (err) break;
+        const vf = makeFrame(i);
+        enc.encode(vf, { keyFrame: i % (fps * 2) === 0 });
+        vf.close();
+        while (enc.encodeQueueSize > 4 && !err) await sleep(0);
+      }
+      if (!err) await enc.flush();
+      const ms = performance.now() - t0;
+      try { enc.close(); } catch (e) { /* 無視 */ }
+      return { ms, out: outN, err: err ? String(err.message || err) : '' };
+    }
+
+    // 条件ごとの測定。先に10コマで準備運動をしてから、n コマを測る
+    async function bench(name, opts) {
+      try { await bench1(name, opts); } catch (e) { log(`${name}: 失敗(${e && e.message ? e.message : e})`); }
+    }
+    async function bench1(name, { w = 960, h = 480, fps = 15, bitrate = 1000000, hw = 'no-preference', latency = 'quality', n = 240, par = 1, cpu = false }) {
+      const cfg = await pick(w, h, fps, bitrate, hw, latency);
+      if (!cfg) { log(`${name}: この条件では使えません`); return; }
+      const src = makeSource(w, h);
+      let frames420 = null;
+      if (cpu) { // 描いた絵を先に普通のメモリ(I420)に変換しておき、毎コマそこから作る(画像用メモリからの読み戻しが起きない)。15枚を使い回す
+        const g = src.cv.getContext('2d');
+        frames420 = [];
+        for (let k = 0; k < 15; k++) {
+          src.draw(k);
+          const px = g.getImageData(0, 0, w, h).data;
+          const buf = new Uint8Array(w * h * 3 / 2);
+          const uOff = w * h; const vOff = uOff + (w * h) / 4;
+          for (let y = 0; y < h; y++) {
+            for (let x = 0; x < w; x++) {
+              const o = (y * w + x) * 4; const r = px[o], gg = px[o + 1], bb = px[o + 2];
+              buf[y * w + x] = (0.257 * r + 0.504 * gg + 0.098 * bb + 16) | 0;
+              if ((y & 1) === 0 && (x & 1) === 0) {
+                const ci = (y >> 1) * (w >> 1) + (x >> 1);
+                buf[uOff + ci] = (-0.148 * r - 0.291 * gg + 0.439 * bb + 128) | 0;
+                buf[vOff + ci] = (0.439 * r - 0.368 * gg - 0.071 * bb + 128) | 0;
+              }
+            }
+          }
+          frames420.push(buf);
+        }
+      }
+      const make = (i) => (cpu
+        ? new VideoFrame(frames420[i % 15], { format: 'I420', codedWidth: w, codedHeight: h, timestamp: Math.round((i * 1e6) / fps) })
+        : (src.draw(i), new VideoFrame(src.cv, { timestamp: Math.round((i * 1e6) / fps) })));
+      await runOne(cfg, 10, make, fps);
+      const t0 = performance.now();
+      const per = Math.floor(n / par);
+      const results = await Promise.all(Array.from({ length: par }, () => runOne(cfg, per, make, fps)));
+      const wall = performance.now() - t0;
+      const total = per * par;
+      const errs = results.map((r) => r.err).filter(Boolean);
+      log(`${name}: ${fmt(total / (wall / 1000))}コマ/秒(${total}コマを${fmt(wall / 1000)}秒)${par > 1 ? ` 同時${par}本` : ''} ${cfg.codec} ${w}x${h} ${cfg.hardwareAcceleration || ''}${errs.length ? ` エラー:${errs[0]}` : ''}`);
+    }
+
+    goBtn.addEventListener('click', async () => {
+      goBtn.disabled = true; copyBtn.disabled = true; lines.length = 0;
+      log(`【圧縮の速さ】${new Date().toLocaleString('ja-JP')}`);
+      log(`端末: ${navigator.userAgent}`);
+      log(`CPUの数: ${navigator.hardwareConcurrency || '-'}`);
+      if (typeof VideoEncoder === 'undefined') { log('この端末のブラウザには WebCodecs がありません'); goBtn.disabled = false; return; }
+      let wake = null;
+      try { wake = await navigator.wakeLock.request('screen'); } catch (e) { /* 無視 */ }
+      try {
+        // 同じ絵を、条件を変えて圧縮する(960x480・15コマ・1Mbps が、まとめの「低」と同じ)
+        await bench('A 今のまとめと同じ', {});
+        await bench('B 専用処理部を指定', { hw: 'prefer-hardware' });
+        await bench('C CPUを指定', { hw: 'prefer-software' });
+        await bench('D 低遅延の指定', { latency: 'realtime' });
+        await bench('E 絵を普通のメモリから作る', { cpu: true });
+        await bench('F 圧縮器を2本同時', { par: 2 });
+        await bench('G 圧縮器を4本同時', { par: 4 });
+        await bench('H 大きさ1280x480・30コマ・3Mbps(まとめの「標準」)', { w: 1280, h: 480, fps: 30, bitrate: 3000000 });
+        await bench('I 大きさ480x240', { w: 480, h: 240 });
+        log('おわり');
+      } catch (e) {
+        log(`止まりました: ${e && e.message ? e.message : e}`);
+      } finally {
+        try { wake && wake.release(); } catch (e) { /* 無視 */ }
+        goBtn.disabled = false; copyBtn.disabled = false;
+      }
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const text = lines.join('\n');
+      try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'コピーしました'; }
+      catch (e) { const r = document.createRange(); r.selectNodeContents(out); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copyBtn.textContent = '選択しました。コピーしてください'; }
+      setTimeout(() => { copyBtn.textContent = '結果をコピー'; }, 3000);
+    });
+  </script>
+</body>
+</html>
