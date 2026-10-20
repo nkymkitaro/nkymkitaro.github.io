@@ -87,6 +87,18 @@ export function aheadFrames() {
   return AHEAD_DEFAULT;
 }
 
+// 交互にやる: 出力の何コマぶんを、まとめて「読み出して並べる」→まとめて「圧縮に渡す」にするか。0なら1コマずつ(従来)。
+// 読み出しと圧縮が同時に端末の専用処理部を使うと取り合いになる疑いがあるため、時間をずらして試す。URL に ?batch=数 を付けると端末で試せる
+export const BATCH_DEFAULT = 0;
+export function batchFrames() {
+  try {
+    const raw = new URLSearchParams(location.search).get('batch');
+    const v = Number(raw);
+    if (raw !== null && raw !== '' && Number.isFinite(v) && v >= 0 && v <= 64) return Math.floor(v);
+  } catch (err) { /* 無視 */ }
+  return BATCH_DEFAULT;
+}
+
 // 前から順に読み出すだけの、書き出し用の読み取り役(見る画面の TrackB より単純。飛ぶ動きはない)
 // 必要なコマが出てくるまでだけ待ち、その先 aheadFrames() コマは待たずに読み出しへ渡しておく
 class ExportTrack {
@@ -274,12 +286,17 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
     const frameUs = 1e6 / q.fps;
     const fontPx = 15;
     let drawn = 0;
-    for (let k = 0; k < total; k++) {
-      if (shouldCancel()) throw cancelled();
-      if (encErr) throw encErr;
+    const B = Math.max(1, batchFrames());
+    // 並べる先: 交互にやるときは B 枚、従来は1枚
+    const surfaces = [{ cv, g }];
+    for (let j = 1; j < B; j++) {
+      const c2 = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
+      surfaces.push({ cv: c2, g: c2.getContext('2d') });
+    }
+    const renderFrame = async (k, g2) => {
       const t = tMin + (k * 1000) / q.fps;
-      g.fillStyle = '#000';
-      g.fillRect(0, 0, W, H);
+      g2.fillStyle = '#000';
+      g2.fillRect(0, 0, W, H);
       for (let i = 0; i < tracks.length; i++) {
         const tr = tracks[i];
         const r0 = performance.now();
@@ -291,29 +308,48 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
         if (f) {
           const sw = f.displayWidth; const sh = f.displayHeight;
           const s = Math.min(cellW / sw, cellH / sh);
-          g.drawImage(f, x0 + (cellW - sw * s) / 2, y0 + (cellH - sh * s) / 2, sw * s, sh * s);
+          g2.drawImage(f, x0 + (cellW - sw * s) / 2, y0 + (cellH - sh * s) / 2, sw * s, sh * s);
         }
         // カメラ名(左上)。見る画面と同じ、暗い地に白い文字
         const label = String(tr.label);
         const fs = Math.max(fontPx, Math.round(cellH * 0.045));
-        g.font = `900 ${fs}px Murecho, sans-serif`;
-        g.textAlign = 'left'; g.textBaseline = 'middle';
-        const bw = g.measureText(label).width + fs * 1.2;
-        g.fillStyle = 'rgba(28, 28, 30, 0.82)';
-        g.fillRect(x0, y0, bw, fs * 1.9);
-        g.fillStyle = '#fff';
-        g.fillText(label, x0 + fs * 0.6, y0 + fs * 0.95);
+        g2.font = `900 ${fs}px Murecho, sans-serif`;
+        g2.textAlign = 'left'; g2.textBaseline = 'middle';
+        const bw = g2.measureText(label).width + fs * 1.2;
+        g2.fillStyle = 'rgba(28, 28, 30, 0.82)';
+        g2.fillRect(x0, y0, bw, fs * 1.9);
+        g2.fillStyle = '#fff';
+        g2.fillText(label, x0 + fs * 0.6, y0 + fs * 0.95);
         diag.add('draw', performance.now() - d0);
       }
-      const vf = new VideoFrame(cv, { timestamp: Math.round(k * frameUs), duration: Math.round(frameUs) });
+    };
+    const pushFrame = async (k, src) => {
+      const vf = new VideoFrame(src, { timestamp: Math.round(k * frameUs), duration: Math.round(frameUs) });
       encoder.encode(vf, { keyFrame: k % (q.fps * 2) === 0 });
       vf.close();
       drawn++;
       diag.qs('encode', encoder.encodeQueueSize);
+    };
+    const drainTo = async (limit) => {
       const e0 = performance.now();
-      while (encoder.encodeQueueSize > 4) await new Promise((r) => setTimeout(r, 1));
+      while (encoder.encodeQueueSize > limit && !encErr) await new Promise((r) => setTimeout(r, 1));
       diag.add('encWait', performance.now() - e0);
-      if (k % 5 === 0) {
+    };
+    for (let k0 = 0; k0 < total; k0 += B) {
+      if (shouldCancel()) throw cancelled();
+      if (encErr) throw encErr;
+      const n = Math.min(B, total - k0);
+      if (B === 1) {
+        await renderFrame(k0, g);
+        await pushFrame(k0, cv);
+        await drainTo(4);
+      } else {
+        for (let j = 0; j < n; j++) await renderFrame(k0 + j, surfaces[j].g); // 読み出して並べる(まとめて)
+        await drainTo(0); // 前の圧縮が終わるのを待ってから(圧縮が空いている間に読み出しを進めたので、待ちは短いはず)
+        for (let j = 0; j < n; j++) await pushFrame(k0 + j, surfaces[j].cv); // 圧縮に渡す(まとめて)
+      }
+      const k = k0 + n - 1;
+      if (Math.floor(k0 / B) % Math.max(1, Math.ceil(5 / B)) === 0) {
         const el = performance.now() - started;
         onProgress({ fraction: Math.min(0.97, (k + 1) / total), remainMs: Math.max(0, (el / (k + 1)) * (total - k - 1)) });
         await tick();
@@ -355,7 +391,7 @@ async function composeFast(cams, all, q, audioCam, { onProgress, shouldCancel })
       otherMs: r(ms - diag.t.read - diag.t.draw - diag.t.encWait),
       decodeQ: { avg: avg('decode'), max: mx('decode') }, encodeQ: { avg: avg('encode'), max: mx('encode') },
       outFps: +(drawn / (ms / 1000)).toFixed(1),
-      ahead: tracks[0].ahead, hiddenMs: r(diag.hiddenMs),
+      ahead: tracks[0].ahead, batch: batchFrames(), hiddenMs: r(diag.hiddenMs),
     };
     return { blob, mime: 'video/mp4', ext: 'mp4', mode: 'fast', hasAudio, audioCam: aCam[0].label, videoCodec: cfg.codec, audioCodec: aKind ? aCfg.codec : '', width: W, height: H, fps: q.fps, frames: drawn, ms, diag: diagOut };
   } finally {
