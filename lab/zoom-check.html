@@ -105,7 +105,9 @@
       return null;
     }
     async function runDigital(zoom, seconds) {
-      const W = Math.floor(Math.min(v.videoWidth, 1280) / 2) * 2; const H = Math.floor(Math.min(v.videoHeight, 720) / 2) * 2;
+      // 縦向き・横向きのどちらでも、長い辺が1280以下になるよう、縦横の比を保って縮める
+      const sc = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+      const W = Math.floor((v.videoWidth * sc) / 2) * 2; const H = Math.floor((v.videoHeight * sc) / 2) * 2;
       const cfg = await pickEnc(W, H);
       if (!cfg) { log(`倍率${zoom}: 圧縮の設定が使えません`); return; }
       const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
