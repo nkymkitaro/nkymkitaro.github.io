@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>ズームの確認(試作)</title>
+  <style>
+    html, body { margin: 0; background: #000; color: #fff; font-family: system-ui, sans-serif; }
+    body { display: flex; flex-direction: column; gap: 14px; padding: 16px; box-sizing: border-box; min-height: 100%; }
+    button { font-size: 18px; font-weight: 800; padding: 12px 20px; min-height: 56px; border-radius: 10px; border: 1px solid #666; background: #333; color: #fff; }
+    button:disabled { opacity: 0.45; }
+    p { margin: 0; color: #aaa; font-size: 14px; line-height: 1.6; }
+    h2 { margin: 6px 0 0; font-size: 16px; }
+    video { width: 100%; max-height: 38vh; background: #111; border-radius: 8px; object-fit: contain; }
+    input[type=range] { width: 100%; height: 40px; }
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 13px; line-height: 1.5; color: #ddd; }
+  </style>
+</head>
+<body>
+  <!-- 撮影中のカメラのズームが、この端末で使えるかを調べる確認用のページ。映像は保存せず、何も送らない。試作です。 -->
+  <p>この端末のカメラで、ズームが使えるかを調べます。映像は保存せず、どこにも送りません。1〜3を順に押してください。3は約1分かかります。調べている間は、ほかのアプリに切り替えず、画面を点けたままにしてください。</p>
+  <video id="v" playsinline muted autoplay></video>
+  <button id="b1" type="button">1. カメラの対応状況を調べる</button>
+  <h2>2. カメラ自体のズーム</h2>
+  <input id="zs" type="range" min="1" max="1" step="0.1" value="1" disabled>
+  <button id="b2" type="button" disabled>2. ズームを動かして確かめる</button>
+  <h2>3. デジタルズーム(画面の切り取り)の負荷</h2>
+  <button id="b3" type="button" disabled>3. 録画と同じ負荷で測る(約1分)</button>
+  <button id="copy" type="button" disabled>結果をコピー</button>
+  <pre id="out"></pre>
+  <script type="module">
+    const out = document.getElementById('out');
+    const v = document.getElementById('v');
+    const b1 = document.getElementById('b1'); const b2 = document.getElementById('b2'); const b3 = document.getElementById('b3');
+    const copyBtn = document.getElementById('copy'); const zs = document.getElementById('zs');
+    const lines = [];
+    const log = (s) => { lines.push(s); out.textContent = lines.join('\n'); };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const fmt = (n, d = 1) => (Math.round(n * 10 ** d) / 10 ** d).toFixed(d);
+    let stream = null; let track = null; let caps = null; let wake = null;
+
+    // 1. 対応状況
+    b1.addEventListener('click', async () => {
+      b1.disabled = true; lines.length = 0;
+      log(`【ズームの確認】${new Date().toLocaleString('ja-JP')}`);
+      log(`端末: ${navigator.userAgent}`);
+      try {
+        if (stream) stream.getTracks().forEach((t) => t.stop());
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+        track = stream.getVideoTracks()[0];
+        v.srcObject = stream; await v.play().catch(() => {});
+        await sleep(500);
+        const s = track.getSettings();
+        log(`映像: ${s.width || v.videoWidth}x${s.height || v.videoHeight} ${s.frameRate ? fmt(s.frameRate, 0) + 'コマ' : ''} カメラ向き:${s.facingMode || '不明'}`);
+        caps = typeof track.getCapabilities === 'function' ? track.getCapabilities() : null;
+        log(`getCapabilities: ${caps ? 'あり' : 'なし'}`);
+        if (caps) log(`対応している項目: ${Object.keys(caps).join(', ')}`);
+        if (caps && caps.zoom) {
+          log(`カメラ自体のズーム: 使える 最小${caps.zoom.min} 最大${caps.zoom.max} 刻み${caps.zoom.step}  いまの値${s.zoom ?? '不明'}`);
+          zs.min = caps.zoom.min; zs.max = caps.zoom.max; zs.step = caps.zoom.step || 0.1; zs.value = s.zoom || caps.zoom.min; zs.disabled = false; b2.disabled = false;
+        } else {
+          log('カメラ自体のズーム: 使えない(この端末のブラウザは zoom を出していません)');
+        }
+        try {
+          const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+          log(`カメラの数: ${devs.length} ${devs.map((d) => d.label || '(名前なし)').join(' / ')}`);
+        } catch (e) { log('カメラの一覧: 取れませんでした'); }
+        log(`映像の取り出し: VideoFrame ${typeof VideoFrame !== 'undefined' ? 'あり' : 'なし'} / VideoEncoder ${typeof VideoEncoder !== 'undefined' ? 'あり' : 'なし'} / requestVideoFrameCallback ${v.requestVideoFrameCallback ? 'あり' : 'なし'}`);
+        b3.disabled = typeof VideoFrame === 'undefined' || typeof VideoEncoder === 'undefined';
+      } catch (e) {
+        log(`カメラを開けませんでした: ${e && e.name ? e.name + ' ' : ''}${e && e.message ? e.message : e}`);
+      }
+      b1.disabled = false; copyBtn.disabled = false;
+    });
+
+    zs.addEventListener('input', async () => {
+      if (!track) return;
+      try { await track.applyConstraints({ advanced: [{ zoom: Number(zs.value) }] }); } catch (e) { /* 結果は2のボタンで記録する */ }
+    });
+
+    // 2. カメラ自体のズームを、最小・中間・最大に動かして確かめる
+    b2.addEventListener('click', async () => {
+      if (!track || !caps || !caps.zoom) return;
+      b2.disabled = true;
+      const { min, max } = caps.zoom;
+      for (const z of [min, (min + max) / 2, max, min]) {
+        const t0 = performance.now();
+        let res = '成功';
+        try { await track.applyConstraints({ advanced: [{ zoom: z }] }); } catch (e) { res = `失敗(${e && e.name ? e.name : e})`; }
+        await sleep(400);
+        const s = track.getSettings();
+        log(`ズーム ${fmt(z, 2)} を指示 → ${res} / いまの値 ${s.zoom ?? '不明'} / 映像 ${v.videoWidth}x${v.videoHeight} / 指示から${fmt(performance.now() - t0, 0)}ms`);
+        zs.value = s.zoom || z;
+      }
+      b2.disabled = false;
+    });
+
+    // 3. デジタルズームの負荷: 録画と同じ形(映像を1コマずつ取り出して圧縮)で、倍率ごとに15秒測る
+    async function pickEnc(w, h) {
+      for (const c of [{ codec: 'avc1.42001f', avc: { format: 'avc' } }, { codec: 'avc1.420028', avc: { format: 'avc' } }, { codec: 'vp09.00.10.08' }]) {
+        const cfg = { ...c, width: w, height: h, bitrate: 1000000, framerate: 30, latencyMode: 'quality' };
+        try { const r = await VideoEncoder.isConfigSupported(cfg); if (r && r.supported) return cfg; } catch (e) { /* 次へ */ }
+      }
+      return null;
+    }
+    async function runDigital(zoom, seconds) {
+      const W = Math.floor(Math.min(v.videoWidth, 1280) / 2) * 2; const H = Math.floor(Math.min(v.videoHeight, 720) / 2) * 2;
+      const cfg = await pickEnc(W, H);
+      if (!cfg) { log(`倍率${zoom}: 圧縮の設定が使えません`); return; }
+      const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(W, H) : Object.assign(document.createElement('canvas'), { width: W, height: H });
+      const g = cv.getContext('2d');
+      let encoded = 0; let err = null;
+      const enc = new VideoEncoder({ output: () => { encoded++; }, error: (e) => { err = e; } });
+      enc.configure(cfg);
+      let n = 0; let skipped = 0; let late = 0; let sum = 0; let max = 0; let lastT = 0;
+      const t00 = performance.now();
+      await new Promise((resolve) => {
+        const tick = (now) => {
+          if (performance.now() - t00 >= seconds * 1000 || err) { resolve(); return; }
+          const a = performance.now();
+          if (lastT && now - lastT > 70) late++;
+          lastT = now;
+          if (enc.encodeQueueSize > 6) { skipped++; } else {
+            let src = v;
+            if (zoom > 1) {
+              const sw = v.videoWidth / zoom; const sh = v.videoHeight / zoom;
+              g.drawImage(v, (v.videoWidth - sw) / 2, (v.videoHeight - sh) / 2, sw, sh, 0, 0, W, H);
+              src = cv;
+            }
+            const vf = new VideoFrame(src, { timestamp: Math.round((performance.now() - t00) * 1000) });
+            enc.encode(vf, { keyFrame: n % 60 === 0 });
+            vf.close();
+            n++;
+          }
+          const d = performance.now() - a; sum += d; if (d > max) max = d;
+          v.requestVideoFrameCallback(tick);
+        };
+        v.requestVideoFrameCallback(tick);
+      });
+      try { await enc.flush(); } catch (e) { /* 無視 */ }
+      try { enc.close(); } catch (e) { /* 無視 */ }
+      const sec = (performance.now() - t00) / 1000;
+      log(`倍率${zoom}: ${fmt(n / sec)}コマ/秒で圧縮(${n}コマ) 1コマの処理 平均${fmt(sum / Math.max(1, n + skipped), 2)}ms 最大${fmt(max, 1)}ms / 間に合わず捨てたコマ ${skipped} / 70ms以上空いた回数 ${late} / ${cfg.codec} ${W}x${H}${err ? ` エラー:${err.message || err}` : ''}`);
+    }
+
+    b3.addEventListener('click', async () => {
+      if (!track) return;
+      b3.disabled = true; b1.disabled = true; copyBtn.disabled = true;
+      try { wake = await navigator.wakeLock.request('screen'); } catch (e) { /* 無視 */ }
+      try {
+        if (caps && caps.zoom) { try { await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (e) { /* 無視 */ } await sleep(300); }
+        log('--- 録画と同じ負荷(映像を1コマずつ取り出して圧縮)。各15秒 ---');
+        await runDigital(1, 15);
+        await runDigital(2, 15);
+        await runDigital(3, 15);
+        log('おわり。端末の熱さを手で触って、結果と一緒に伝えてください');
+      } catch (e) {
+        log(`止まりました: ${e && e.message ? e.message : e}`);
+      } finally {
+        try { wake && wake.release(); } catch (e) { /* 無視 */ }
+        b3.disabled = false; b1.disabled = false; copyBtn.disabled = false;
+      }
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const text = lines.join('\n');
+      try { await navigator.clipboard.writeText(text); copyBtn.textContent = 'コピーしました'; }
+      catch (e) { const r = document.createRange(); r.selectNodeContents(out); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copyBtn.textContent = '選択しました。コピーしてください'; }
+      setTimeout(() => { copyBtn.textContent = '結果をコピー'; }, 3000);
+    });
+  </script>
+</body>
+</html>
