@@ -49,6 +49,7 @@ body {
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
 }
+.brand-logo { display: block; height: 2.6rem; width: auto; margin: 0 auto; }
 h1 {
   font-size: 2rem;
   font-weight: 900;
@@ -831,6 +832,7 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
 }
 @media (orientation: landscape) {
   body.mode-setup h1 { margin: 0 0 8px; font-size: 1.5rem; }
+  .brand-logo { height: 1.9rem; }
   #setupArea { max-width: 960px; }
   .start-panels { flex-direction: row; --start-slant: 48px; }
   /* 横向きは左右に並べ、境目を縦方向の斜めにする(左パネルの右辺を傾ける) */
