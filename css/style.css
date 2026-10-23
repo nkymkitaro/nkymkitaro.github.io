@@ -1862,3 +1862,58 @@ body.mode-monitor #monitorArea:not(.replaying) {
 @media (orientation: landscape) and (max-height: 340px) {
   body.mode-monitor #monitorArea.has-children:not(.replaying) .var-hint { display: none; }
 }
+
+/* =========================================================
+   撮影中のカメラのズーム(2026-10-23。依頼: 2026-10-23-to-coder-camera-zoom.md。js/zoom-control.js)
+   - 画面の下のスライダーと倍率の表示だけ。対応していない端末では出ない(hidden)
+   - 親機: 映像の下側(縦向きは「カメラを追加」の上、横向きは映像の下端)。子機: 画面の下側
+   - 高さ56px(押せる範囲は48px以上)、つまみは32px。色は白・黒・グレーのみ(赤とアンバーは使わない)
+   - 倍率の文字は18px。動きは付けない(値の変更はすぐ映像に反映する)
+   ========================================================= */
+.zoom-ctl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: min(86%, 380px);
+  height: 56px;
+  padding: 0 16px;
+  border-radius: 28px;
+  background: rgba(20, 20, 22, 0.88);
+  color: var(--text);
+  touch-action: none; /* なぞっている間に画面が動かないように */
+}
+.zoom-ctl[hidden], .zoom-ctl.zoom-inactive { display: none; }
+.zoom-ctl .zoom-slider { flex: 1 1 auto; min-width: 0; height: 48px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; outline: none; touch-action: none; }
+.zoom-ctl .zoom-slider::-webkit-slider-thumb { width: 32px; height: 32px; margin-top: -13px; }
+.zoom-ctl .zoom-slider::-moz-range-thumb { width: 32px; height: 32px; }
+.zoom-ctl .zoom-readout {
+  flex: 0 0 auto;
+  min-width: 3.4em;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* 親機: 映像の下側。縦向きは、カメラの切り替えと「カメラを追加」(高さ48px+下の余白12px)の上に10px空ける */
+body.mode-monitor #monitorArea:not(.replaying) .zoom-host {
+  grid-area: video;
+  align-self: end;
+  justify-self: center;
+  z-index: 3;
+  margin: 0 0 70px;
+}
+body.mode-monitor #monitorArea.replaying .zoom-host { display: none; }
+@media (orientation: landscape) and (max-height: 540px) {
+  /* 横向きは、カメラの切り替えが右の列にあるので、映像の下端に置く */
+  body.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 0 12px; }
+}
+/* 子機: 画面の下側。「画面をロックすると送信が止まります」の上に置く */
+.zoom-send {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 64px);
+  transform: translateX(-50%);
+  z-index: 4;
+}

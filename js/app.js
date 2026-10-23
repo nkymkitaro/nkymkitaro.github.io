@@ -19,6 +19,7 @@ import { initJoinQr, closeJoinQr, parseJoinParam, parseJoinMethod, removeJoinPar
 import { initStartScreen, rememberRole } from './start-screen.js';
 import { initPrepPage, openPrep } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
+import { createZoomControl } from './zoom-control.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
 
 // LINEなどのアプリ内ブラウザの判定(js/in-app-browser.js が <head> で先に済ませている)。
@@ -43,6 +44,8 @@ if (!inApp.leaving) {
 }
 
 const cameraLink = new CameraLink();
+let hostZoom = null; // 親機のズームの操作(js/zoom-control.js)
+let sendZoom = null; // 子機のズームの操作
 // さかのぼれる長さの既定は30秒(15秒は試合でも地稽古でも短いため、2026-10-17 に15秒から上げた)。
 // 数分の録画は、この写真方式ではなく動画で残す別の方式で扱う
 const DEFAULT_BUFFER_SEC = 30;
@@ -89,6 +92,14 @@ function startMonitor() {
   // 表示サイズは映像の縦横比に合わせてReplayPlayer側で自動調整する
   cameraLink.startAsMonitor(() => {
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
+    // 親機自身のカメラ(カメラ1)のズーム。対応していない端末では出さない
+    if (!hostZoom) hostZoom = createZoomControl({
+      parent: document.getElementById('monitorArea'),
+      className: 'zoom-host',
+      getTrack: () => { const st = cameraLink.localMonitorVideo.srcObject; return st ? st.getVideoTracks()[0] : null; },
+    });
+    hostZoom.refresh();
+    hostZoom.setActive(cameraLink.activeSource === 'local');
   });
   initJoinQr(cameraLink.myId); // 参加用のQR(番号は startAsMonitor の最初で決まる)。作れなくても、番号で参加できる
 
@@ -236,6 +247,14 @@ async function connectToMonitor(targetId, method = 'code') {
   // つながった: 入力の部品を片付けて、カメラの映像を画面いっぱいに出す
   cameraNumber = result.number || 0;
   sendVideo.srcObject = cameraLink.ownStream;
+  if (!sendZoom) {
+    sendZoom = createZoomControl({
+      parent: document.getElementById('sendView'),
+      className: 'zoom-send',
+      getTrack: () => (cameraLink.ownStream ? cameraLink.ownStream.getVideoTracks()[0] : null),
+    });
+  }
+  sendZoom.refresh(); // つなぎ直すたびに1倍に戻る
   sendVideo.play().catch(() => {}); // 自動再生がブロックされても、映像自体は流れている
   document.activeElement && document.activeElement.blur();
   document.body.classList.add('camera-sending');
@@ -247,6 +266,7 @@ function leaveCameraSending() {
   cameraLink.disconnectFromMonitor();
   document.body.classList.remove('camera-sending');
   sendVideo.srcObject = null;
+  if (sendZoom) sendZoom.el.hidden = true;
   camBand.reset();
   codeInput.clear();
   cameraStatusEl.textContent = '';
@@ -309,6 +329,7 @@ function renderCamSelector(sources) {
   container.style.display = multi ? '' : 'none';
   document.getElementById('monitorArea').classList.toggle('has-children', multi);
   const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
+  if (hostZoom) hostZoom.setActive(cameraLink.activeSource === 'local'); // 親機のカメラを見ているときだけ
   // リプレイ中は全画面で操作が消えることがあるので、いま見ているカメラは帯の下に常に出しておく
   // (並べて見ているときは、それぞれの映像にカメラ名が出るので出さない)
   const current = sources.find((src) => src.id === highlightId);
