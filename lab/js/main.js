@@ -16,6 +16,7 @@ import { ensureMicPermission } from './audio-input.js';
 import { showToast } from '../../js/toast.js';
 import { attachPress } from '../../js/press-feedback.js';
 import { enableWakeLock } from '../../js/wake-lock.js';
+import { track } from '../../js/analytics.js';
 
 const PEER_PREFIX = 'kendo-var-room-';
 
@@ -397,6 +398,7 @@ async function initParent(app) {
       if (ok && parent.take) { parent.take.remainMin = remainMin; parent._saveTake(); }
       // 録画の最中にまとめを先に作る(既定で入れる。2026-10-23 中山さんの決定。止めて比べたいときは URL に ?pre=0)
       if (ok && parent.take && new URLSearchParams(location.search).get('pre') !== '0') prebuilder.start(parent.take.id, el('#optQuality').value);
+      if (ok) track('rec_start', { cameras: 1 + [...parent.children.values()].filter((c) => c.connected).length }); // 親機のカメラ+つながっている子機(録画が実際に始まったときだけ)
       if (!ok) showToast('録画を開始できませんでした');
       else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
       enableWakeLock({ quiet: true });
@@ -564,6 +566,7 @@ async function initParent(app) {
   async function saveTake(t) {
     if (savingIds.has(t.id)) return; // 二度押ししても、保存は1回だけ
     savingIds.add(t.id);
+    track('rec_save');
     setSheet(null); // 帯と下の「中止」が見えるように、シートを閉じる(画面の絵の7)
     takesSig = ''; render();
     const started = performance.now();

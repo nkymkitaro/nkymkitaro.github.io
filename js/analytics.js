@@ -27,6 +27,8 @@ const ALLOWED_EVENTS = {
   var_zoom: [], // リプレイ中に拡大を使った(VAR1回につき1度)
   var_scrub: [], // リプレイ中に映像をなぞってコマ送りした(VAR1回につき1度)
   clip_save: ['count', 'all_cameras'],
+  rec_start: ['cameras'], // 録画を始めた(親機のカメラを含む台数)。録画が実際に始まったときだけ
+  rec_save: [], // 録画の保存を押した(保存を始めた時点)
   line_open: [],
 };
 const MAX_STRING_LENGTH = 40; // 万一、長い文字が混ざっても送らない
