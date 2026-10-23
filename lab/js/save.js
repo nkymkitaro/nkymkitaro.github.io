@@ -87,7 +87,7 @@ export function resolveSaveMode(pref = 'auto') {
 }
 
 // 端末に出す。戻り値: 'shared' | 'downloaded' | 'cancelled'
-export async function deliverFiles(files, { title = '剣道VAR', mode = 'auto' } = {}) {
+export async function deliverFiles(files, { title = 'MITORI', mode = 'auto' } = {}) {
   if (resolveSaveMode(mode) === 'share' && navigator.canShare && navigator.share) {
     try {
       if (navigator.canShare({ files })) {

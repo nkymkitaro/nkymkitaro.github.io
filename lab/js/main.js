@@ -552,7 +552,7 @@ async function initParent(app) {
     window.__lastMake = { file, ...lastSave.make };
     const deliver = async () => {
       hideMake();
-      const how = await deliverFiles([file], { title: '剣道VAR 録画(まとめ)', mode: el('#optSave').value });
+      const how = await deliverFiles([file], { title: 'MITORI 録画(まとめ)', mode: el('#optSave').value });
       if (how === 'cancelled') showToast('保存をやめました');
       else { saving = { text: '保存しました' }; refreshSub(); setTimeout(() => { saving = null; refreshSub(); }, 2200); }
     };
@@ -586,7 +586,7 @@ async function initParent(app) {
         showToast(err && err.message && /映像がありません/.test(err.message) ? err.message : '途中で止まりました。もう一度保存してください。');
         return;
       }
-      const how = await deliverFiles(res.files, { title: '剣道VAR 録画', mode: el('#optSave').value });
+      const how = await deliverFiles(res.files, { title: 'MITORI 録画', mode: el('#optSave').value });
       lastSave = { at: Date.now(), ms: Math.round(performance.now() - started), how, info: res.info, files: res.files.map((f) => ({ name: f.name, type: f.type, size: f.size })) };
       window.__lastSave = lastSave;
       if (how === 'cancelled') showToast('保存をやめました');

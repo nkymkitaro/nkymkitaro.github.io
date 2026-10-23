@@ -191,7 +191,7 @@ async function encodeFramesToVideo(frames, fps) {
 async function shareOrDownload(files) {
   if (navigator.canShare && navigator.share && navigator.canShare({ files })) {
     try {
-      await navigator.share({ files, title: '剣道VAR クリップ' });
+      await navigator.share({ files, title: 'MITORI クリップ' });
       return;
     } catch (err) {
       if (err && err.name === 'AbortError') return; // 共有シートを閉じただけなので何もしない
