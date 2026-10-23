@@ -19,6 +19,8 @@ import { enableWakeLock } from '../../js/wake-lock.js';
 import { track } from '../../js/analytics.js';
 
 const PEER_PREFIX = 'kendo-var-room-';
+// 試験用の入口(「試験用」のボタン)は、試作ページ(<html data-lab>)だけに出す。通常のページには出さない
+const isLab = document.documentElement.hasAttribute('data-lab');
 
 // ---- アイコン(仕様2-2、画面の絵のSVGをそのまま使う)。録画・録画停止・VARは塗りつぶし、ほかは線 ----
 const svgFill = (inner) => `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${inner}</svg>`;
@@ -198,7 +200,7 @@ async function initParent(app) {
       <p class="lab-note" id="labListNote" hidden>映像はこの端末の中にあります。</p>
       <ul class="lab-takes" id="labTakes"></ul>
       <div class="lab-foot">
-        <button type="button" class="lab-link" id="labOpenTest">試験用</button>
+        ${isLab ? '<button type="button" class="lab-link" id="labOpenTest">試験用</button>' : ''}
         <button type="button" class="btn-hero lab-close" id="labCloseSheet">閉じる</button>
       </div>
     </div>
@@ -309,7 +311,8 @@ async function initParent(app) {
   }
   overlay.addEventListener('click', () => setSheet(null));
   el('#labCloseSheet').addEventListener('click', () => setSheet(null));
-  el('#labOpenTest').addEventListener('click', () => setSheet('test'));
+  if (isLab) el('#labOpenTest').addEventListener('click', () => setSheet('test'));
+  else testSheet.hidden = true; // 通常のページには、試験用の入口を出さない(中の設定の部品は、値を読むために残す)
   el('#labBackSheet').addEventListener('click', () => setSheet('main', { list: listOnly }));
 
   methodsPromise.then((m) => {

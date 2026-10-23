@@ -796,9 +796,9 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// 試作ページ(lab/multi-rec.html、<html data-lab>)だけに、接続と録画を貸し出す。
-// 試作の部品(lab/js/)がここから受け取る。通常のページ(index.html)では何も公開しない
-if (document.documentElement.hasAttribute('data-lab')) {
+// 録画の部品(lab/js/main.js)に、接続とカメラの映像を貸し出す。
+// 録画は通常のページ(index.html)と試作ページ(lab/multi-rec.html、<html data-lab>)の両方で動く
+{
   window.kendoVarApp = {
     cameraLink,
     recorder,
