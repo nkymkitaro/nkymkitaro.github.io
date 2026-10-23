@@ -395,8 +395,8 @@ async function initParent(app) {
         method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: maxSel, audio: el('#optAudio').value === '1',
       });
       if (ok && parent.take) { parent.take.remainMin = remainMin; parent._saveTake(); }
-      // 録画の最中にまとめを先に作る(試験用。URL に ?pre=1 を付けたときだけ)
-      if (ok && parent.take && new URLSearchParams(location.search).get('pre') === '1') prebuilder.start(parent.take.id, el('#optQuality').value);
+      // 録画の最中にまとめを先に作る(既定で入れる。2026-10-23 中山さんの決定。止めて比べたいときは URL に ?pre=0)
+      if (ok && parent.take && new URLSearchParams(location.search).get('pre') !== '0') prebuilder.start(parent.take.id, el('#optQuality').value);
       if (!ok) showToast('録画を開始できませんでした');
       else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
       enableWakeLock({ quiet: true });
