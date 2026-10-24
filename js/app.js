@@ -118,12 +118,12 @@ function renderRecStatus() {
 
   let summary;
   if (cameraLink.isPaused) {
-    summary = '一時停止中のため、録画していません';
+    summary = '一時停止中のため、撮影していません';
   } else {
     const recorded = Math.floor(recorder.getFrames(cameraLink.activeSource).length / recorder.fps);
     summary = recorded >= rewind
       ? `${rewind}秒前まで戻れます`
-      : `録画中です。あと${rewind - recorded}秒で${rewind}秒前まで戻れます`;
+      : `撮影中です。あと${rewind - recorded}秒で${rewind}秒前まで戻れます`;
   }
 
   let camsHtml = '';
@@ -132,7 +132,7 @@ function renderRecStatus() {
       let state;
       if (!src.connected) state = '<span class="rec-cam-off">切断</span>';
       else if (cameraLink.isPaused) state = '<span class="rec-cam-off">停止中</span>';
-      else state = '<span class="rec-cam-on"><span class="rec-dot"></span>録画中</span>';
+      else state = '<span class="rec-cam-on"><span class="rec-dot"></span>撮影中</span>';
       return `<span class="rec-cam">${src.label} ${state}</span>`;
     }).join('') + '</div>';
   }
@@ -316,7 +316,7 @@ function updatePauseButtonIcon(paused) {
   btn.innerHTML = paused
     ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.2" height="14" rx="1"/><rect x="13.8" y="5" width="4.2" height="14" rx="1"/></svg>';
-  btn.setAttribute('aria-label', paused ? '録画を再開' : '録画を一時停止');
+  btn.setAttribute('aria-label', paused ? '撮影を再開' : '撮影を一時停止');
 }
 
 // カメラ切り替えボタンを、接続中カメラの数(最大4つ)に合わせて描き直す
@@ -671,7 +671,7 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   });
   if (!ok) {
     recorder.release();
-    showToast('録画データがまだありません');
+    showToast('見返せる映像がまだありません');
     return;
   }
   dismissRoleSurvey(); // 立場の問いが開いたまま次のVARに入ったら、閉じる
