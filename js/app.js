@@ -17,7 +17,7 @@ import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } 
 import { createCodeInput } from './code-input.js';
 import { initJoinQr, closeJoinQr, parseJoinParam, parseJoinMethod, removeJoinParam } from './join-qr.js';
 import { initStartScreen, rememberRole } from './start-screen.js';
-import { initPrepPage, openPrep } from './prep-page.js';
+import { initPrepPage, openPrep, isPrepSeen } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
 import { createZoomControl } from './zoom-control.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
@@ -79,6 +79,7 @@ function leaveSetupScreen() {
   document.body.classList.remove('mode-setup');
 }
 
+let liveStartSent = false;
 function startMonitor() {
   leaveSetupScreen();
   document.getElementById('monitorArea').style.display = 'block';
@@ -91,6 +92,7 @@ function startMonitor() {
 
   // 表示サイズは映像の縦横比に合わせてReplayPlayer側で自動調整する
   cameraLink.startAsMonitor(() => {
+    if (!liveStartSent) { liveStartSent = true; track('live_start'); } // 撮影の画面に着いた(許可が通り、映像が出た)。1回だけ
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
     // 親機自身のカメラ(カメラ1)のズーム。対応していない端末では出さない
     if (!hostZoom) hostZoom = createZoomControl({
@@ -101,7 +103,9 @@ function startMonitor() {
     hostZoom.refresh();
     hostZoom.setActive(cameraLink.activeSource === 'local');
   });
-  initJoinQr(cameraLink.myId); // 参加用のQR(番号は startAsMonitor の最初で決まる)。作れなくても、番号で参加できる
+  // 参加用のQR(番号は startAsMonitor の最初で決まる)。作れなくても、番号で参加できる。
+  // 初めて「カメラを追加」を押したときだけ、先に「はじめる前に」(同じWi-Fi・テザリング)を出す
+  initJoinQr(cameraLink.myId, { beforeOpen: (proceed) => { if (isPrepSeen()) return false; openPrep({ onOk: proceed }); return true; } });
 
   setInterval(renderRecStatus, 500);
   renderRecStatus();
@@ -379,6 +383,7 @@ const helpSheet = document.getElementById('helpSheet');
 const helpOverlay = document.getElementById('helpOverlay');
 
 function openHelp() {
+  if (!helpSheet.classList.contains('open')) track('help_open'); // 開いたという事実だけ。1回の操作で1回
   helpSheet.classList.add('open');
   helpOverlay.classList.add('open');
 }
@@ -509,6 +514,13 @@ if (qrJoinCode && !inApp.blocked && !inApp.leaving) {
   startCamera({ focus: false });
   codeInput.fill(qrJoinCode);
   connectToMonitor(qrJoinCode, parseJoinMethod(window.location.search));
+}
+// リンクですぐ撮影(?start=1): 準備ページとスタート画面を飛ばして、「はじめる」を押したあとの画面へ進む。
+// 「前回」の印は変えない。「最初の画面に戻る」矢印はそのまま使える(戻ると、?start=1 のないスタート画面)。
+// アプリ内ブラウザで先へ進ませないとき・?join= のときは、何もしない
+if (/[?&]start=1(&|$)/.test(window.location.search) && !qrJoinCode && !inApp.blocked && !inApp.leaving) {
+  track('role_select', { role: 'start' });
+  startMonitor();
 }
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
 

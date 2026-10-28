@@ -47,9 +47,6 @@
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="lab/lab.css">
 
-  <!-- 初めて開いたときだけ「はじめる前に」を出すための目印。スタート画面が一瞬見えてしまわないよう、描画の前に付ける。
-       覚えておけない環境(プライベートブラウズなど)では、毎回出る -->
-  <script>try { if (!/[?&]join=\d{4}(&|$)/.test(location.search) && !localStorage.getItem('kendo-var-prep-seen')) document.documentElement.classList.add('needs-prep'); } catch (e) { if (!/[?&]join=\d{4}(&|$)/.test(location.search)) document.documentElement.classList.add('needs-prep'); }</script>
 </head>
 <body class="mode-setup">
 
@@ -76,7 +73,7 @@
     </div>
   </div>
 
-  <!-- 0. はじめる前に(2台以上で使うときの準備)。初めて開いたときに1回出る。ヘルプからいつでも開ける -->
+  <!-- 0. はじめる前に(2台以上で使うときの準備)。初めて「カメラを追加」を押したときに1回出る。ヘルプからいつでも開ける -->
   <div id="prepArea" class="prep-area" role="dialog" aria-modal="true" aria-labelledby="prepTitle">
     <div class="prep-inner">
       <header class="prep-head">

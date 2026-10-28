@@ -2,7 +2,7 @@
   "id": "./",
   "name": "MITORI",
   "short_name": "MITORI",
-  "start_url": "./",
+  "start_url": "./?start=1&utm_source=home",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

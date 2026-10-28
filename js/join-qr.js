@@ -106,7 +106,8 @@ export function closeJoinQr() {
 
 // 「カメラを追加」を押すと、QRと接続IDを大きく出す。code は親機の4桁の番号
 // QRを作れなかったときも、接続IDと案内は出す(番号で参加できる)
-export async function initJoinQr(code) {
+// beforeOpen(proceed): 押したときに先に何かを出すとき true を返す(続きは proceed で呼ぶ)。「準備ページを、初めて押したときに出す」ために使う
+export async function initJoinQr(code, { beforeOpen } = {}) {
   const button = document.getElementById('btnAddCamera');
   overlay = document.getElementById('qrOverlay');
   if (!button || !overlay) return;
@@ -117,7 +118,7 @@ export async function initJoinQr(code) {
   else big.hidden = true; // QRなし。接続IDだけで使える
 
   attachPress(button, { vibrate: 12 });
-  button.addEventListener('click', openOverlay);
+  button.addEventListener('click', () => { if (beforeOpen && beforeOpen(openOverlay)) return; openOverlay(); });
   const closeBtn = overlay.querySelector('#btnQrClose');
   attachPress(closeBtn, { vibrate: 0 });
   closeBtn.addEventListener('click', closeJoinQr);

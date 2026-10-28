@@ -29,6 +29,8 @@ const ALLOWED_EVENTS = {
   clip_save: ['count', 'all_cameras'],
   rec_start: ['cameras'], // 録画を始めた(親機のカメラを含む台数)。録画が実際に始まったときだけ
   rec_save: [], // 録画の保存を押した(保存を始めた時点)
+  live_start: [], // 撮影の画面に着いた(親機。カメラの許可が通り、映像が出たとき。ページを開くたびに最大1回)
+  help_open: [], // 「?」を押して、ヘルプが開いた
   line_open: [],
 };
 const MAX_STRING_LENGTH = 40; // 万一、長い文字が混ざっても送らない
