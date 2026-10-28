@@ -28,6 +28,7 @@ export function initPrepPage({ onFirstRunSolo, onChoice } = {}) {
   const root = document.documentElement;
   let onOk = null; // openPrep({ onOk }) で渡された続き
   area._setOnOk = (fn) => { onOk = fn; };
+  area._quiet = false; // 子機の失敗の案内から開いたときは、解析(prep_choice)に数えない
   let firstRun = root.classList.contains('needs-prep'); // 以前の「初回に自動で出す」形の名残。今は付かない
 
   // ステップを押すと、右の丸にチェックが付く(もう一度押すと外れる)。全部付くと「準備OK！」になる
@@ -51,7 +52,7 @@ export function initPrepPage({ onFirstRunSolo, onChoice } = {}) {
     markSeen();
     area.classList.remove('show');
     root.classList.remove('needs-prep');
-    if (onChoice) onChoice(solo ? 'single' : 'ok');
+    if (onChoice && !area._quiet) onChoice(solo ? 'single' : 'ok');
     if (solo && wasFirstRun && onFirstRunSolo) onFirstRunSolo();
     const next = onOk; onOk = null;
     if (!solo && next) next(); // 「カメラを追加」から開いたときの続き
@@ -66,10 +67,11 @@ export function initPrepPage({ onFirstRunSolo, onChoice } = {}) {
 
 // ヘルプなどから開く。チェックは付け直せるよう、毎回外しておく
 // onOk: 「準備OK」を押したあとに呼ぶ(「カメラを追加」から開いたとき、参加用のQRを出す)
-export function openPrep({ onOk } = {}) {
+export function openPrep({ onOk, quiet = false } = {}) {
   const area = document.getElementById('prepArea');
   if (!area) return;
   if (area._setOnOk) area._setOnOk(onOk || null);
+  area._quiet = quiet;
   area.querySelectorAll('.prep-step').forEach((s) => s.setAttribute('aria-pressed', 'false'));
   document.getElementById('btnPrepOk').textContent = '準備OK';
   area.classList.add('show');

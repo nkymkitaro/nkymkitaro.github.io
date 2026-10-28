@@ -313,6 +313,38 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* ボタン付きの知らせ(「つなぎ方を見る」)。押せる範囲は48px以上 */
+.toast.has-action.show { pointer-events: auto; }
+.toast-action {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  margin: 10px 0 0;
+  padding: 0 16px;
+  border: 2px solid var(--text);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+/* 携帯回線のままのとき、番号を入れる画面に1回出す表示(押すと消える) */
+.cell-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  margin: 16px 0 0;
+  padding: 0 18px;
+  border: 2px solid var(--text);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+.cell-note[hidden] { display: none; }
+.cell-note svg { width: 22px; height: 22px; flex: 0 0 auto; }
 
 /* --- 初心者向けの補足説明 --- */
 .help-text {
@@ -889,7 +921,7 @@ body.mode-camera #cameraArea { display: flex; flex: 1; min-height: 0; flex-direc
   padding: 4vh 0 0;
 }
 .join-title { margin: 0; font-size: 1.8rem; font-weight: 900; }
-.join-guide { margin: 10px 0 24px; color: var(--text-dim); font-size: 0.95rem; line-height: 1.6; }
+.join-guide { text-wrap: balance; margin: 10px 0 24px; color: var(--text-dim); font-size: 0.95rem; line-height: 1.6; }
 .code-input { position: relative; }
 .code-boxes { display: flex; gap: 10px; justify-content: center; }
 .code-box {

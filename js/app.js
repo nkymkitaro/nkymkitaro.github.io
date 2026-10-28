@@ -192,9 +192,21 @@ function startCamera({ focus = true } = {}) {
     updateCameraBand();
   };
   cameraLink.startAsCamera();
+  showCellNote();
 
   codeInput = createCodeInput({ root: document.getElementById('codeInput'), onComplete: connectToMonitor });
   if (focus) codeInput.focus(); // 端末によっては、押した直後でないとキーボードが開かない。開かなければ枠を押せばよい
+}
+
+// 携帯回線のままなら、「Wi‑Fiにつないでください」を1回出す(押すと消える。止めはしない)。
+// Android の Chrome だけ値が取れる(iPhone の Safari は取れないので何も出さない)。Wi‑Fiにつながったら自動で消える
+function showCellNote() {
+  const note = document.getElementById('cellNote');
+  const conn = navigator.connection;
+  if (!note || !conn || conn.type !== 'cellular') return;
+  note.hidden = false;
+  note.addEventListener('click', () => { note.hidden = true; }, { once: true });
+  conn.addEventListener('change', () => { if (conn.type !== 'cellular') note.hidden = true; });
 }
 
 // 映像の枠を、カメラ映像の縦横比に合わせて画面いっぱいに広げる。
@@ -243,7 +255,8 @@ async function connectToMonitor(targetId, method = 'code') {
   if (!result.ok) {
     if (result.reason !== 'cancelled') {
       const long = result.reason === 'unreachable';
-      showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout, long ? { duration: LONG_TOAST_MS } : undefined);
+      // つながらなかったときは、つなぎ方の絵(準備ページと同じもの)を開くボタンを添える
+      showToast(JOIN_FAILURE_MESSAGES[result.reason] || JOIN_FAILURE_MESSAGES.timeout, long ? { duration: LONG_TOAST_MS, action: { label: 'つなぎ方を見る', onClick: () => openPrep({ quiet: true }) } } : undefined);
       if (method !== 'code') codeInput.focus(); // 番号の枠で入れ直せるように
     }
     return;

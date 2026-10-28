@@ -3,11 +3,25 @@
 // アプリのトーン(暗色・角丸カード)に合わせた通知を上部に短く出す。
 let hideTimer = null;
 
-export function showToast(message, { duration = 3200 } = {}) {
+// action: { label, onClick } を渡すと、文の下にボタンを1つ出す(押すと onClick を呼び、知らせは閉じる)
+export function showToast(message, { duration = 3200, action } = {}) {
   const toast = document.getElementById('toast');
   if (!toast) return;
 
   toast.textContent = message;
+  toast.classList.toggle('has-action', !!action);
+  if (action) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'toast-action';
+    btn.textContent = action.label;
+    btn.addEventListener('click', () => {
+      clearTimeout(hideTimer);
+      toast.classList.remove('show');
+      action.onClick();
+    });
+    toast.appendChild(btn);
+  }
   toast.classList.add('show');
 
   clearTimeout(hideTimer);

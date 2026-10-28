@@ -198,6 +198,11 @@
         <input type="text" id="targetIdInput" class="code-field" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="4桁の番号">
       </div>
       <div class="join-status" id="cameraStatus" aria-live="polite"></div>
+      <!-- 携帯回線のままのときだけ出す(js/app.js)。押すと消える -->
+      <button type="button" class="cell-note" id="cellNote" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.2" r="0.9" fill="currentColor"/><path d="M3 3l18 18"/></svg>
+        <span>Wi‑Fiにつないでください</span>
+      </button>
       <p class="join-note"><span class="nowrap">同じWi‑Fiに</span><span class="nowrap">つないでください。</span><span class="nowrap">つながらないときは、</span><span class="nowrap">はじめたスマホの</span><span class="nowrap">テザリング(iPhoneは</span><span class="nowrap">「インターネット共有」)</span><span class="nowrap">につないでください。</span></p>
     </div>
 
