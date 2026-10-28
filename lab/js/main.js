@@ -111,7 +111,7 @@ function createBandOverlay({ bandId, compute, subEl }) {
   const band = document.getElementById(bandId);
   if (!band) return { refresh() {} };
   const text = band.querySelector('.state-band-text');
-  const normal = { live: 'LIVE', sending: '送信中' };
+  const normal = { live: 'LIVE', sending: '撮影中' };
   let mine = null; // いま自分が出している状態
   let busy = false;
   function refresh() {
@@ -197,8 +197,8 @@ async function initParent(app) {
           <button type="button" class="lab-big" id="labStart">${iconText(ICON.rec, '録画開始')}</button>
         </div>
       </div>
-      <p class="lab-note lab-unsaved-note" id="labUnsavedNote" hidden>保存を押すと、端末に残ります。</p>
-      <p class="lab-note" id="labListNote" hidden>映像はこの端末の中にあります。</p>
+      <p class="lab-note lab-unsaved-note" id="labUnsavedNote" hidden>保存を押すと、スマホに残ります。</p>
+      <p class="lab-note" id="labListNote" hidden>映像はこのスマホの中にあります。</p>
       <ul class="lab-takes" id="labTakes"></ul>
       <div class="lab-foot">
         ${isLab ? '<button type="button" class="lab-link" id="labOpenTest">試験用</button>' : ''}
@@ -563,7 +563,7 @@ async function initParent(app) {
       making = null; render();
       window.__lastMakeError = String(err && err.message ? err.message : err);
       if (err && err.cancelled) showToast('まとめを中止しました。カメラごとの動画は保存済みです');
-      else if (err && err.unsupported) showToast('この端末では、まとめ動画は作れません');
+      else if (err && err.unsupported) showToast('このスマホでは、まとめ動画は作れません');
       else showToast('まとめを作れませんでした。カメラごとの動画は保存済みです');
       return;
     }
@@ -944,7 +944,7 @@ async function initChild(app) {
     if (sub) {
       if (st.recording && !connected) {
         if (!sub.dataset.lab) { subPrev = { text: sub.textContent, hidden: sub.hidden }; sub.dataset.lab = '1'; }
-        sub.textContent = '見ている端末とつながっていません'; sub.hidden = false;
+        sub.textContent = '見ているスマホとつながっていません'; sub.hidden = false;
       } else if (sub.dataset.lab) { // つながったら、元の表示(カメラの番号)に戻す
         sub.textContent = subPrev.text; sub.hidden = subPrev.hidden; delete sub.dataset.lab;
       }

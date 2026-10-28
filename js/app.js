@@ -134,7 +134,7 @@ function renderRecStatus() {
   if (sources.length > 1) {
     camsHtml = '<div class="rec-cams">' + sources.map((src) => {
       let state;
-      if (!src.connected) state = '<span class="rec-cam-off">切断</span>';
+      if (!src.connected) state = '<span class="rec-cam-off">つながっていません</span>';
       else if (cameraLink.isPaused) state = '<span class="rec-cam-off">停止中</span>';
       else state = '<span class="rec-cam-on"><span class="rec-dot"></span>撮影中</span>';
       return `<span class="rec-cam">${src.label} ${state}</span>`;
@@ -148,7 +148,7 @@ function renderRecStatus() {
 const camBand = createStateBand({
   bandId: 'camStateBand',
   subId: 'camSubBand',
-  labels: { sending: '送信中', paused: '一時停止中', lost: '接続が切れました' },
+  labels: { sending: '撮影中', paused: '一時停止中', lost: 'つながっていません' },
 });
 const cameraStatusEl = document.getElementById('cameraStatus');
 let codeInput = null;
@@ -157,14 +157,14 @@ let cameraPaused = false;
 
 // 参加できなかった理由。番号は消さず、短く知らせる
 const JOIN_FAILURE_MESSAGES = {
-  camera: 'カメラを使えませんでした。カメラの利用を許可してください',
-  'not-found': 'この番号は見つかりませんでした。番号をご確認ください',
-  full: '満員のため参加できませんでした',
+  camera: 'カメラを使えませんでした。カメラの利用を許可してください。',
+  'not-found': 'この番号は見つかりませんでした。番号をご確認ください。',
+  full: '満員のため参加できませんでした。',
   // 番号は通ったのに、映像の経路を作れなかった。ネットワークを変えない限りつながらないので、対処まで伝える
-  unreachable: 'この端末からは直接つながりませんでした。はじめた端末と同じWi‑Fiか、はじめた端末のテザリングにつないでください',
-  closed: '接続できませんでした。もう一度お試しください',
-  timeout: '接続できませんでした。もう一度お試しください',
-  network: '通信できませんでした。電波をご確認ください',
+  unreachable: '直接つながりませんでした。同じWi‑Fiか、はじめたスマホのテザリングにつないでください。',
+  closed: 'つながりませんでした。もう一度お試しください。',
+  timeout: 'つながりませんでした。もう一度お試しください。',
+  network: '通信できませんでした。電波をご確認ください。',
 };
 const LONG_TOAST_MS = 7000; // 対処まで書いた長めの知らせは、読み終えられるよう長く出す
 
@@ -172,18 +172,18 @@ const LONG_TOAST_MS = 7000; // 対処まで書いた長めの知らせは、読�
 function startCamera({ focus = true } = {}) {
   leaveSetupScreen();
   document.body.classList.add('mode-camera'); // 画面の切り替え・横向きのレイアウト用
-  enableWakeLock({ quiet: true }); // 送信中の画面に「画面をロックすると送信が止まります」と常に出すので、成功の知らせは出さない
+  enableWakeLock({ quiet: true }); // 送信中の画面に「画面を消すと、映像が届かなくなります。」と常に出すので、成功の知らせは出さない
   cameraLink.onPauseStateChanged = (isPaused) => {
     cameraPaused = isPaused;
     if (document.body.classList.contains('camera-sending')) updateCameraBand();
   };
   cameraLink.onConnectionLost = () => {
     camBand.setState('lost');
-    camBand.showSub('再接続しています…');
+    camBand.showSub('つなぎ直しています…');
   };
   // 繋ぎ直しを打ち切った(直接つながらない状態が続いた)。自動では試さなくなるので、その旨と対処を出す
   cameraLink.onReconnectGaveUp = () => {
-    camBand.showSub('再接続できませんでした');
+    camBand.showSub('つなぎ直せませんでした');
     showToast(JOIN_FAILURE_MESSAGES.unreachable, { duration: LONG_TOAST_MS });
   };
   cameraLink.onReconnected = (number) => {
@@ -229,7 +229,7 @@ async function connectToMonitor(targetId, method = 'code') {
   if (joining) return;
   joining = true;
   codeInput.setBusy(true);
-  cameraStatusEl.textContent = '接続中…';
+  cameraStatusEl.textContent = 'つないでいます…';
   const result = await cameraLink.connectToMonitor(targetId);
   joining = false;
   cameraStatusEl.textContent = '';
@@ -265,7 +265,7 @@ async function connectToMonitor(targetId, method = 'code') {
   updateCameraBand();
 }
 
-// 接続を切って、参加する前の画面に戻る
+// 参加をやめて、参加する前の画面に戻る
 function leaveCameraSending() {
   cameraLink.disconnectFromMonitor();
   document.body.classList.remove('camera-sending');
@@ -275,7 +275,7 @@ function leaveCameraSending() {
   codeInput.clear();
   cameraStatusEl.textContent = '';
   cameraPaused = false;
-  showToast('接続を切りました');
+  showToast('参加をやめました');
   maybeAskRole(); // 撮影の邪魔にならない、参加する前の画面に戻ったこのタイミングで、立場を聞く(条件は role-survey.js)
 }
 
@@ -346,7 +346,7 @@ function renderCamSelector(sources) {
     if (src.id === highlightId) classes.push('btn-active');
     if (!src.connected) classes.push('cam-offline');
     btn.className = classes.join(' ');
-    btn.textContent = src.connected ? src.label : `${src.label}(切断)`;
+    btn.textContent = src.connected ? src.label : `${src.label}(つながっていません)`;
     btn.addEventListener('click', () => selectCamera(src.id));
     container.appendChild(btn);
   });
@@ -570,7 +570,7 @@ const replayUi = createReplayUi({
     if (camId) applyReplayView('single', camId);
   },
 });
-const BACK_TO_REPLAY_MS = 6000; // 「リプレイに戻る」を出しておく時間
+const BACK_TO_REPLAY_MS = 6000; // 「VARに戻る」を出しておく時間
 let backToReplayPoint = null;
 let backToReplayTimer = null;
 
@@ -683,7 +683,7 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   });
   if (!ok) {
     recorder.release();
-    showToast('見返せる映像がまだありません');
+    showToast('見返せる映像がまだありません。');
     return;
   }
   dismissRoleSurvey(); // 立場の問いが開いたまま次のVARに入ったら、閉じる
@@ -716,7 +716,7 @@ btnBackToReplay.addEventListener('click', () => {
   chooseReplayView();
   if (!player.resumeAt(point)) {
     recorder.release();
-    showToast('リプレイの映像が残っていません');
+    showToast('VARの映像が残っていません。');
     return;
   }
   enterBrowserFullscreen();

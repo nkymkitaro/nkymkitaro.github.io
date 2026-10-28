@@ -32,9 +32,9 @@ export async function enableWakeLock({ quiet = false } = {}) {
   enabled = true;
   const ok = await acquire();
   if (ok) {
-    if (!quiet) showToast('画面が自動でオフにならないようにしました(バッテリー消費が増えるため、電源に繋いでおくのがおすすめです)');
+    if (!quiet) showToast('画面が消えないようにしました。');
   } else if (!('wakeLock' in navigator)) {
-    showToast('この端末は画面の自動オフ防止に対応していません。設定で画面のロック時間を長めにしておいてください');
+    showToast('このスマホは、画面を消さない設定に対応していません。設定で画面のロック時間を長めにしてください。');
   }
 }
 

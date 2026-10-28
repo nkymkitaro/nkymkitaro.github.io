@@ -218,7 +218,7 @@ async function shareOrDownload(files) {
 export async function saveClip(targets, fps, { onEncoded } = {}) {
   const usable = (targets || []).filter((t) => t && t.frames && t.frames.length > 0);
   if (usable.length === 0) {
-    showToast('保存できる録画データがまだありません');
+    showToast('保存できる映像がまだありません。');
     return;
   }
 
@@ -234,7 +234,7 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
   }
 
   if (files.length === 0) {
-    showToast('クリップの書き出しに失敗しました。この端末は対応していない可能性があります');
+    showToast('保存できませんでした。このスマホは対応していない可能性があります。');
     return;
   }
 
@@ -242,7 +242,7 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
   if (onEncoded) {
     onEncoded(files.length); // 完了の知らせ(状態の帯)は呼び出し側が出す
   } else {
-    showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件のクリップを保存しました`);
+    showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件を保存しました`);
   }
   await shareOrDownload(files);
 }

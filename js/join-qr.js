@@ -80,7 +80,7 @@ export async function createJoinQrSvg(code) {
     const qr = qrcode(0, ERROR_CORRECTION); // 0 = 長さに合わせて最小のバージョンを選ぶ
     qr.addData(buildJoinUrl(code), 'Byte');
     qr.make();
-    return toSvg(qr, `カメラで参加するためのQRコード。接続ID ${code}`);
+    return toSvg(qr, `カメラで参加するためのQRコード。番号 ${code}`);
   } catch (err) {
     return null;
   }
@@ -135,7 +135,8 @@ export async function initJoinQr(code, { beforeOpen } = {}) {
 
 // 送る文面。言葉はデザインポリシー 11章に合わせている(「子機」「参加する」の代わりに、受け取る人が分かる言い方)
 const SHARE_TEXT = '稽古を別の角度から撮りたいので、2台目として参加してもらえますか。\n'
-  + '同じWi-Fiか、私のスマホのテザリングにつないでから、下のリンクを開いてください。';
+  + '同じWi‑Fiにつないでください。つながらないときは、私のスマホのテザリング(iPhoneは「インターネット共有」)につないでください。\n'
+  + '下のリンクを開いてください。';
 
 // 「リンクを送る」: OSの共有画面(LINEなどを選べる)を開く。使えない端末(PCなど)では、文面とリンクをコピーする。
 // 送る前にこちらからは通信しない。リンクに入るのは接続IDだけ(映像・個人情報は含まない)
@@ -151,7 +152,7 @@ export async function shareJoinLink(code) {
     }
   }
   const copied = await copyText(message);
-  showToast(copied ? 'コピーしました。' : 'コピーできませんでした。');
+  showToast(copied ? 'コピーしました' : 'コピーできませんでした');
 }
 
 async function copyText(text) {

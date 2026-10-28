@@ -7,7 +7,7 @@
 
 const MONITOR_LABELS = {
   live: 'LIVE',
-  replay: 'VAR REPLAY',
+  replay: 'VAR',
   paused: '一時停止中',
 };
 

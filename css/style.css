@@ -125,8 +125,8 @@ canvas {
   gap: 10px;
 }
 .status-row .icon-btn {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   margin-bottom: 10px;
 }
 .status-row .icon-btn svg { width: 18px; height: 18px; }
@@ -493,7 +493,7 @@ body.mode-monitor h1 { display: none; }
 }
 .qr-overlay[hidden] { display: none; }
 .qr-overlay-body { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
-.qr-overlay-img { width: min(100%, calc(100dvh - 330px), 520px); aspect-ratio: 1; }
+.qr-overlay-img { width: min(100%, calc(100dvh - 370px), 520px); aspect-ratio: 1; }
 .qr-overlay-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .qr-overlay-title { margin: 0 0 4px; font-size: 1.5rem; font-weight: 900; }
 .qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; text-wrap: balance; }
@@ -1534,7 +1534,7 @@ body.mode-monitor #monitorArea.replaying.grid-view .state-bands { top: -48px; }
 body.mode-monitor #monitorArea.replaying.grid-view .state-bands { flex-direction: row; align-items: flex-start; gap: 8px; }
 /* 保存するカメラ(「選択中のみ」のとき基準のカメラ、「全カメラ」のとき全部)を、保存ボタンの中に小さく出す */
 .save-label { display: inline-flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
-.save-target { font-size: 0.72rem; font-weight: 700; opacity: 0.85; }
+.save-target { font-size: 13px; font-weight: 700; opacity: 0.85; }
 .save-target[hidden] { display: none; }
 body.mode-monitor #monitorArea.replaying.grid-view #displayCanvas { scale: 1; translate: 0 0; }
 body.mode-monitor #monitorArea.replaying.grid-view #camSelector,
@@ -1593,7 +1593,7 @@ body.mode-monitor #monitorArea.replaying.grid-view::after { display: none; }
    - 上の行(一時停止・設定・ヘルプ)と、状態の帯・「あと◯秒で戻れます」は映像の上に重ねる(リプレイの全画面と同じ考え方)。
    - QRと接続IDは常時は出さない。「カメラを追加」(高さ48px、映像の左下)を押すと、大きい表示が開く(js/join-qr.js)。
    - 2台以上つながったら、カメラの切り替えが左下に並び、「カメラを追加」は丸い「+」だけになる。
-   - 下のボタンは、縦向きは幅いっぱい(今までと同じ大きさ)。横向きは右の列(幅144px)に縦に並べる。
+   - 下のボタンは、縦向きは幅いっぱい(今までと同じ大きさ)。横向きは右の列(幅164px。上の段の3ボタンが48pxで、間隔10px)に縦に並べる。
    - 押せる範囲は高さ48px以上。文字は13px以上。
    ========================================================= */
 body.mode-monitor #monitorArea:not(.replaying) {
@@ -1653,7 +1653,7 @@ body.mode-monitor #monitorArea:not(.replaying) .status-row {
   align-self: start;
   justify-self: end;
   z-index: 3;
-  gap: 8px;
+  gap: 10px;
   margin: calc(env(safe-area-inset-top) + 8px) max(8px, env(safe-area-inset-right)) 0 0;
 }
 body.mode-monitor #monitorArea:not(.replaying) .status-row .icon-btn {
@@ -1739,10 +1739,10 @@ body.mode-monitor #monitorArea:not(.replaying) .player-toolbar,
 body.mode-monitor #monitorArea:not(.replaying) .seek-row,
 body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: none; }
 
-/* 横向き: 映像を左いっぱいに。右の列(幅144px)に、上から 一時停止・設定・ヘルプ、カメラの切り替えと「カメラを追加」、下のボタン */
+/* 横向き: 映像を左いっぱいに。右の列(幅164px。上の段の3ボタンが48pxで、間隔10px)に、上から 一時停止・設定・ヘルプ、カメラの切り替えと「カメラを追加」、下のボタン */
 @media (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) {
-    grid-template-columns: minmax(0, 1fr) 144px;
+    grid-template-columns: minmax(0, 1fr) 164px;
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "video head"
@@ -1758,7 +1758,7 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
     align-self: start;
     justify-self: stretch;
     justify-content: space-between;
-    gap: 0;
+    gap: 10px;
     margin: 8px 0 0;
   }
   body.mode-monitor #monitorArea:not(.replaying) .cam-dock {

@@ -7,7 +7,7 @@ import { showToast } from './toast.js';
 
 // 追加できたときの知らせ。ホーム画面に置かれたかはブラウザから分からない(端末のホームアプリの設定で決まる)ので、
 // アプリ一覧の場所も添える
-const INSTALLED_MESSAGE = '追加しました。ホーム画面にない場合は、アプリ一覧から置けます';
+const INSTALLED_MESSAGE = '追加しました。ホーム画面にない場合は、アプリ一覧から置けます。';
 const INSTALLED_NOTICE_MS = 5000;
 
 let deferredPrompt = null;

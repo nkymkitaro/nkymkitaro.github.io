@@ -390,7 +390,7 @@ export class ReplayPlayer {
 
     const behindFrames = (frames.length - 1) - this.frameIndex;
     const behindSeconds = (behindFrames / this.recorder.fps).toFixed(1);
-    this.timeReadout.textContent = behindFrames === 0 ? '最新フレーム' : `− ${behindSeconds}秒`;
+    this.timeReadout.textContent = behindFrames === 0 ? 'いま' : `${behindSeconds}秒前`;
     this.timeReadout.classList.add('is-replay');
     return true;
   }
@@ -631,6 +631,6 @@ export class ReplayPlayer {
   }
 
   _updateSpeedButton() {
-    this.speedBtn.textContent = this.playbackSpeed + 'x';
+    this.speedBtn.textContent = this.playbackSpeed + '倍';
   }
 }

@@ -69,7 +69,7 @@ export class CameraLink {
       };
     } catch (err) {
       console.error(err);
-      showToast('カメラを起動できませんでした。カメラの利用を許可してください。');
+      showToast('カメラを使えませんでした。カメラの利用を許可してください。');
     }
 
     this.peer = new Peer('kendo-var-room-' + this.myId);
@@ -103,7 +103,7 @@ export class CameraLink {
       if (oldCall && oldCall !== call) {
         try { oldCall.close(); } catch (err) { console.error(err); }
       }
-      if (!wasConnected) showToast(`${existing.label}が再接続しました`);
+      if (!wasConnected) showToast(`${existing.label}をつなぎ直しました`);
       this._notifyCamsChanged();
       return;
     }
@@ -157,7 +157,7 @@ export class CameraLink {
       if (this.activeSource === camEntry.id) {
         // ライブ表示中に切断された場合、固まった最後のコマを映し続けないよう親機に戻す
         this.activeSource = 'local';
-        showToast(`${camEntry.label}が切断されたため、カメラ${LOCAL_CAMERA_NUMBER}の映像に戻しました`);
+        showToast(`${camEntry.label}がつながっていないため、カメラ${LOCAL_CAMERA_NUMBER}の映像に戻しました。`);
       }
       this._notifyCamsChanged();
     };
@@ -443,7 +443,7 @@ export class CameraLink {
     const src = this.getAllSources().find((s) => s.id === id);
     if (!src) return false;
     if (!src.connected) {
-      showToast(`${src.label}は現在接続されていません`);
+      showToast(`${src.label}はつながっていません。`);
       return false;
     }
     this.activeSource = id;
