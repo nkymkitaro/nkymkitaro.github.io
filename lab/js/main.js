@@ -761,6 +761,7 @@ async function initParent(app) {
     const m = viewer.metrics;
     if (m.seekMs != null) lines.push(`動画から見る: 離れた場面へ移る${m.jumpMs ?? '-'}ms 1コマ送り${m.stepMs ?? '-'}ms 画面上のカメラ間のずれ${m.spreadMs ?? '-'}ms`);
     if (photoStepMs != null) lines.push(`写真方式(VARの直近30秒): 1コマを出す${photoStepMs.avg}ms(最大${photoStepMs.max}ms、${photoStepMs.n}コマの平均)`);
+    lines.push(`経路: ${window.__relayRoute === 'relay' ? '中継' : window.__relayRoute === 'direct' ? '直接' : '未確認'}(中継の試作 ${/[?&]relay=1(&|$)/.test(location.search) ? '有効' : '無効'})`);
     lines.push(`端末: ${navigator.userAgent}`);
     return lines.join('\n');
   }

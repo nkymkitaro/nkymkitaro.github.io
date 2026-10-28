@@ -1,0 +1,6 @@
+name = "mitori-relay-credentials"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+# 鍵は、ここに書かない。次の2つを「wrangler secret put」で入れる(relay/README.md)
+#   TURN_KEY_ID
+#   TURN_KEY_API_TOKEN

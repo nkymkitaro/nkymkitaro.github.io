@@ -13,6 +13,7 @@ import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
 import { maybeShowHomeNudge } from './home-nudge.js';
+import { prefetchRelayConfig } from './relay.js';
 import { createReplayUi } from './replay-ui.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
@@ -532,6 +533,7 @@ function renderAllSettingsSelectors() {
 renderAllSettingsSelectors();
 updateRewindLabel();
 initInstallPrompt();
+prefetchRelayConfig(); // 中継の試作(?relay=1 のときだけ合言葉を取りに行く。js/relay.js)
 
 // 押した手応え(デザインポリシー 2-4)。主要な操作とコマ送りは、対応端末なら押した瞬間に短く振動させる
 [['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30], ['btnBackToReplay', 30],

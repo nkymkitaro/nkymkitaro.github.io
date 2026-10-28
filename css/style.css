@@ -313,6 +313,8 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
+/* ふわっと消える知らせ(js/toast.js の fadeMs=500。中継のお知らせだけ。「動きを減らす」設定では、下の prefers-reduced-motion で止まる) */
+.toast.slow-fade { transition: opacity 0.5s ease-out, transform 0.5s ease-out; }
 /* ボタン付きの知らせ(「つなぎ方を見る」)。押せる範囲は48px以上 */
 .toast.has-action.show { pointer-events: auto; }
 .toast-action {

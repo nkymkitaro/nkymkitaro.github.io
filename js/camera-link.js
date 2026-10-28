@@ -2,6 +2,7 @@
 // 親機自身のカメラ + 子機(最大3台) = 合計4台までの映像ソースを管理する。
 // 「今どんなカメラが繋がっているか」が変わるたびに onCamsChanged で外部(composition root)
 // に知らせるだけで、ボタンなどのDOM組み立てはこのクラスの外に任せる(疎結合)。
+import { peerOptions, watchRoute } from './relay.js';
 import { showToast } from './toast.js';
 
 const MAX_REMOTE_CAMS = 3; // 親機1台 + 子機最大3台 = 合計4台まで
@@ -72,7 +73,7 @@ export class CameraLink {
       showToast('カメラを使えませんでした。カメラの利用を許可してください。');
     }
 
-    this.peer = new Peer('kendo-var-room-' + this.myId);
+    this.peer = new Peer('kendo-var-room-' + this.myId, peerOptions());
     this.peer.on('call', (call) => this._handleIncomingCall(call));
   }
 
@@ -174,6 +175,7 @@ export class CameraLink {
       });
       // ブラウザによってはcall.on('close')が発火しないことがあるための保険
       const pc = call.peerConnection;
+      watchRoute(pc, { isSender: false }); // 中継の試作(?relay=1 のときだけ動く)
       if (pc) {
         pc.addEventListener('iceconnectionstatechange', () => {
           if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
@@ -209,7 +211,7 @@ export class CameraLink {
   // ---- 子機側 ----
   // 子機として起動: 映像を送るだけの軽量ピア
   startAsCamera() {
-    this.peer = new Peer();
+    this.peer = new Peer(undefined, peerOptions());
     this._peerReady = new Promise((resolve) => this.peer.on('open', resolve));
     this.peer.on('connection', (conn) => {
       conn.on('data', (data) => this._onMonitorMessage(data));
@@ -346,6 +348,7 @@ export class CameraLink {
     };
     call.on('close', markLost);
     const pc = call.peerConnection;
+    watchRoute(pc, { isSender: true }); // 中継の試作(?relay=1 のときだけ動く)
     if (pc) {
       pc.addEventListener('iceconnectionstatechange', () => {
         const state = pc.iceConnectionState;
