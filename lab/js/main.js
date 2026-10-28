@@ -275,7 +275,7 @@ async function initParent(app) {
   // VARのボタン(本番の部品)は、この試作のページでだけ、言葉を「VAR」、アイコンを早戻しにする。本番のコードが秒数入りの文字に書き戻すので、そのたびに直す
   const rewindBtn = document.getElementById('btnRewind');
   const rewindLabel = document.getElementById('btnRewindLabel');
-  if (rewindBtn) { const old = rewindBtn.querySelector('svg'); if (old) old.outerHTML = ICON.var; }
+  if (rewindBtn) { const old = rewindBtn.querySelector('svg:not(.var-ring)'); if (old) old.outerHTML = ICON.var; }
   if (rewindLabel) {
     const fix = () => { if (rewindLabel.textContent !== 'VAR') rewindLabel.textContent = 'VAR'; };
     fix();

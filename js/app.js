@@ -112,6 +112,34 @@ function startMonitor() {
   updateStateBand(); // 起動時に「LIVE」の帯を出す
 }
 
+// --- VARボタンの輪(css/style.css「VARボタンの輪」)。見ているカメラのたまった秒数 ÷ さかのぼれる長さ ---
+const varRingBtn = document.getElementById('btnRewind');
+const varRingSvg = varRingBtn.querySelector('.var-ring');
+const varRingRects = varRingSvg ? Array.from(varRingSvg.querySelectorAll('rect')) : [];
+let varRingLen = 0;
+function layoutVarRing() {
+  const w = varRingBtn.clientWidth;
+  const h = varRingBtn.clientHeight;
+  if (!w || !h) return;
+  varRingRects.forEach((r) => {
+    r.setAttribute('x', 1.5); r.setAttribute('y', 1.5);
+    r.setAttribute('width', w - 3); r.setAttribute('height', h - 3);
+    r.setAttribute('rx', 10);
+  });
+  varRingLen = varRingRects[0].getTotalLength();
+  varRingRects[1].style.strokeDasharray = `${varRingLen}`;
+  updateVarRing();
+}
+function updateVarRing() {
+  if (!varRingLen) return;
+  const frames = recorder.getFrames(cameraLink.activeSource).length;
+  const p = Math.max(0, Math.min(1, (frames / recorder.fps) / varSettings.bufferSeconds));
+  varRingRects[1].style.strokeDashoffset = `${varRingLen * (1 - p)}`;
+  varRingBtn.classList.toggle('ring-paused', cameraLink.isPaused);
+}
+if (varRingSvg && 'ResizeObserver' in window) new ResizeObserver(layoutVarRing).observe(varRingBtn);
+setInterval(updateVarRing, 250); // 1秒に4回。録画や映像の負荷は増えない(数を数えるだけ)
+
 // 「今押したら何秒前まで戻れるか」と、各カメラが録画できているかを表示する。
 // 起動直後や子機が切れたときに、押す前に分かるようにするため。
 function renderRecStatus() {

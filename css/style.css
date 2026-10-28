@@ -1951,3 +1951,31 @@ body.mode-monitor #monitorArea.replaying .zoom-host { display: none; }
   transform: translateX(-50%);
   z-index: 4;
 }
+
+
+/* =========================================================
+   VARボタンの輪(2026-10-28。依頼: 2026-10-28-to-coder-var-ring.md)
+   見ているカメラに「何秒ぶんたまっているか」を、文字なしで伝える。0秒で空、さかのぼれる長さで満タン。
+   - ボタンの押せる範囲(いまの大きさ)は変えない。輪はその枠の外周に置き、琥珀色の面を内側へ6px縮めて収める
+   - 色は白(進み)とグレー(地)だけ。満タンのあとは動かさない。一時停止中は進みもグレー
+   - 動きは --dur-base(0.18秒)。「動きを減らす」設定では、上の prefers-reduced-motion で止まる
+   ========================================================= */
+body.mode-monitor #btnRewind {
+  position: relative;
+  isolation: isolate;
+  background: transparent;
+  border-color: transparent;
+}
+body.mode-monitor #btnRewind::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  z-index: -1;
+  border-radius: 8px;
+  background: var(--accent-replay);
+}
+.action-btn svg.var-ring, .var-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+.var-ring rect { fill: none; stroke-width: 3; }
+.var-ring .var-ring-track { stroke: var(--text-dim); opacity: 0.5; }
+.var-ring .var-ring-fill { stroke: var(--text); stroke-linecap: butt; transition: stroke-dashoffset var(--dur-base) linear; }
+#btnRewind.ring-paused .var-ring-fill { stroke: var(--text-dim); }
