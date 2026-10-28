@@ -197,6 +197,7 @@ async function initParent(app) {
           <button type="button" class="lab-big" id="labStart">${iconText(ICON.rec, '録画開始')}</button>
         </div>
       </div>
+      <p class="lab-note lab-unsaved-note" id="labUnsavedNote" hidden>保存を押すと、端末に残ります。</p>
       <p class="lab-note" id="labListNote" hidden>映像はこの端末の中にあります。</p>
       <ul class="lab-takes" id="labTakes"></ul>
       <div class="lab-foot">
@@ -386,6 +387,26 @@ async function initParent(app) {
   }
   new MutationObserver(refreshSub).observe(document.getElementById('stateBand'), { attributes: true, attributeFilter: ['data-state'] });
 
+  // ---- 保存し忘れ対策(2026-10-24 依頼 rec-autosave の a・b) ----
+  // a. 端末の保存領域を、ブラウザに勝手に消されにくくする(録画を始めるときに頼む。結果は試験用の数値に載せる)
+  async function requestPersist() {
+    try {
+      if (!navigator.storage || !navigator.storage.persist) { window.__persist = '未対応'; return; }
+      if (navigator.storage.persisted && await navigator.storage.persisted()) { window.__persist = '許可済み'; return; }
+      window.__persist = (await navigator.storage.persist()) ? '許可' : '不許可';
+    } catch (err) { window.__persist = '失敗'; }
+  }
+  // 未保存の録画(止めたあとで、まだ保存していないもの)があるか。ページを閉じようとしたときの確認に使う
+  let hasUnsaved = false;
+  async function refreshUnsaved() {
+    try { hasUnsaved = (await store.listTakes()).some((x) => !x.hiddenAt && x.stoppedAt && !x.savedAt); } catch (err) { /* 読めないときは前のまま */ }
+  }
+  refreshUnsaved();
+  setInterval(refreshUnsaved, 3000);
+  window.addEventListener('beforeunload', (e) => {
+    if (isRecording() || isCollecting() || hasUnsaved) { e.preventDefault(); e.returnValue = ''; }
+  });
+
   // ---- 録画を始める・終える ----
   let starting = false;
   async function startRec() {
@@ -395,6 +416,7 @@ async function initParent(app) {
       const u = await store.usage();
       if (u && u.freeMB < DEFAULTS.minFreeMB * 2) { raiseAlarm(`空き容量が少ないため(あと約${Math.round(u.freeMB)}MB)、録画を始められません`); return; }
       setSheet(null);
+      requestPersist(); // 待たない(録画の開始を遅らせない)
       const ok = await parent.startTake({
         method: el('#optMethod').value, segSec: Number(el('#optSeg').value), maxSec: maxSel, audio: el('#optAudio').value === '1',
       });
@@ -591,6 +613,8 @@ async function initParent(app) {
       window.__lastSave = lastSave;
       if (how === 'cancelled') showToast('保存をやめました');
       else {
+        // 「保存済み」の印(端末に覚える)。共有の画面を出した・ダウンロードを始めた時点。iPhoneは、共有の画面を閉じただけかは分からない
+        try { const cur = await store.getTake(t.id); if (cur) { cur.savedAt = Date.now(); await store.putTake(cur); } } catch (err) { /* 印が付けられなくても、保存は済んでいる */ }
         if (res.note) showToast(res.note);
         if (res.info.length >= 2) await makeCombined(t);
         else {
@@ -600,7 +624,7 @@ async function initParent(app) {
         }
       }
     } finally {
-      saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; render();
+      saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; refreshUnsaved(); render();
     }
   }
 
@@ -698,6 +722,7 @@ async function initParent(app) {
     const lines = [];
     lines.push(`【録画の数値】${new Date(tk.startedAt).toLocaleString('ja-JP')} 録画のしかた:${tk.method === 'B' ? 'ふつう(MP4にまとめる)' : '比べる用'} 内部の区切り${tk.segSec}秒 長さ${tk.stoppedAt ? fmtDur(tk.stoppedAt - tk.startedAt) : '録画中'}${tk.partial ? ' 途中まで' : ''}`);
     if (segs[0]) lines.push(`録画の形式: ${segs[0].mime}`);
+    lines.push(`保存領域の保護(persist): ${window.__persist || 'まだ頼んでいない'}`);
     const recvSec = live && live.take.collectMs != null ? live.take.collectMs / 1000 : (tk.collectedAt && tk.stoppedAt ? (tk.collectedAt - tk.stoppedAt) / 1000 : null);
     if (tk.gaveUp) lines.push(`録画停止→映像受信: ${recvSec != null ? recvSec.toFixed(1) : '-'}秒で中止(届いていないカメラ: ${(tk.missing || []).join('・') || 'なし'})`);
     else if (recvSec != null) lines.push(`録画停止→映像受信の完了まで: ${recvSec.toFixed(1)}秒${tk.resumedAt ? '(中止のあと続きを受信)' : ''}`);
@@ -758,7 +783,7 @@ async function initParent(app) {
   async function renderTakes() {
     const list = (await store.listTakes()).filter((x) => !x.hiddenAt);
     const cur = take();
-    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.partial, !!t.gaveUp, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting(), !!making]);
+    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.savedAt, !!t.partial, !!t.gaveUp, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting(), !!making]);
     if (sig === takesSig) return;
     takesSig = sig;
     const sizes = new Map();
@@ -766,6 +791,8 @@ async function initParent(app) {
     const ul = el('#labTakes');
     ul.innerHTML = '';
     el('#labListNote').hidden = !list.length;
+    const isUnsaved = (t) => !!t.stoppedAt && !t.savedAt && !(cur && cur.id === t.id && isCollecting());
+    el('#labUnsavedNote').hidden = !list.some(isUnsaved);
     list.forEach((t) => {
       const li = document.createElement('li');
       li.dataset.take = t.id;
@@ -775,7 +802,8 @@ async function initParent(app) {
       const info = document.createElement('p');
       info.className = 'lab-take-info';
       const part = t.partial ? `<em>${t.missing && t.missing.length ? `${esc(t.missing.join('・'))}は途中まで` : '途中まで'}</em>` : '';
-      info.innerHTML = `<b>${esc(fmtClock(t.startedAt))}</b> <span>${durMs ? `${fmtDur(durMs)} ・ ` : ''}${mb}MB</span>${part}`;
+      const mark = isUnsaved(t) ? '<em class="lab-unsaved">未保存</em>' : (t.savedAt ? '<em class="lab-saved">保存済み</em>' : '');
+      info.innerHTML = `<b>${esc(fmtClock(t.startedAt))}</b> <span>${durMs ? `${fmtDur(durMs)} ・ ` : ''}${mb}MB</span>${mark}${part}`;
       li.appendChild(info);
       if (busy) {
         const p = document.createElement('p');
@@ -786,10 +814,10 @@ async function initParent(app) {
         if (durMs >= 30 * 60000) { const n = document.createElement('p'); n.className = 'lab-note'; n.textContent = '保存に時間がかかります。'; li.appendChild(n); }
         const row = document.createElement('div');
         row.className = 'lab-take-btns';
-        const mk = (icon, label, fn, dis) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'lab-act'; b.innerHTML = icon; b.setAttribute('aria-label', label); if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
+        const mk = (icon, label, fn, dis, wide) => { const b = document.createElement('button'); b.type = 'button'; b.className = wide ? 'lab-act lab-act-text' : 'lab-act'; b.innerHTML = wide ? iconText(icon, label) : icon; b.setAttribute('aria-label', label); if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
         row.append(
           mk(ICON.play, '見る', () => openViewer(t.id)),
-          mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making),
+          mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, isUnsaved(t)),
           mk(ICON.trash, '消す', () => removeTakes([t.id])),
         );
         li.appendChild(row);
