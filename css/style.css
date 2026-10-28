@@ -2017,3 +2017,22 @@ body.mode-monitor #btnRewind::before {
 .home-nudge-steps svg { width: 36px; height: 36px; }
 .home-nudge-steps .nudge-arrow { width: 22px; height: 22px; color: var(--text-dim); }
 .home-nudge-hint { margin: 4px 8px 0 0; text-align: center; font-size: 0.8rem; font-weight: 800; color: var(--text-soft); }
+
+
+/* =========================================================
+   ヘルプの一番上の「いま、すること」と、「くわしく」(2026-10-28)
+   - 親機(撮影画面)と子機で、出す行を替える。色は足さない。長い説明は「くわしく」を押すと開く
+   ========================================================= */
+.help-sheet .help-now { margin: 4px 0 14px; padding: 12px 14px; border: 1px solid var(--hairline); border-radius: var(--radius-md); background: var(--surface-2); }
+.help-sheet .help-now p { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text); line-height: 1.6; }
+.help-sheet .help-now p + p { margin-top: 4px; }
+.help-now-cam { display: none; }
+body.mode-camera .help-now-host { display: none; }
+body.mode-camera .help-now-cam { display: block; }
+.help-more summary {
+  display: flex; align-items: center; min-height: 48px; margin: 4px 0 6px; padding: 0 4px;
+  font-size: 0.92rem; font-weight: 800; color: var(--text); cursor: pointer; list-style: none;
+}
+.help-more summary::-webkit-details-marker { display: none; }
+.help-more summary::after { content: '+'; margin-left: 8px; font-size: 1.2rem; font-weight: 800; color: var(--text-dim); }
+.help-more[open] summary::after { content: '−'; }
