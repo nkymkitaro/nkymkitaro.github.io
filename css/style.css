@@ -1979,3 +1979,41 @@ body.mode-monitor #btnRewind::before {
 .var-ring .var-ring-track { stroke: var(--text-dim); opacity: 0.5; }
 .var-ring .var-ring-fill { stroke: var(--text); stroke-linecap: butt; transition: stroke-dashoffset var(--dur-base) linear; }
 #btnRewind.ring-paused .var-ring-fill { stroke: var(--text-dim); }
+
+
+/* =========================================================
+   ホーム画面への追加の案内(2026-10-28。依頼: 2026-10-28-to-coder-home-screen-nudge.md)
+   最初のVARのあとに1回だけ。画面の下(縦向きは「カメラを追加」の上、横向きは映像の左下)に置く小さなカード。新しい色は足さない
+   ========================================================= */
+.home-nudge {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  z-index: 62; /* 「?」(60)・ヘルプのシート(58)より上、トースト(88)より下 */
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 12px 8px 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+}
+.home-nudge[hidden] { display: none; }
+@media (orientation: landscape) and (max-height: 540px) {
+  .home-nudge { right: auto; left: 12px; margin: 0; width: min(60vw, 420px); }
+}
+.home-nudge-head { display: flex; align-items: center; gap: 8px; }
+.home-nudge-text { margin: 0; flex: 1; font-size: 0.95rem; font-weight: 800; line-height: 1.5; text-wrap: balance; }
+.home-nudge-close {
+  flex: 0 0 auto; width: 48px; height: 48px; margin: 0; padding: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; background: transparent; border-color: transparent;
+}
+.home-nudge-close svg { width: 20px; height: 20px; }
+.home-nudge-add {
+  display: block; width: calc(100% - 8px); min-height: 48px; margin: 4px 0 0; padding: 0 16px;
+  background: var(--text); color: #000; border-color: var(--text); border-radius: 999px; font-size: 0.95rem; font-weight: 800;
+}
+.home-nudge-steps { display: flex; align-items: center; justify-content: center; gap: 10px; margin: 6px 8px 0 0; }
+.home-nudge-steps svg { width: 36px; height: 36px; }
+.home-nudge-steps .nudge-arrow { width: 22px; height: 22px; color: var(--text-dim); }
+.home-nudge-hint { margin: 4px 8px 0 0; text-align: center; font-size: 0.8rem; font-weight: 800; color: var(--text-soft); }

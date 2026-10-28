@@ -12,6 +12,7 @@ import { saveClip } from './clip-saver.js';
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
+import { maybeShowHomeNudge } from './home-nudge.js';
 import { createReplayUi } from './replay-ui.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
 import { createCodeInput } from './code-input.js';
@@ -748,6 +749,7 @@ document.getElementById('btnGoLive').addEventListener('click', () => {
     backToReplayTimer = setTimeout(hideBackToReplay, BACK_TO_REPLAY_MS);
   }
   maybeAskRole(); // 見返し終わった直後に、立場を聞く(条件は role-survey.js)
+  maybeShowHomeNudge(); // 初めて見終えたとき1回だけ、ホーム画面への追加を勧める(条件は home-nudge.js)
 });
 btnBackToReplay.addEventListener('click', () => {
   dismissRoleSurvey(); // 戻る操作の直後に、立場の問いが出てしまわないようにする

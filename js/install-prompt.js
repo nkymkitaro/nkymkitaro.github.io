@@ -28,6 +28,25 @@ function notifyInstalled() {
   showToast(INSTALLED_MESSAGE, { duration: INSTALLED_NOTICE_MS });
 }
 
+// ブラウザが「追加」の仕組みを渡してきているか(Android の Chrome など)。最初のVARのあとの案内(home-nudge.js)が使う
+export function canPromptInstall() { return !!deferredPrompt; }
+
+// 追加の確認画面を出す。出せたら true
+export async function promptInstall() {
+  if (!deferredPrompt) return false;
+  const promptEvent = deferredPrompt;
+  deferredPrompt = null;
+  setButtonsVisible(false);
+  try {
+    await promptEvent.prompt();
+    await promptEvent.userChoice;
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
 export function initInstallPrompt() {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); // ブラウザ任せのバナーではなく、アプリ内のボタンから出す
