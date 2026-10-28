@@ -493,10 +493,15 @@ async function initParent(app) {
     await parent.stopTake('user');
     render();
   }
+  // 「録画」は1タップで始める(2026-10-28。依頼: 2026-10-28-to-coder-rec-one-tap.md)。設定は前回の値(初めては最長10分・音あり)。
+  // 最長・音・画質と、録画の一覧は、録画のシートの中。誤って始めても、最長で自動で止まり、「録画停止」ですぐ止められる
   recBtn.addEventListener('click', () => {
     if (isRecording()) { stopRec(); return; }
-    setSheet('main');
+    startRec();
   });
+  // 録画の一覧と最長などの設定は、⚙(VAR設定)のシートの一番上の「録画の一覧と設定」から開く(上の段は、帯の「REC 0:10」と重なるため、ボタンを足さない)
+  const listLink = document.getElementById('btnOpenRecList');
+  if (listLink) listLink.addEventListener('click', () => { document.getElementById('btnCloseSettings').click(); setSheet('main'); });
   el('#labStart').addEventListener('click', startRec);
 
   // ---- 録画の一覧: 消す(10秒は元に戻せる) ----
