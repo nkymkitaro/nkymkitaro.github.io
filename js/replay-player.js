@@ -64,6 +64,7 @@ export class ReplayPlayer {
     this._gridCache = new Map(); // camId -> { frame, drawable }: コマが変わらないカメラは、描き直すときに画像を作り直さない
     this._gridLayout = null; // 最後に並べたときの配置(タップした場所のカメラを調べるため)
     this._gridSmall = false; // 描き直しが遅い端末では true: 並べた形のときだけ映像を小さくして読み込む
+    this.delayMode = false;  // 遅れて映している間は true(ライブの描画を止める)
     this._gridTimes = [];    // 直近の描き直しの時間(ms)。コマを新しく読み込んだ回だけ数える
 
     this.seekBar = document.getElementById('seekBar');
@@ -108,7 +109,7 @@ export class ReplayPlayer {
     if (this._liveLoopStarted) return;
     this._liveLoopStarted = true;
     const loop = () => {
-      if (!this.isReplay) {
+      if (!this.isReplay && !this.delayMode) {
         const video = getActiveVideoEl();
         if (video && video.readyState >= video.HAVE_CURRENT_DATA) {
           this._fitCanvasTo(video.videoWidth, video.videoHeight);
@@ -527,6 +528,138 @@ export class ReplayPlayer {
     if (!tileW || !tileH) { tileW = 640; tileH = 480; }
     const layout = this._chooseGrid(items.length, tileW, tileH);
     this._fitCanvasTo(layout.cols * tileW, layout.rows * tileH);
+    layout.tileW = tileW;
+    layout.tileH = tileH;
+    this._paintTiles(items, layout);
+
+    // 新しく作った画像を控え、使わなくなった古い画像は片付ける
+    items.forEach((it) => {
+      const old = this._gridCache.get(it.id);
+      if (old && old.drawable !== it.drawable && old.drawable && old.drawable.close) old.drawable.close();
+      if (it.drawable) this._gridCache.set(it.id, { frame: it.frame, drawable: it.drawable });
+      else this._gridCache.delete(it.id);
+    });
+    for (const id of [...this._gridCache.keys()]) {
+      if (!ids.includes(id)) {
+        const old = this._gridCache.get(id);
+        if (old.drawable && old.drawable.close) old.drawable.close();
+        this._gridCache.delete(id);
+      }
+    }
+    this._gridLayout = { cols: layout.cols, rows: layout.rows, tileW, tileH, ids };
+    if (created.length > 0) this._noteGridTime(performance.now() - startedAt);
+  }
+
+  // ---- 遅れて映す(2026-10-30 依頼 delay-display)。いま − N秒 のコマを、順に出し続ける ----
+  // 新しくためる仕組みは作らず、VARと同じ録画バッファを読む。VARには入らない(isReplay は false のまま)
+  startDelay(sec, { onState } = {}) {
+    this.stopDelay();
+    this.delayMode = true;
+    this.delaySec = sec;
+    this._delayReady = null;
+    this._delayOnState = onState || null;
+    this._delayCache = new Map(); // camId -> { frame, drawable }
+    this._delayToken = 0;
+    this._delayBusy = false;
+    let last = 0;
+    const loop = (now) => {
+      if (!this.delayMode) return;
+      if (now - last >= 60 && !this._delayBusy) { last = now; this._delayTick(); }
+      this._delayRaf = requestAnimationFrame(loop);
+    };
+    this._delayRaf = requestAnimationFrame(loop);
+  }
+
+  stopDelay() {
+    if (!this.delayMode) return;
+    this.delayMode = false;
+    cancelAnimationFrame(this._delayRaf);
+    this._delayToken++;
+    for (const entry of this._delayCache.values()) {
+      if (entry.drawable && entry.drawable.close) entry.drawable.close();
+    }
+    this._delayCache.clear();
+    this._delayReady = null;
+  }
+
+  async _delayTick() {
+    this._delayBusy = true;
+    const token = ++this._delayToken;
+    const created = [];
+    try {
+      const targetTs = performance.now() - this.delaySec * 1000;
+      const ids = this.gridCamIds();
+      // N秒たつまでは出さない(いちばん古いコマが、まだ「いま − N秒」に届いていない)
+      const ready = ids.some((id) => this.recorder.getFrames(id)[0].ts <= targetTs + 150);
+      if (ready !== this._delayReady) {
+        this._delayReady = ready;
+        if (this._delayOnState) this._delayOnState(ready);
+      }
+      if (!ready) {
+        this.ctx.fillStyle = '#000';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        return;
+      }
+      const items = await Promise.all(ids.map(async (id) => {
+        const frames = this.recorder.getFrames(id);
+        // 録画のいちばん古いコマより前を指したときは、そのコマ(長さの上限ぎりぎりのとき)
+        const frame = frames.length && frames[0].ts > targetTs ? frames[0] : this._nearestFrame(frames, targetTs);
+        if (!frame) return { id, frame: null, drawable: null };
+        const cached = this._delayCache.get(id);
+        if (cached && cached.frame === frame) return { id, frame, drawable: cached.drawable };
+        const drawable = await blobToDrawable(frame.blob);
+        created.push(drawable);
+        return { id, frame, drawable };
+      }));
+      if (token !== this._delayToken || !this.delayMode) {
+        created.forEach((d) => d.close && d.close());
+        return;
+      }
+      if (items.length === 1) {
+        const d = items[0].drawable;
+        if (d) {
+          this._fitCanvasTo(d.width, d.height);
+          this.ctx.drawImage(d, 0, 0, this.canvas.width, this.canvas.height);
+        }
+      } else if (items.length > 1) {
+        let tileW = 0; let tileH = 0;
+        items.forEach((it) => {
+          if (!it.drawable) return;
+          tileW = Math.max(tileW, it.drawable.width);
+          tileH = Math.max(tileH, it.drawable.height);
+        });
+        if (!tileW || !tileH) { tileW = 640; tileH = 480; }
+        const layout = this._chooseGrid(items.length, tileW, tileH);
+        layout.tileW = tileW;
+        layout.tileH = tileH;
+        this._fitCanvasTo(layout.cols * tileW, layout.rows * tileH);
+        this._paintTiles(items, layout);
+      }
+      // 使った画像を控え、使わなくなった古い画像は片付ける
+      items.forEach((it) => {
+        const old = this._delayCache.get(it.id);
+        if (old && old.drawable !== it.drawable && old.drawable && old.drawable.close) old.drawable.close();
+        if (it.drawable) this._delayCache.set(it.id, { frame: it.frame, drawable: it.drawable });
+        else this._delayCache.delete(it.id);
+      });
+      for (const id of [...this._delayCache.keys()]) {
+        if (!ids.includes(id)) {
+          const old = this._delayCache.get(id);
+          if (old.drawable && old.drawable.close) old.drawable.close();
+          this._delayCache.delete(id);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      created.forEach((d) => d.close && d.close());
+    } finally {
+      this._delayBusy = false;
+    }
+  }
+
+  // 並べた映像を canvas に描く(VARの「並べて見る」と、遅れて映すで共通)。tileW・tileH は layout に入れて渡す
+  _paintTiles(items, layout) {
+    const { tileW, tileH } = layout;
     const ctx = this.ctx;
     const unit = 1 / layout.scale; // 画面上の1pxが、canvasの何pxにあたるか
     const gap = Math.round(GRID_GAP_PX * unit);
@@ -568,23 +701,6 @@ export class ReplayPlayer {
       ctx.fillStyle = '#fff';
       ctx.fillText(label, x + padX, y + bh / 2);
     });
-
-    // 新しく作った画像を控え、使わなくなった古い画像は片付ける
-    items.forEach((it) => {
-      const old = this._gridCache.get(it.id);
-      if (old && old.drawable !== it.drawable && old.drawable && old.drawable.close) old.drawable.close();
-      if (it.drawable) this._gridCache.set(it.id, { frame: it.frame, drawable: it.drawable });
-      else this._gridCache.delete(it.id);
-    });
-    for (const id of [...this._gridCache.keys()]) {
-      if (!ids.includes(id)) {
-        const old = this._gridCache.get(id);
-        if (old.drawable && old.drawable.close) old.drawable.close();
-        this._gridCache.delete(id);
-      }
-    }
-    this._gridLayout = { cols: layout.cols, rows: layout.rows, tileW, tileH, ids };
-    if (created.length > 0) this._noteGridTime(performance.now() - startedAt);
   }
 
   // 並べた形の描き直しにかかった時間を控え、1コマの時間を超える端末では、映像を小さくして読み込む形に切り替える

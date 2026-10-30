@@ -2038,3 +2038,60 @@ body.mode-camera .help-now-cam { display: block; }
 .help-more summary::-webkit-details-marker { display: none; }
 .help-more summary::after { content: '+'; margin-left: 8px; font-size: 1.2rem; font-weight: 800; color: var(--text-dim); }
 .help-more[open] summary::after { content: '−'; }
+
+
+/* =========================================================
+   遅れて映す(2026-10-30 依頼 delay-display)
+   - いま − N秒 の映像を全画面で流し続ける。VARの全画面と同じ形で、操作は右下の「×」だけ
+   - 帯はグレー地(一時停止中と同じ扱い。新しい色は足さない)。録画中は、帯の下に「REC 0:10」(lab/js/main.js)
+   ========================================================= */
+.state-band[data-state="delay"], .state-band[data-state="delayWait"] { background: var(--surface-2); color: var(--text); }
+.delay-exit { display: none; }
+#delaySecSelector { margin: 4px 0 12px; }
+body.mode-monitor #monitorArea.delaying {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: block !important;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  overflow: hidden;
+  padding: 0;
+}
+body.mode-monitor #monitorArea.delaying .stage-video {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  display: block;
+  border-radius: 0;
+}
+body.mode-monitor #monitorArea.delaying #displayCanvas { width: 100%; height: 100%; border-radius: 0; object-fit: contain; }
+body.mode-monitor #monitorArea.delaying :is(.monitor-head, .cam-dock, .seek-row, .var-hint, .controls-row, .player-toolbar, .save-row, .rec-status, #camBadge) { display: none !important; }
+body.mode-monitor #monitorArea.delaying .state-bands { top: calc(env(safe-area-inset-top) + 12px); left: env(safe-area-inset-left); }
+body.mode-monitor #monitorArea.delaying .delay-exit {
+  position: absolute;
+  z-index: 2;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 28px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(28,28,30,0.82);
+  color: #fff;
+}
+.delay-exit svg { width: 24px; height: 24px; }
+@media (orientation: landscape) {
+  body.mode-monitor #monitorArea.delaying .state-bands { top: 8px; }
+}

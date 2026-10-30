@@ -353,6 +353,7 @@ function syncRecorderPauseState(sources) {
 
 // 状態の帯を、今の状態(リプレイ中 / 一時停止中 / LIVE)に合わせる
 function updateStateBand() {
+  if (player.delayMode) return; // 遅れて映している間の帯は、下の startDelayDisplay が出す
   if (player.isReplay) setBandState('replay');
   else if (cameraLink.isPaused) setBandState('paused');
   else setBandState('live');
@@ -842,6 +843,51 @@ document.getElementById('btnLineContact').addEventListener('click', () => track(
 document.getElementById('btnHelpInline').addEventListener('click', openHelp); // 横向き時の親機用
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);
+
+// --- 遅れて映す(2026-10-30 依頼 delay-display): ⚙から秒数を選ぶと、いま − N秒 の映像を全画面で流し続ける ---
+const DELAY_OPTIONS = [10, 20, 30];
+const btnDelayOpen = document.getElementById('btnDelayOpen');
+const delaySecSelector = document.getElementById('delaySecSelector');
+function renderDelaySelector() {
+  delaySecSelector.innerHTML = '';
+  DELAY_OPTIONS.filter((sec) => sec <= varSettings.bufferSeconds).forEach((sec) => {
+    const btn = document.createElement('button');
+    btn.textContent = `${sec}秒`;
+    btn.addEventListener('click', () => startDelayDisplay(sec));
+    delaySecSelector.appendChild(btn);
+  });
+}
+btnDelayOpen.addEventListener('click', () => {
+  const open = delaySecSelector.hidden;
+  if (open) renderDelaySelector();
+  delaySecSelector.hidden = !open;
+  btnDelayOpen.setAttribute('aria-expanded', String(open));
+});
+function startDelayDisplay(sec) {
+  if (player.isReplay || player.delayMode) return;
+  closeSettings();
+  delaySecSelector.hidden = true;
+  btnDelayOpen.setAttribute('aria-expanded', 'false');
+  const bandText = document.querySelector('#stateBand .state-band-text');
+  player.startDelay(sec, {
+    onState: (ready) => {
+      setBandState(ready ? 'delay' : 'delayWait');
+      if (ready) bandText.textContent = `${sec}秒遅れ`;
+    },
+  });
+  monitorArea.classList.add('delaying');
+  setBandState('delayWait');
+  enterBrowserFullscreen();
+}
+function stopDelayDisplay() {
+  if (!player.delayMode) return;
+  player.stopDelay();
+  monitorArea.classList.remove('delaying');
+  exitBrowserFullscreen();
+  updateStateBand();
+}
+document.getElementById('btnDelayExit').addEventListener('click', stopDelayDisplay);
+attachPress(document.getElementById('btnDelayExit'), { vibrate: 12 });
 
 document.getElementById('btnSettings').addEventListener('click', openSettings);
 document.getElementById('btnCloseSettings').addEventListener('click', closeSettings);
