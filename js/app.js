@@ -559,11 +559,13 @@ if (qrJoinCode && !inApp.blocked && !inApp.leaving) {
   codeInput.fill(qrJoinCode);
   connectToMonitor(qrJoinCode, parseJoinMethod(window.location.search));
 }
-// リンクですぐ撮影(?start=1): 準備ページとスタート画面を飛ばして、「はじめる」を押したあとの画面へ進む。
-// 「前回」の印は変えない。「最初の画面に戻る」矢印はそのまま使える(戻ると、?start=1 のないスタート画面)。
+// ふつうに開いたときも、準備ページとスタート画面を飛ばして、「はじめる」を押したあとの画面(撮影画面)へ進む。
+// ?front=1 のときだけ、今までのスタート画面を出す(戻すとき・比べるとき用)。?start=1 は付いていても動きは同じ(集計用)。
+// 「前回」の印は変えない。「最初の画面に戻る」矢印を押すと、?front=1 のスタート画面に戻る(番号を手で入れて参加する入口)。
 // アプリ内ブラウザで先へ進ませないとき・?join= のときは、何もしない
-if (/[?&]start=1(&|$)/.test(window.location.search) && !qrJoinCode && !inApp.blocked && !inApp.leaving) {
-  track('role_select', { role: 'start' });
+const showFront = /[?&]front=1(&|$)/.test(window.location.search);
+if (!showFront && !qrJoinCode && !inApp.blocked && !inApp.leaving) {
+  // role_select は送らない(「はじめる」を選んだ人の数と混ざるため)。着いたことは live_start で数える
   startMonitor();
 }
 document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSending);
@@ -573,7 +575,7 @@ document.getElementById('btnDisconnect').addEventListener('click', leaveCameraSe
 // 開き直して最初の画面から始める。表示するのは「他のカメラがつながっていない・録画していない」ときだけ(css/style.css の .back-start)
 function backToStartScreen() {
   try { sessionStorage.setItem(RETURNED_KEY, '1'); } catch (err) { /* 数え直すだけ */ }
-  window.location.replace(window.location.pathname);
+  window.location.replace(window.location.pathname + '?front=1');
 }
 ['btnBackStart', 'btnJoinBack'].forEach((id) => {
   const btn = document.getElementById(id);
