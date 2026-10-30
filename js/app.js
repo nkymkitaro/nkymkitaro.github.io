@@ -56,7 +56,7 @@ const recorder = new MultiCamRecorder({ fps: 15, durationSec: DEFAULT_BUFFER_SEC
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 // --- VAR設定(親機からいつでも調整できる) ---
-const REWIND_OPTIONS = [10, 15, 30, 60]; // 秒。さかのぼれる長さは、これに合わせて自動で決める(2026-10-30。2つの設定がぶつかるのを防ぐ)
+const REWIND_OPTIONS = [10, 15, 30]; // 秒。さかのぼれる長さは、これに合わせて自動で決める(2026-10-30。2つの設定がぶつかるのを防ぐ)
 const MIN_BUFFER_SEC = DEFAULT_BUFFER_SEC; // ためる長さの下限。戻る秒数が短くても、この長さはためる
 const BUFFER_HEAVY_SEC = 60; // 戻る秒数にこの長さを選んだときは「重くなることがあります。」を出す
 // 録画の画質。カメラは640×480で取り込むので、640pxより上げても細かくならない(「高」は外した、2026-10-14)。
