@@ -553,6 +553,8 @@ initRoleSurvey();
 // 「前回」の印は変えない(rememberRole を呼ばない)
 // アプリ内ブラウザで先へ進ませないときは、準備ページも出さず、自動の参加もしない(カメラが使えないため)
 if (inApp.blocked || inApp.leaving) document.documentElement.classList.remove('needs-prep');
+// アプリ内ブラウザで先へ進ませないときは、スタート画面(または案内)を出す。隠したままにしない
+if (inApp.blocked || inApp.leaving) document.documentElement.classList.remove('auto-start');
 const qrJoinCode = parseJoinParam(window.location.search);
 if (qrJoinCode && !inApp.blocked && !inApp.leaving) {
   document.documentElement.classList.remove('needs-prep');

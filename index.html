@@ -19,6 +19,17 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:description" content="スマホで撮って、その場で見返す。2台なら、死角からも。">
 
+  <!-- 開いた直後に、スタート画面(「はじめる」)が一瞬見えないようにする。?front=1 のとき以外は、app.js が撮影画面へ進むまで隠す。
+       app.js が読み込めなかったときのため、3秒たったら必ず外す -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      if (/[?&]front=1(&|$)/.test(location.search)) return;
+      root.classList.add('auto-start');
+      setTimeout(function () { root.classList.remove('auto-start'); }, 3000);
+    })();
+  </script>
+
   <!-- PWA / 全画面表示設定 (iOS & Android) -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">

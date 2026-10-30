@@ -724,6 +724,8 @@ body.mode-setup h1 { flex: 0 0 auto; margin: 6px 0 14px; }
   display: flex;
   flex-direction: column;
 }
+/* 自動で撮影画面へ進むとき、スタート画面を一瞬も見せない(index.html の先頭の小さな処理が付ける) */
+html.auto-start #setupArea { display: none !important; }
 .start-panels {
   flex: 1;
   min-height: 0;
