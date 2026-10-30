@@ -602,8 +602,7 @@ export class ReplayPlayer {
         if (this._delayOnState) this._delayOnState(ready, remain);
       }
       if (!ready) {
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         return;
       }
       const items = await Promise.all(ids.map(async (id) => {

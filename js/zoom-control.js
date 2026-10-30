@@ -24,7 +24,8 @@ export function zoomSupport(track) {
 
 // parent: 操作を入れる要素。getTrack: 今のカメラの映像トラックを返す関数(なければ null)
 // buttonParent: 開閉の丸いボタンを入れる要素。buttonClass: そのボタンの追加クラス
-export function createZoomControl({ parent, getTrack, className = '', buttonParent, buttonClass = '' }) {
+// portraitParent: 縦向きのときだけ、ボタンをこちらへ移す(縦向きの上の行は、REC の帯と4つのボタンで幅が足りないため)
+export function createZoomControl({ parent, getTrack, className = '', buttonParent, buttonClass = '', portraitParent = null }) {
   const root = document.createElement('div');
   root.className = `zoom-ctl ${className}`.trim();
   root.hidden = true;
@@ -47,7 +48,16 @@ export function createZoomControl({ parent, getTrack, className = '', buttonPare
   toggle.setAttribute('aria-expanded', 'false');
   const ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5.5 5.5M10.5 8v5M8 10.5h5"/></svg>';
   toggle.innerHTML = ICON;
-  (buttonParent || parent).insertBefore(toggle, (buttonParent || parent).firstChild);
+  const home = buttonParent || parent;
+  const portraitMq = window.matchMedia ? window.matchMedia('(orientation: portrait)') : null;
+  function placeToggle() {
+    const target = portraitParent && portraitMq && portraitMq.matches ? portraitParent : home;
+    if (toggle.parentElement === target) return;
+    if (target === home) home.insertBefore(toggle, home.firstChild);
+    else target.appendChild(toggle);
+  }
+  placeToggle();
+  if (portraitMq && portraitMq.addEventListener) portraitMq.addEventListener('change', placeToggle);
   let hideTimer = null;
   function setOpen(open) {
     clearTimeout(hideTimer);

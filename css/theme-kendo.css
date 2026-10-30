@@ -78,3 +78,24 @@ body.mode-monitor #monitorArea.replaying .add-cam { display: none; }
 
 /* 遅れて映している間は、映像・帯・「×」だけにする(ズームのバーなどが透けて見えていた) */
 body.mode-monitor #monitorArea.delaying :is(.zoom-ctl, .zoom-host, .home-nudge, .back-start, .add-cam, .cam-dock, .var-hint, .rec-status) { display: none !important; }
+
+/* 横向き: 上の行が4つになったので、右の列に収まるよう 2×2 に並べる(1つだけ次の行に落ちていた) */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) .status-row {
+    display: grid;
+    grid-template-columns: repeat(2, 48px);
+    gap: 10px;
+    justify-content: end;
+  }
+}
+/* ズームのボタン: 縦向きは下の行(カメラの切り替えの右端)。上の行は、RECの帯と並ぶと幅が足りない */
+.cam-dock .zoom-toggle { flex: none; margin-left: auto; background: rgba(12, 22, 54, 0.9); border: 1px solid var(--navy-line); }
+#monitorArea.has-children .cam-dock .add-cam { margin-left: 0; }
+.cam-dock .zoom-toggle.is-zoomed { background: var(--text); }
+/* 録画中は、VARの面を紺にして、白い文字が読めるようにする(白い面に白い文字で、VARの文字が消えていた) */
+body.mode-monitor #monitorArea.lab-recording:not(.replaying) #btnRewind { color: #fff; }
+body.mode-monitor #monitorArea.lab-recording:not(.replaying) #btnRewind::before { background: var(--navy-800); }
+/* ディレイが始まるまでの間も、映像の枠を黒くしない */
+body.mode-monitor #monitorArea.delaying #displayCanvas { background: transparent; }
+/* 準備ページの地も、アプリの紺にそろえる */
+.prep-area { background: var(--navy-950); }

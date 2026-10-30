@@ -101,6 +101,7 @@ function startMonitor() {
       parent: document.getElementById('monitorArea'),
       className: 'zoom-host',
       buttonParent: document.querySelector('#monitorArea .status-row'),
+      portraitParent: document.querySelector('#monitorArea .cam-dock'),
       getTrack: () => { const st = cameraLink.localMonitorVideo.srcObject; return st ? st.getVideoTracks()[0] : null; },
     });
     hostZoom.refresh();

@@ -400,6 +400,7 @@ input[type="range"]:disabled::-moz-range-thumb { background: var(--text-dim); }
   box-shadow: 0 -4px 24px rgba(0,0,0,0.5);
 }
 .help-sheet.open { transform: translateY(0); }
+.help-sheet:not(.open) { box-shadow: none; } /* 閉じている間、下にしまった影が画面の下端にかかって、ボタンが薄く見えていた */
 .help-sheet-handle {
   width: 36px;
   height: 4px;
@@ -1249,7 +1250,7 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
   .prep-phones { max-width: 260px; row-gap: 4px; }
   .prep-phone { gap: 4px; }
   .prep-phone svg { width: 56px; height: 34px; }
-  .prep-phone figcaption { font-size: 0.75rem; }
+  .prep-phone figcaption { font-size: 0.8125rem; }
   .prep-steps { grid-area: steps; align-self: start; gap: 8px; }
   .prep-tether { grid-area: tether; align-self: end; padding: 10px 14px; gap: 4px; }
   .prep-actions { grid-area: actions; margin-top: 0; align-self: end; gap: 4px; }
@@ -1275,7 +1276,7 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
   .prep-phones { max-width: 270px; row-gap: 3px; }
   .prep-phone { gap: 4px; }
   .prep-phone svg { width: 52px; height: 32px; }
-  .prep-phone figcaption { font-size: 0.75rem; }
+  .prep-phone figcaption { font-size: 0.8125rem; }
   .prep-steps { gap: 8px; }
   .prep-step { min-height: 76px; padding-top: 10px; padding-bottom: 10px; }
   .prep-tether { padding: 10px 16px; gap: 4px; }
