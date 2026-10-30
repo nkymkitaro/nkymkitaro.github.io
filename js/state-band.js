@@ -9,7 +9,7 @@ const MONITOR_LABELS = {
   live: 'LIVE',
   replay: 'VAR',
   paused: '一時停止中',
-  delay: '遅れ', // 文字は js/app.js が「10秒遅れ」のように書き換える
+  delay: 'ディレイ', // 文字は js/app.js が「10秒ディレイ」のように書き換える
   delayWait: '準備中',
 };
 

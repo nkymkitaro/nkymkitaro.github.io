@@ -847,7 +847,7 @@ function renderDelaySelector() {
   delaySecSelector.innerHTML = '';
   DELAY_OPTIONS.filter((sec) => sec <= varSettings.bufferSeconds).forEach((sec) => {
     const btn = document.createElement('button');
-    btn.textContent = `${sec}秒遅れ`;
+    btn.textContent = `${sec}秒`;
     btn.addEventListener('click', () => startDelayDisplay(sec));
     delaySecSelector.appendChild(btn);
   });
@@ -860,7 +860,7 @@ function startDelayDisplay(sec) {
   player.startDelay(sec, {
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
-      bandText.textContent = ready ? `${sec}秒遅れ` : `あと${remain}秒`;
+      bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });
   monitorArea.classList.add('delaying');
