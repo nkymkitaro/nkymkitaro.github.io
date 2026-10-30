@@ -858,9 +858,9 @@ function startDelayDisplay(sec) {
   closeSettings();
   const bandText = document.querySelector('#stateBand .state-band-text');
   player.startDelay(sec, {
-    onState: (ready) => {
+    onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
-      if (ready) bandText.textContent = `${sec}秒遅れ`;
+      bandText.textContent = ready ? `${sec}秒遅れ` : `あと${remain}秒`;
     },
   });
   monitorArea.classList.add('delaying');

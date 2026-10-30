@@ -75,3 +75,6 @@ body.mode-monitor #monitorArea.replaying :is(.speed-btn, .save-btn, .icon-btn:no
 body.mode-monitor #monitorArea.replaying .icon-btn-primary { color: var(--navy-900); }
 /* 映像の黒を透明にしたぶん、後ろにあった「カメラを追加」が透けるので、VAR中は出さない */
 body.mode-monitor #monitorArea.replaying .add-cam { display: none; }
+
+/* 遅れて映している間は、映像・帯・「×」だけにする(ズームのバーなどが透けて見えていた) */
+body.mode-monitor #monitorArea.delaying :is(.zoom-ctl, .zoom-host, .home-nudge, .back-start, .add-cam, .cam-dock, .var-hint, .rec-status) { display: none !important; }

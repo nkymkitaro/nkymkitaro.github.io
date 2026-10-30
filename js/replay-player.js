@@ -591,9 +591,15 @@ export class ReplayPlayer {
       const ids = this.gridCamIds();
       // N秒たつまでは出さない(いちばん古いコマが、まだ「いま − N秒」に届いていない)
       const ready = ids.some((id) => this.recorder.getFrames(id)[0].ts <= targetTs + 150);
-      if (ready !== this._delayReady) {
+      // 準備中は、あと何秒で始まるかも知らせる(いちばん早く届くカメラ基準)
+      const remain = ready ? 0 : Math.max(1, Math.ceil(Math.min(...ids.map((id) => {
+        const fr = this.recorder.getFrames(id);
+        return fr.length ? this.delaySec - (performance.now() - fr[0].ts) / 1000 : this.delaySec;
+      }))));
+      if (ready !== this._delayReady || remain !== this._delayRemain) {
         this._delayReady = ready;
-        if (this._delayOnState) this._delayOnState(ready);
+        this._delayRemain = remain;
+        if (this._delayOnState) this._delayOnState(ready, remain);
       }
       if (!ready) {
         this.ctx.fillStyle = '#000';
