@@ -1,0 +1,77 @@
+/* =========================================================
+   剣道の配色(2026-10-30 試作。中山さんの指示: 紺・白・赤・黒)
+   役割: 紺 = 面と操作の地 / 白 = 文字と、VAR(道着の白) / 赤 = 撮っている状態だけ(LIVE・REC) / 黒 = 映像の背景
+   見分けは色相でなく明暗で付ける(LIVE = 濃い赤、VAR = 白): 体育館の照明でも、色の見え方が違う人にも伝わる。
+   このファイルを外す(index.html の link を消す)と、今までの配色に戻る
+   ========================================================= */
+:root {
+  --navy-950: #070d22;
+  --navy-900: #0c1636;
+  --navy-800: #14224d;
+  --navy-700: #1d3170;
+  --navy-line: rgba(255, 255, 255, 0.2);
+  --accent-live: #d6231b;   /* 白文字とのコントラスト比 5.1:1(今までの赤は 3.5:1) */
+  --accent-replay: #ffffff; /* VAR = 白。アンバーはやめる */
+  --surface: var(--navy-900);
+  --surface-2: var(--navy-800);
+  --glass: rgba(255, 255, 255, 0.1);
+}
+body.mode-monitor { background: var(--navy-950); }
+
+/* 帯: LIVE は赤地・白文字。VAR は白地・紺文字 */
+.state-band[data-state="live"] { background: var(--accent-live); color: #fff; }
+.state-band[data-state="replay"] { background: #fff; color: var(--navy-900); }
+.state-band[data-state="paused"], .state-band[data-state="delay"], .state-band[data-state="delayWait"] { background: var(--navy-700); color: #fff; }
+
+/* 上の3つのボタン・戻る矢印・カメラの切り替え: 紺の地に白い細い縁 */
+body.mode-monitor #monitorArea:not(.replaying) .status-row .icon-btn,
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button,
+.back-start {
+  background: rgba(12, 22, 54, 0.9);
+  border: 1px solid var(--navy-line);
+}
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button.active,
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button.btn-active {
+  background: #fff !important;
+  color: var(--navy-900) !important;
+  border-color: #fff !important;
+}
+.add-cam { background: rgba(12, 22, 54, 0.9); border-color: #fff; }
+.zoom-ctl { background: rgba(12, 22, 54, 0.9); border: 1px solid var(--navy-line); }
+.state-bands .rec-status { background: rgba(12, 22, 54, 0.92); border: 1px solid var(--navy-line); }
+body.mode-monitor #monitorArea:not(.replaying) .var-hint { color: var(--text-soft); }
+
+/* VAR: 白い面に紺の文字。輪(さかのぼれる長さ)は赤 = 撮ってためている印 */
+body.mode-monitor #btnRewind { color: var(--navy-900); }
+body.mode-monitor #btnRewind::before { background: #fff; }
+.var-ring .var-ring-track { stroke: var(--navy-700); opacity: 1; }
+.var-ring .var-ring-fill { stroke: var(--accent-live); }
+#btnRewind.ring-paused .var-ring-fill { stroke: var(--text-dim); }
+
+/* 録画: 紺の面に赤い丸。録画中は赤地に白(いま撮っている印) */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
+  background: var(--navy-800);
+  border: 1px solid var(--navy-line);
+  color: #fff;
+}
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn svg { color: var(--accent-live); fill: var(--accent-live); }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn.is-recording { background: var(--accent-live); border-color: var(--accent-live); color: #fff; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn.is-recording svg { color: #fff; fill: #fff; }
+
+/* 映像のまわり(上下・左右の余白)は、黒でなく濃い紺 */
+body.mode-monitor #monitorArea:not(.replaying) { background: var(--navy-950); }
+body.mode-monitor #monitorArea:not(.replaying) #displayCanvas { background: transparent; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions { background: var(--navy-950); }
+body.mode-monitor #monitorArea:not(.replaying) .var-hint { background: var(--navy-950); }
+
+/* VAR中(見返している画面)も、同じ配色: 映像のまわりは濃い紺、操作は紺の面、LIVEに戻るは赤 */
+body.mode-monitor #monitorArea.replaying { background: var(--navy-950); }
+body.mode-monitor #monitorArea.replaying #displayCanvas { background: transparent; }
+body.mode-monitor #monitorArea.replaying :is(.speed-btn, .save-btn, .icon-btn:not(.icon-btn-primary), .undo-btn) {
+  background: var(--navy-800);
+  border: 1px solid var(--navy-line);
+  color: #fff;
+}
+body.mode-monitor #monitorArea.replaying .icon-btn-primary { color: var(--navy-900); }
+/* 映像の黒を透明にしたぶん、後ろにあった「カメラを追加」が透けるので、VAR中は出さない */
+body.mode-monitor #monitorArea.replaying .add-cam { display: none; }
