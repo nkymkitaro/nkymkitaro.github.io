@@ -2095,3 +2095,22 @@ body.mode-monitor #monitorArea.delaying .delay-exit {
 @media (orientation: landscape) {
   body.mode-monitor #monitorArea.delaying .state-bands { top: 8px; }
 }
+
+
+/* ズーム(2026-10-30): 普段はスライダーを出さない。丸いボタンを押すと出て、3秒さわらないと消える */
+.zoom-ctl:not(.zoom-open) { display: none; }
+.zoom-toggle[hidden], .zoom-toggle.zoom-inactive { display: none; }
+.zoom-toggle { font-family: inherit; font-size: 14px; font-weight: 800; letter-spacing: -0.02em; color: var(--text); }
+.zoom-toggle svg { width: 24px; height: 24px; }
+.zoom-toggle.is-zoomed { background: var(--text) !important; color: #000 !important; }
+/* 子機: 映像の右上 */
+.zoom-send-btn {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 12px;
+  width: 48px;
+  height: 48px;
+  background: rgba(12, 22, 54, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}

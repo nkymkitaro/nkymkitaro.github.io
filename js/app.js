@@ -100,6 +100,7 @@ function startMonitor() {
     if (!hostZoom) hostZoom = createZoomControl({
       parent: document.getElementById('monitorArea'),
       className: 'zoom-host',
+      buttonParent: document.querySelector('#monitorArea .status-row'),
       getTrack: () => { const st = cameraLink.localMonitorVideo.srcObject; return st ? st.getVideoTracks()[0] : null; },
     });
     hostZoom.refresh();
@@ -298,6 +299,8 @@ async function connectToMonitor(targetId, method = 'code') {
     sendZoom = createZoomControl({
       parent: document.getElementById('sendView'),
       className: 'zoom-send',
+      buttonParent: document.getElementById('sendFrame'),
+      buttonClass: 'zoom-send-btn',
       getTrack: () => (cameraLink.ownStream ? cameraLink.ownStream.getVideoTracks()[0] : null),
     });
   }
@@ -313,7 +316,7 @@ function leaveCameraSending() {
   cameraLink.disconnectFromMonitor();
   document.body.classList.remove('camera-sending');
   sendVideo.srcObject = null;
-  if (sendZoom) sendZoom.el.hidden = true;
+  if (sendZoom) sendZoom.hide();
   camBand.reset();
   codeInput.clear();
   cameraStatusEl.textContent = '';
