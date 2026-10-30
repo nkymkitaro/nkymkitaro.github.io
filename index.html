@@ -99,9 +99,12 @@
           <div class="prep-phone">
             <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
               <rect x="3" y="3" width="70" height="40" rx="7"></rect>
-              <path d="M32 15l12 8-12 8z" fill="currentColor" stroke-linejoin="round"></path>
+              <path d="M15 15l12 8-12 8z" fill="currentColor" stroke-linejoin="round"></path>
+              <circle cx="49" cy="26" r="8"></circle>
+              <circle cx="49" cy="26" r="3" fill="currentColor" stroke="none"></circle>
+              <circle class="art-rec" cx="61" cy="13" r="3.5" stroke="none"></circle>
             </svg>
-            <figcaption>はじめるスマホ</figcaption>
+            <figcaption>このスマホ</figcaption>
           </div>
           <div class="prep-phone">
             <svg width="76" height="46" viewBox="0 0 76 46" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
@@ -109,8 +112,9 @@
               <circle cx="38" cy="23" r="10"></circle>
               <circle cx="38" cy="23" r="4"></circle>
               <circle class="art-rec" cx="61" cy="13" r="3.5" stroke="none"></circle>
+              <path d="M14 9v8M10 13h8" stroke-linecap="round"></path>
             </svg>
-            <figcaption>追加するスマホ</figcaption>
+            <figcaption>もう1台</figcaption>
           </div>
         </div>
       </figure>
@@ -119,8 +123,7 @@
         <button type="button" class="prep-step" aria-pressed="false">
           <span class="prep-num" aria-hidden="true">1</span>
           <span class="prep-step-text">
-            <span class="prep-step-title">全部のスマホを、同じWi‑Fiにつなぐ</span>
-            <span class="prep-step-detail">会場のWi‑Fiか、はじめたスマホのテザリング</span>
+            <span class="prep-step-title">同じWi‑Fiにつなぐ</span>
           </span>
           <span class="prep-check" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5l3.5 3.5 7.5-8"></path></svg>
@@ -129,8 +132,7 @@
         <button type="button" class="prep-step" aria-pressed="false">
           <span class="prep-num" aria-hidden="true">2</span>
           <span class="prep-step-text">
-            <span class="prep-step-title">追加するスマホで、QRを読む</span>
-            <span class="prep-step-detail">QRは、次の画面に出ます。読めないときは、「←」から「カメラで参加」</span>
+            <span class="prep-step-title">もう1台で、QRを読む</span>
           </span>
           <span class="prep-check" aria-hidden="true">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5l3.5 3.5 7.5-8"></path></svg>
@@ -139,7 +141,7 @@
       </div>
 
       <div class="prep-tether">
-        <div class="prep-tether-title">つながらないときは、はじめたスマホのテザリング</div>
+        <div class="prep-tether-title">つながらないときは、テザリング</div>
         <p><span class="nowrap">iPhone：インターネット共有</span>　<span class="nowrap">Android：テザリング</span></p>
       </div>
 
@@ -308,9 +310,9 @@
       <div class="qr-overlay-img" id="qrBig"></div>
       <div class="qr-overlay-side">
         <h2 class="qr-overlay-title" id="qrTitle">カメラを追加</h2>
-        <p class="qr-overlay-note"><span class="nowrap">追加する</span><span class="nowrap">スマホで読み取る</span></p>
+        <p class="qr-overlay-note"><span class="nowrap">もう1台で</span><span class="nowrap">読み取る</span></p>
         <p class="qr-overlay-code">番号 <strong id="qrBigCode"></strong></p>
-        <p class="qr-overlay-wifi"><span class="nowrap">同じWi‑Fiに</span><span class="nowrap">つないでください。</span><span class="nowrap">つながらないときは、</span><span class="nowrap">このスマホの</span><span class="nowrap">テザリング(iPhoneは</span><span class="nowrap">「インターネット共有」)</span><span class="nowrap">につないでください。</span></p>
+        <p class="qr-overlay-wifi"><span class="nowrap">同じWi‑Fiに</span><span class="nowrap">つなぐ。</span><span class="nowrap">つながらないときは、</span><span class="nowrap">このスマホの</span><span class="nowrap">テザリング。</span></p>
         <div class="qr-overlay-actions">
           <button type="button" id="btnQrShare" class="qr-overlay-share">リンクを送る</button>
           <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
@@ -365,7 +367,7 @@
     <p>会場でこの画面を操作するスマホです。1台で使うときは、そのまま使えます。このスマホのカメラは「カメラ1」です。映像が縦向きの画面で横長になるときは、スマホを横にすると大きく映ります。</p>
 
     <h4>📷 カメラを追加</h4>
-    <p>別アングルを足すときは、はじめたスマホで「カメラを追加」を押します。QRが出るので、追加するスマホで読み取ると、その映像が届きます。読み取れないときは、追加するスマホで「←」から「カメラで参加」を選び、番号を入れます。「リンクを送る」を押すと、LINEなどで参加用のリンクを送ることもできます。参加したカメラは「カメラ2」から順に呼ばれ、同じ番号に最大3台まで参加できます。できれば同じWi‑Fiにつないでおくと、つながりが安定し、モバイル通信量も節約できます。横向きで撮影する場合は、スマホの画面の回転をオンにしてください。</p>
+    <p>別アングルを足すときは、はじめたスマホで「カメラを追加」を押します。QRが出るので、もう1台で読み取ると、その映像が届きます。読み取れないときは、もう1台で「←」から「カメラで参加」を選び、番号を入れます。「リンクを送る」を押すと、LINEなどで参加用のリンクを送ることもできます。参加したカメラは「カメラ2」から順に呼ばれ、同じ番号に最大3台まで参加できます。できれば同じWi‑Fiにつないでおくと、つながりが安定し、モバイル通信量も節約できます。横向きで撮影する場合は、スマホの画面の回転をオンにしてください。</p>
 
     <h4>📶 会場でつながらないとき</h4>
     <p>同じWi‑Fiにつないでください。つながらないときは、はじめたスマホのテザリング(iPhoneは「インターネット共有」)につないでください。iPhoneは「設定」→「インターネット共有」、Androidは「設定」→「ネットワーク」→「テザリング」で設定できます。機種によって名前や場所が異なる場合は、「テザリング」で探してください。映像ははじめたスマホとカメラの間で直接やり取りされるため、携帯の通信量はほとんど使いません。ただし、番号を受け渡すために、インターネットにはつながっている必要があります。会場のWi‑Fiは、スマホどうしの通信を遮断していることがあり、その場合は、同じWi‑Fiにつないでもつながりません。</p>
