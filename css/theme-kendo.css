@@ -99,3 +99,6 @@ body.mode-monitor #monitorArea.lab-recording:not(.replaying) #btnRewind::before 
 body.mode-monitor #monitorArea.delaying #displayCanvas { background: transparent; }
 /* 準備ページの地も、アプリの紺にそろえる */
 .prep-area { background: var(--navy-950); }
+
+/* ズームは撮影中のカメラ用。VAR再生中・ディレイ中は出さない(帯と重なって見えた不具合の修正) */
+body.mode-monitor #monitorArea:is(.replaying, .delaying) .zoom-toggle { display: none !important; }

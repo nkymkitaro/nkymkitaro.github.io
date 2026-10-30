@@ -1944,7 +1944,7 @@ body.mode-monitor #monitorArea:not(.replaying) .zoom-host {
 body.mode-monitor #monitorArea.replaying .zoom-host { display: none; }
 @media (orientation: landscape) and (max-height: 540px) {
   /* 横向きは、カメラの切り替えが右の列にあるので、映像の下端に置く */
-  body.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 0 12px; }
+  body.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 12px 12px 72px; justify-self: end; } /* 左下の「←」(幅48px)と重ならないよう、右に寄せる */
 }
 /* 子機: 画面の下側。「画面をロックすると送信が止まります」の上に置く */
 .zoom-send {
