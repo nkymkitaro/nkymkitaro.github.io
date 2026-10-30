@@ -2115,3 +2115,20 @@ body.mode-monitor #monitorArea.delaying .delay-exit {
   background: rgba(12, 22, 54, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
+
+
+/* 「元に戻す」のトースト(画面の下、ボタンの上)。上に出すと、RECの帯と一時停止などのボタンにかぶる */
+.toast.toast-low {
+  top: auto;
+  bottom: calc(env(safe-area-inset-bottom) + 176px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 8px 8px 18px;
+  transform: translateX(-50%) translateY(16px);
+}
+.toast.toast-low.show { transform: translateX(-50%) translateY(0); }
+.toast.toast-low .toast-action { width: auto; margin: 0; flex: none; }
+@media (orientation: landscape) and (max-height: 540px) {
+  .toast.toast-low { bottom: 72px; left: 36%; }
+}

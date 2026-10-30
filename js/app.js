@@ -537,7 +537,7 @@ initInstallPrompt();
 prefetchRelayConfig(); // 中継の試作(?relay=1 のときだけ合言葉を取りに行く。js/relay.js)
 
 // 押した手応え(デザインポリシー 2-4)。主要な操作とコマ送りは、対応端末なら押した瞬間に短く振動させる
-[['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30], ['btnBackToReplay', 30],
+[['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30],
  ['btnStepBack', 12], ['btnStepForward', 12], ['btnPlayPause', 12], ['btnSpeed', 0]]
   .forEach(([id, vibrate]) => attachPress(document.getElementById(id), { vibrate }));
 
@@ -600,7 +600,6 @@ if (varHint && !hasUsedVar()) varHint.hidden = false;
 const playerToolbar = document.getElementById('playerToolbar');
 const saveRow = document.getElementById('saveRow');
 const monitorArea = document.getElementById('monitorArea');
-const btnBackToReplay = document.getElementById('btnBackToReplay');
 // リプレイの全画面表示での、操作の出し入れ・タップ・2回タップ・2本指の拡大・なぞり(js/replay-ui.js)。
 // 拡大となぞりは、使われたかどうかをVAR1回につき1度だけ数える
 const replayUi = createReplayUi({
@@ -617,7 +616,7 @@ const replayUi = createReplayUi({
     if (camId) applyReplayView('single', camId);
   },
 });
-const BACK_TO_REPLAY_MS = 6000; // 「VARに戻る」を出しておく時間
+const BACK_TO_REPLAY_MS = 6000; // 「元に戻す」(さっきのVARに戻る)を出しておく時間。画面の下のボタンではなく、トーストで出す(2026-10-30)
 let backToReplayPoint = null;
 let backToReplayTimer = null;
 
@@ -716,8 +715,10 @@ function exitBrowserFullscreen() {
 
 function hideBackToReplay() {
   clearTimeout(backToReplayTimer);
+  // 「元に戻す」のトーストが出ているときは、閉じる(別のVARに入ったあとに押されないように)
+  const toastEl = document.getElementById('toast');
+  if (backToReplayPoint && toastEl && toastEl.classList.contains('has-action')) toastEl.classList.remove('show');
   backToReplayPoint = null;
-  btnBackToReplay.classList.remove('show');
 }
 
 document.getElementById('btnRewind').addEventListener('click', () => {
@@ -750,16 +751,19 @@ document.getElementById('btnGoLive').addEventListener('click', () => {
   if (point) {
     hideBackToReplay();
     backToReplayPoint = point;
-    btnBackToReplay.classList.add('show');
     backToReplayTimer = setTimeout(hideBackToReplay, BACK_TO_REPLAY_MS);
+    // 下のボタンは増やさず、トーストで「元に戻す」を出す(ポリシー 3章)。「VAR」と「VARに戻る」が並んで紛らわしかった
+    showToast('LIVEに戻りました', { duration: BACK_TO_REPLAY_MS, low: true, action: { label: '元に戻す', onClick: resumeLastVar } });
   }
   maybeAskRole(); // 見返し終わった直後に、立場を聞く(条件は role-survey.js)
   maybeShowHomeNudge(); // 初めて見終えたとき1回だけ、ホーム画面への追加を勧める(条件は home-nudge.js)
 });
-btnBackToReplay.addEventListener('click', () => {
+function resumeLastVar() {
   dismissRoleSurvey(); // 戻る操作の直後に、立場の問いが出てしまわないようにする
   const point = backToReplayPoint;
-  hideBackToReplay();
+  clearTimeout(backToReplayTimer);
+  backToReplayPoint = null;
+  if (!point) return;
   recorder.hold();
   chooseReplayView();
   if (!player.resumeAt(point)) {
@@ -769,7 +773,7 @@ btnBackToReplay.addEventListener('click', () => {
   }
   enterBrowserFullscreen();
   setReplayUI(true);
-});
+}
 
 // 保存する範囲: 今見ている場面の前後(中山さん決定、2026-10-14)。録画の端にかかるときは、ある分だけ
 const SAVE_BEFORE_MS = 5000;

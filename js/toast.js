@@ -4,7 +4,8 @@
 let hideTimer = null;
 
 // action: { label, onClick } を渡すと、文の下にボタンを1つ出す(押すと onClick を呼び、知らせは閉じる)
-export function showToast(message, { duration = 3200, action, fadeMs } = {}) {
+// low: true は、画面の下(ボタンの上)に出す。上の「REC」の帯や、一時停止などのボタンにかぶらないようにする(「元に戻す」用)
+export function showToast(message, { duration = 3200, action, fadeMs, low } = {}) {
   const toast = document.getElementById('toast');
   if (!toast) return;
 
@@ -12,6 +13,7 @@ export function showToast(message, { duration = 3200, action, fadeMs } = {}) {
   toast.classList.toggle('has-action', !!action);
   // fadeMs: 出入りの長さを替える(中継のお知らせの「ふわっと消える」0.5秒だけ。「動きを減らす」設定では、CSS側で止まる)
   toast.classList.toggle('slow-fade', !!fadeMs);
+  toast.classList.toggle('toast-low', !!low);
   if (action) {
     const btn = document.createElement('button');
     btn.type = 'button';
