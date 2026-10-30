@@ -842,28 +842,20 @@ helpOverlay.addEventListener('click', closeHelp);
 
 // --- 遅れて映す(2026-10-30 依頼 delay-display): ⚙から秒数を選ぶと、いま − N秒 の映像を全画面で流し続ける ---
 const DELAY_OPTIONS = [10, 20, 30];
-const btnDelayOpen = document.getElementById('btnDelayOpen');
 const delaySecSelector = document.getElementById('delaySecSelector');
 function renderDelaySelector() {
   delaySecSelector.innerHTML = '';
   DELAY_OPTIONS.filter((sec) => sec <= varSettings.bufferSeconds).forEach((sec) => {
     const btn = document.createElement('button');
-    btn.textContent = `${sec}秒`;
+    btn.textContent = `${sec}秒遅れ`;
     btn.addEventListener('click', () => startDelayDisplay(sec));
     delaySecSelector.appendChild(btn);
   });
 }
-btnDelayOpen.addEventListener('click', () => {
-  const open = delaySecSelector.hidden;
-  if (open) renderDelaySelector();
-  delaySecSelector.hidden = !open;
-  btnDelayOpen.setAttribute('aria-expanded', String(open));
-});
+renderDelaySelector();
 function startDelayDisplay(sec) {
   if (player.isReplay || player.delayMode) return;
   closeSettings();
-  delaySecSelector.hidden = true;
-  btnDelayOpen.setAttribute('aria-expanded', 'false');
   const bandText = document.querySelector('#stateBand .state-band-text');
   player.startDelay(sec, {
     onState: (ready) => {
