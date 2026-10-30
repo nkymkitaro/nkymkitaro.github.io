@@ -5,15 +5,16 @@
 // - 「動きを減らす」設定の端末では、広がる動きを省いてすぐ切り替える
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
+import { readLocal, writeLocal } from './safe-storage.js';
 
 const STORAGE_KEY = 'kendo-var-last-role';
 
 // 端末に覚えておく。保存できない環境(プライベートブラウズなど)でも画面の動作には影響させない
 function loadLastRole() {
-  try { return localStorage.getItem(STORAGE_KEY); } catch (err) { return null; }
+  return readLocal(STORAGE_KEY);
 }
 function saveLastRole(role) {
-  try { localStorage.setItem(STORAGE_KEY, role); } catch (err) { /* 保存できなくても使える */ }
+  writeLocal(STORAGE_KEY, role);
 }
 
 // パネルの位置と色をそのまま写した板を出し、画面いっぱいに広げてから next を呼ぶ

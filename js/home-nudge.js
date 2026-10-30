@@ -5,14 +5,15 @@
 // - 計測は足さない(app_open の display_mode と utm_source=home で見える)
 import { canPromptInstall, promptInstall } from './install-prompt.js';
 import { attachPress } from './press-feedback.js';
+import { readLocal, writeLocal } from './safe-storage.js';
 
 const DONE_KEY = 'kendo-var-home-nudge-done';
 
 function isDone() {
-  try { return localStorage.getItem(DONE_KEY) === '1'; } catch (err) { return false; }
+  return readLocal(DONE_KEY) === '1';
 }
 function markDone() {
-  try { localStorage.setItem(DONE_KEY, '1'); } catch (err) { /* 覚えられなくても使える */ }
+  writeLocal(DONE_KEY, '1');
 }
 function isStandalone() {
   return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;

@@ -23,6 +23,7 @@ import { initPrepPage, openPrep, isPrepSeen } from './prep-page.js';
 import { initAnalytics, track, getDisplayMode } from './analytics.js';
 import { createZoomControl } from './zoom-control.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
+import { readLocal, writeLocal } from './safe-storage.js';
 
 // LINEなどのアプリ内ブラウザの判定(js/in-app-browser.js が <head> で先に済ませている)。
 // leaving: LINEから標準ブラウザへ開き直している最中。blocked: 「ブラウザで開いてください」を出して先へ進ませない
@@ -662,11 +663,11 @@ function backToStartScreen() {
 const VAR_USED_KEY = 'kendo-var-var-used';
 const varHint = document.getElementById('varHint');
 function hasUsedVar() {
-  try { return localStorage.getItem(VAR_USED_KEY) === '1'; } catch (err) { return false; } // 読めない端末では毎回出す
+  return readLocal(VAR_USED_KEY) === '1'; // 読めない端末では毎回出す
 }
 function markVarUsed() {
   if (varHint) varHint.hidden = true;
-  try { localStorage.setItem(VAR_USED_KEY, '1'); } catch (err) { /* 保存できなくても使える */ }
+  writeLocal(VAR_USED_KEY, '1');
 }
 if (varHint && !hasUsedVar()) varHint.hidden = false;
 
@@ -708,10 +709,10 @@ function setReplayUI(isReplay, { newVar = false } = {}) {
 // 2台以上の映像があれば、並べて見る形から始める。最後に使った見え方は、この端末の中だけに覚えておく
 const REPLAY_VIEW_KEY = 'kendoVar.replayView';
 function savedReplayView() {
-  try { return localStorage.getItem(REPLAY_VIEW_KEY); } catch (err) { return null; }
+  return readLocal(REPLAY_VIEW_KEY);
 }
 function rememberReplayView(view) {
-  try { localStorage.setItem(REPLAY_VIEW_KEY, view); } catch (err) { /* 覚えられなくても動く */ }
+  writeLocal(REPLAY_VIEW_KEY, view);
 }
 // VARに入る・リプレイに戻るときの見え方。描き直しは呼んだ側(rewind・resumeAt)が行う
 function chooseReplayView() {

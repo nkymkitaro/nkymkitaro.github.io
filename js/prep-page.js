@@ -4,17 +4,18 @@
 // - ヘルプの一番上からいつでも開ける(openPrep)
 // - 手触り(押した時の沈み・振動)は共通部品 press-feedback、動きの値は css/style.css の :root を使う
 import { attachPress } from './press-feedback.js';
+import { readLocal, writeLocal } from './safe-storage.js';
 
 const SEEN_KEY = 'kendo-var-prep-seen';
 
 // 準備ページを見たことがあるか。読めない環境では、見ていないことにする(毎回出てもよい)
 export function isPrepSeen() {
-  try { return localStorage.getItem(SEEN_KEY) === '1'; } catch (err) { return false; }
+  return readLocal(SEEN_KEY) === '1';
 }
 
 // 見たことを端末に覚えておく。保存できない環境では、毎回出てもよい
 function markSeen() {
-  try { localStorage.setItem(SEEN_KEY, '1'); } catch (err) { /* 覚えられなくても使える */ }
+  writeLocal(SEEN_KEY, '1');
 }
 
 // onFirstRunSolo: 初回の表示で「1台だけで使う」を押したときに呼ばれる(スタート画面の「前回」の印用)
