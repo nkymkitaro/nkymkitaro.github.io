@@ -15,7 +15,8 @@ export function installMockCams(cameraLink, count) {
       document.body.appendChild(videoEl);
       videoEl.play().catch(() => {});
       const number = i + 2;
-      cameraLink.remoteCams.push({ id: `mock${number}`, label: `カメラ${number}`, number, videoEl, connected: true, call: null, dataConn: null });
+      const off = /[?&]mockoff=1/.test(location.search) && i === n - 1; // ?mockoff=1: 最後のカメラは、つながっていないことにする
+      cameraLink.remoteCams.push({ id: `mock${number}`, label: `カメラ${number}`, number, videoEl, connected: !off, call: null, dataConn: null });
     }
     cameraLink._notifyCamsChanged();
   };

@@ -388,6 +388,19 @@ function paintCamThumbs() {
     const src = sources.find((x) => x.id === cv.dataset.cam);
     const v = src && src.connected ? src.videoEl : null;
     const ctx = cv.getContext('2d');
+    if (src && !src.connected) { // つながっていないカメラは、灰色の地にバッテン(文字は出さない)
+      ctx.fillStyle = '#3a3a3f';
+      ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 8;
+      ctx.lineCap = 'round';
+      const cx = cv.width / 2, cy = cv.height / 2, r = cv.height * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+      ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+      ctx.stroke();
+      return;
+    }
     if (!v || v.readyState < 2 || !v.videoWidth) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
     // 縦横比を保って、小さな枠いっぱいに(はみ出す分は切る)
     const sr = v.videoWidth / v.videoHeight;
@@ -441,13 +454,8 @@ function renderCamSelector(sources) {
       num.className = 'cam-thumb-num';
       num.textContent = (src.label.match(/\d+/) || [''])[0];
       btn.append(cv, name, num);
-      if (!src.connected) {
-        const off = document.createElement('small');
-        off.textContent = 'つながっていません';
-        name.appendChild(off);
-      }
     } else {
-      btn.textContent = src.connected ? src.label : `${src.label}(つながっていません)`;
+      btn.textContent = src.connected ? src.label : `${src.label} ✕`; // つながっていないカメラは、文字でなくバッテン
     }
     btn.addEventListener('click', () => selectCamera(src.id));
     container.appendChild(btn);

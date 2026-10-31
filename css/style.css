@@ -2181,7 +2181,6 @@ body.mode-monitor #monitorArea:not(.replaying) .cam-selector button.has-thumb { 
   body.mode-monitor #monitorArea.cams-many:not(.replaying) .var-hint { display: none; }
 }
 .cam-thumb-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
-.cam-thumb-name small { font-size: 13px; font-weight: 700; opacity: 0.8; white-space: normal; }
 
 .cam-thumb-num { display: none; }
 @media (orientation: portrait) {
