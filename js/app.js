@@ -371,6 +371,34 @@ function updatePauseButtonIcon(paused) {
   btn.setAttribute('aria-label', paused ? '撮影を再開' : '撮影を一時停止');
 }
 
+// --- 切り替えボタンの小さなライブ映像 ---
+// 4コマ/秒で、各カメラの映像(すでに映している<video>)を小さな絵に描くだけ。録画の取り込みには触れない。
+// 画面が隠れているとき・リプレイ中・ディレイ中は描かない
+const THUMB_W = 128;
+const THUMB_H = 96;
+const THUMB_INTERVAL_MS = 250;
+function paintCamThumbs() {
+  if (document.hidden) return;
+  const area = document.getElementById('monitorArea');
+  if (!area || area.classList.contains('replaying') || area.classList.contains('delaying')) return;
+  const canvases = document.querySelectorAll('#camSelector canvas.cam-thumb');
+  if (!canvases.length) return;
+  const sources = cameraLink.getAllSources();
+  canvases.forEach((cv) => {
+    const src = sources.find((x) => x.id === cv.dataset.cam);
+    const v = src && src.connected ? src.videoEl : null;
+    const ctx = cv.getContext('2d');
+    if (!v || v.readyState < 2 || !v.videoWidth) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height); return; }
+    // 縦横比を保って、小さな枠いっぱいに(はみ出す分は切る)
+    const sr = v.videoWidth / v.videoHeight;
+    const dr = cv.width / cv.height;
+    let sw = v.videoWidth, sh = v.videoHeight, sx = 0, sy = 0;
+    if (sr > dr) { sw = sh * dr; sx = (v.videoWidth - sw) / 2; } else { sh = sw / dr; sy = (v.videoHeight - sh) / 2; }
+    try { ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height); } catch (err) { /* 描けないコマは飛ばす */ }
+  });
+}
+setInterval(paintCamThumbs, THUMB_INTERVAL_MS);
+
 // カメラ切り替えボタンを、接続中カメラの数(最大4つ)に合わせて描き直す
 function renderCamSelector(sources) {
   const container = document.getElementById('camSelector');
@@ -380,6 +408,7 @@ function renderCamSelector(sources) {
   const multi = sources.length > 1;
   container.style.display = multi ? '' : 'none';
   document.getElementById('monitorArea').classList.toggle('has-children', multi);
+  document.getElementById('monitorArea').classList.toggle('cams-many', sources.length >= 3); // 3台以上: 小さく並べる(css/style.css)
   const highlightId = player.isReplay ? player.currentCamId : cameraLink.activeSource;
   if (hostZoom) hostZoom.setActive(cameraLink.activeSource === 'local'); // 親機のカメラを見ているときだけ
   // リプレイ中は全画面で操作が消えることがあるので、いま見ているカメラは帯の下に常に出しておく
@@ -393,11 +422,37 @@ function renderCamSelector(sources) {
     const classes = [];
     if (src.id === highlightId) classes.push('btn-active');
     if (!src.connected) classes.push('cam-offline');
+    // ライブ中で2台以上のときは、切り替えボタンを小さなライブ映像にする(2026-10-31。中山さん決定)。
+    // どのカメラも映っているかが、切り替えなくても一目で分かる。リプレイ中は、これまでの文字だけのボタン
+    const thumb = multi && !player.isReplay;
+    if (thumb) classes.push('has-thumb');
     btn.className = classes.join(' ');
-    btn.textContent = src.connected ? src.label : `${src.label}(つながっていません)`;
+    if (thumb) {
+      const cv = document.createElement('canvas');
+      cv.className = 'cam-thumb';
+      cv.width = THUMB_W;
+      cv.height = THUMB_H;
+      cv.dataset.cam = src.id;
+      cv.setAttribute('aria-hidden', 'true');
+      const name = document.createElement('span');
+      name.className = 'cam-thumb-name';
+      name.textContent = src.label;
+      const num = document.createElement('span'); // 3台以上の縦向きでは、文字のかわりに、映像の隅に番号だけ出す
+      num.className = 'cam-thumb-num';
+      num.textContent = (src.label.match(/\d+/) || [''])[0];
+      btn.append(cv, name, num);
+      if (!src.connected) {
+        const off = document.createElement('small');
+        off.textContent = 'つながっていません';
+        name.appendChild(off);
+      }
+    } else {
+      btn.textContent = src.connected ? src.label : `${src.label}(つながっていません)`;
+    }
     btn.addEventListener('click', () => selectCamera(src.id));
     container.appendChild(btn);
   });
+  paintCamThumbs();
 
   // リプレイ中で、2台以上の映像があれば「並べる」(並べて見る形に戻る)を出す
   if (player.isReplay && player.view !== 'grid' && player.canGrid()) {
@@ -943,4 +998,10 @@ document.addEventListener('keydown', (e) => {
     getCameraNumber: () => cameraNumber,
   };
   document.dispatchEvent(new CustomEvent('kendovar-app-ready'));
+}
+
+// 確認用: ?mockcams=2 のとき、2台目をつながったことにする(js/dev-mock.js)。通常は読み込まれない
+{
+  const m = /[?&]mockcams=(\d)/.exec(window.location.search);
+  if (m) import('./dev-mock.js').then((mod) => mod.installMockCams(cameraLink, Number(m[1]))).catch(() => {});
 }

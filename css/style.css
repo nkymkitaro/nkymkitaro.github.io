@@ -2159,3 +2159,40 @@ body.mode-monitor #monitorArea:not(.replaying):not(.sec-open):not(.first-use) :i
   pointer-events: none;
 }
 body.mode-monitor #monitorArea:not(.replaying) :is(#btnSettings, #btnHelpInline) { transition: opacity var(--dur-fast, 150ms) ease, visibility 0s; }
+
+/* 2台以上のライブ中は、切り替えボタンが小さなライブ映像になる(2026-10-31。js/app.js の renderCamSelector) */
+.cam-selector button.has-thumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 4px 10px 4px 4px;
+  text-align: left;
+}
+/* 縦向きは幅が足りないので、映像は小さく。入りきらなければ、上の段へ折り返す */
+.cam-thumb { flex: none; width: 48px; height: 36px; border-radius: 6px; background: #000; }
+body.mode-monitor #monitorArea:not(.replaying).has-children .cam-selector { flex-wrap: wrap; row-gap: 8px; }
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button.has-thumb { gap: 6px; padding: 4px 8px 4px 4px; }
+@media (orientation: landscape) and (max-height: 540px) {
+  .cam-thumb { width: 56px; height: 42px; }
+  /* 3台以上: 右の列の高さが足りなくなるので、映像と文字を小さくし、「一言」は出さない */
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-selector button.has-thumb { min-height: 48px; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-thumb { width: 44px; height: 33px; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .var-hint { display: none; }
+}
+.cam-thumb-name { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.cam-thumb-name small { font-size: 13px; font-weight: 700; opacity: 0.8; white-space: normal; }
+
+.cam-thumb-num { display: none; }
+@media (orientation: portrait) {
+  /* 3台以上: 縦向きは幅が足りないので、映像だけにして、番号は映像の隅に重ねる。1行に収める */
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-selector { flex-wrap: nowrap; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-selector button.has-thumb { position: relative; padding: 4px; min-width: 56px; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-thumb { width: 44px; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-selector button.has-thumb { min-width: 0; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-thumb-name { display: none; }
+  body.mode-monitor #monitorArea.cams-many:not(.replaying) .cam-thumb-num {
+    display: block; position: absolute; left: 6px; top: 6px; padding: 0 6px; border-radius: 4px;
+    background: rgba(0, 0, 0, 0.7); color: #fff; font-size: 13px; font-weight: 800; line-height: 18px;
+  }
+}
