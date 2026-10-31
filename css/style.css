@@ -1779,7 +1779,7 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
 /* 横向き: 映像を左いっぱいに。右の列(幅164px。上の段の3ボタンが48pxで、間隔10px)に、上から 一時停止・設定・ヘルプ、カメラの切り替えと「カメラを追加」、下のボタン */
 @media (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) {
-    grid-template-columns: minmax(0, 1fr) 164px;
+    grid-template-columns: minmax(0, 1fr) clamp(236px, 30vw, 280px); /* 右の列を広げ、ボタンを大きくする(2026-10-31) */
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "video head"
@@ -1824,7 +1824,7 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .undo-btn.show {
     flex: 0 0 auto;
     width: 100%;
-    height: clamp(56px, 18dvh, 96px);
+    height: clamp(56px, 21dvh, 96px);
     min-height: 56px;
   }
 }
@@ -1946,7 +1946,7 @@ body.mode-monitor #monitorArea:not(.replaying) .zoom-host {
 body.mode-monitor #monitorArea.replaying .zoom-host { display: none; }
 @media (orientation: landscape) and (max-height: 540px) {
   /* 横向きは、カメラの切り替えが右の列にあるので、映像の下端に置く */
-  body.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 12px 12px 72px; justify-self: end; } /* 左下の「←」(幅48px)と重ならないよう、右に寄せる */
+  body.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 12px 12px 72px; justify-self: end; max-width: calc(100% - 84px); } /* 左下の「←」(幅48px)と重ならないよう、右に寄せる */
 }
 /* 子機: 画面の下側。「画面をロックすると送信が止まります」の上に置く */
 .zoom-send {
@@ -2134,3 +2134,16 @@ body.mode-monitor #monitorArea.delaying .delay-exit {
 @media (orientation: landscape) and (max-height: 540px) {
   .toast.toast-low { bottom: 72px; left: 36%; }
 }
+
+/* 設定とヘルプは、映像をタップしたときだけ出す(2026-10-31)。場所は空けたまま、薄く消す(押す先が動かないように)。
+   並びは [設定][ヘルプ][ズーム][一時停止]。常に出るものを右に寄せる */
+body.mode-monitor #monitorArea:not(.replaying) #btnSettings { order: 1; }
+body.mode-monitor #monitorArea:not(.replaying) #btnHelpInline { order: 2; }
+body.mode-monitor #monitorArea:not(.replaying) .status-row .zoom-toggle { order: 3; }
+body.mode-monitor #monitorArea:not(.replaying) #btnPauseAll { order: 4; }
+body.mode-monitor #monitorArea:not(.replaying):not(.sec-open):not(.first-use) :is(#btnSettings, #btnHelpInline) {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+body.mode-monitor #monitorArea:not(.replaying) :is(#btnSettings, #btnHelpInline) { transition: opacity var(--dur-fast, 150ms) ease, visibility 0s; }

@@ -595,6 +595,8 @@ function hasUsedVar() {
 }
 function markVarUsed() {
   if (varHint) varHint.hidden = true;
+  const area = document.getElementById('monitorArea');
+  if (area) area.classList.remove('first-use');
   try { localStorage.setItem(VAR_USED_KEY, '1'); } catch (err) { /* 保存できなくても使える */ }
 }
 if (varHint && !hasUsedVar()) varHint.hidden = false;
@@ -618,6 +620,22 @@ const replayUi = createReplayUi({
     if (camId) applyReplayView('single', camId);
   },
 });
+// --- 設定とヘルプは、映像をタップしたときだけ出す(2026-10-31。中山さんの判断)。撮影中に使うボタンだけを常に出す ---
+// 最初のVARを押すまでは出したままにする(初めての人が、ヘルプを探せなくならないように)
+const SECONDARY_SHOW_MS = 4000;
+let secondaryTimer = null;
+function setSecondary(show) {
+  clearTimeout(secondaryTimer);
+  monitorArea.classList.toggle('sec-open', show);
+  if (show) secondaryTimer = setTimeout(() => monitorArea.classList.remove('sec-open'), SECONDARY_SHOW_MS);
+}
+monitorArea.classList.toggle('first-use', !hasUsedVar());
+document.querySelector('.stage-video').addEventListener('click', () => {
+  if (monitorArea.classList.contains('replaying') || monitorArea.classList.contains('delaying')) return;
+  setSecondary(!monitorArea.classList.contains('sec-open'));
+});
+['btnSettings', 'btnHelpInline'].forEach((id) => document.getElementById(id).addEventListener('click', () => setSecondary(false)));
+
 const BACK_TO_REPLAY_MS = 6000; // 「元に戻す」(さっきのVARに戻る)を出しておく時間。画面の下のボタンではなく、トーストで出す(2026-10-30)
 let backToReplayPoint = null;
 let backToReplayTimer = null;
@@ -707,9 +725,24 @@ function enterBrowserFullscreen() {
   } catch (err) { /* 全画面にできなくても、そのまま使える */ }
 }
 
+// 「録画」を押して入った全画面は、撮影が終わってもそのまま(LIVEに戻る・ディレイを終えるでは解除しない)。
+// ブラウザ側で解除されたら、この印を外す(次に「録画」を押したときに、また入る)
+let keepFullscreen = false;
+let pendingKeep = false;
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; } else { keepFullscreen = false; }
+});
+document.addEventListener('click', (e) => {
+  const rec = e.target.closest && e.target.closest('#labRec');
+  if (!rec || document.getElementById('monitorArea').classList.contains('lab-recording')) return; // 録画を始めるときだけ
+  pendingKeep = true;
+  enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
+  setTimeout(() => { pendingKeep = false; }, 1500); // 全画面に入れなかったときの後始末
+}, true);
+
 function exitBrowserFullscreen() {
   try {
-    if (!document.fullscreenElement || !document.exitFullscreen) return;
+    if (keepFullscreen || !document.fullscreenElement || !document.exitFullscreen) return;
     const result = document.exitFullscreen();
     if (result && result.catch) result.catch(() => {});
   } catch (err) { /* 解除できなくても、そのまま使える */ }

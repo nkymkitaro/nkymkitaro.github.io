@@ -79,13 +79,13 @@ body.mode-monitor #monitorArea.replaying .add-cam { display: none; }
 /* 遅れて映している間は、映像・帯・「×」だけにする(ズームのバーなどが透けて見えていた) */
 body.mode-monitor #monitorArea.delaying :is(.zoom-ctl, .zoom-host, .home-nudge, .back-start, .add-cam, .cam-dock, .var-hint, .rec-status) { display: none !important; }
 
-/* 横向き: 上の行が4つになったので、右の列に収まるよう 2×2 に並べる(1つだけ次の行に落ちていた) */
+/* 横向き: 右の列を広げたので、上の行は4つを1行に並べる(2026-10-31。以前は2×2) */
 @media (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) .status-row {
     display: grid;
-    grid-template-columns: repeat(2, 48px);
-    gap: 10px;
-    justify-content: end;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    justify-items: center;
   }
 }
 /* ズームのボタン: 縦向きは下の行(カメラの切り替えの右端)。上の行は、RECの帯と並ぶと幅が足りない */
