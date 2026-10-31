@@ -1823,11 +1823,10 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
     padding: 0 0 max(0px, env(safe-area-inset-bottom));
     background: none;
   }
-  /* ボタンの列の残りの高さを、VARと録画で使い切る。列が広ければ横に2つ並び(1つが大きく)、狭ければ縦に並ぶ */
+  /* ボタンの列の残りの高さを、VARと録画で分ける。1つの高さは最大112px(大きすぎると押しにくく、下に寄せる) */
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-content: stretch;
+    flex-direction: column;
+    justify-content: flex-end;
     align-self: stretch;
     gap: 8px;
     padding: 8px 0 max(8px, env(safe-area-inset-bottom));
@@ -1835,10 +1834,11 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .action-btn,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .undo-btn.show {
-    flex: 1 1 150px;
-    width: auto;
+    flex: 1 1 0;
+    width: 100%;
     height: auto;
     min-height: 56px;
+    max-height: 112px;
   }
 }
 
