@@ -42,7 +42,7 @@ body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(e
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-cancel-btn {
-    flex: 0 0 auto; width: 100%; height: clamp(56px, 18dvh, 96px); min-height: 56px; padding: 0 4px; gap: 6px;
+    flex: 1 1 150px; width: auto; height: auto; min-height: 56px; padding: 0 4px; gap: 6px; /* 右の列の残りの高さを使い切る。広ければ横に2つ(css/style.css) */
   }
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > * svg { width: 28px; height: 28px; }
 }

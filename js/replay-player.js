@@ -82,6 +82,9 @@ export class ReplayPlayer {
       this.canvas.width = width;
       this.canvas.height = height;
     }
+    // 横向きの画面で、映像の幅ぶんだけを映像に使い、残りをボタンの列に回すための縦横比(css/style.css の --video-ar)
+    const area = this.canvas.closest('#monitorArea');
+    if (area) area.style.setProperty('--video-ar', String(width / height));
   }
 
   // 見ているカメラのコマの並び。録画が古いコマを捨てていたら、そのぶんコマ番号を前へずらして、

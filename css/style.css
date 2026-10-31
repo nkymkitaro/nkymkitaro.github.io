@@ -1779,7 +1779,11 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
 /* 横向き: 映像を左いっぱいに。右の列(幅164px。上の段の3ボタンが48pxで、間隔10px)に、上から 一時停止・設定・ヘルプ、カメラの切り替えと「カメラを追加」、下のボタン */
 @media (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) {
-    grid-template-columns: minmax(0, 1fr) clamp(236px, 30vw, 280px); /* 右の列を広げ、ボタンを大きくする(2026-10-31) */
+    /* 映像は、縦いっぱいの大きさ(縦横比のまま)だけ使い、残りの横幅を、すべて右のボタンの列に回す(2026-10-31)。
+       右の列は最低 236px。足りないときは映像のほうを縮める。映像の縦横比 --video-ar は js/replay-player.js が入れる */
+    grid-template-columns:
+      min(calc((100dvh - env(safe-area-inset-top)) * var(--video-ar, 1.3333) + env(safe-area-inset-left) + env(safe-area-inset-right)), calc(100% - 244px))
+      minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr) auto;
     grid-template-areas:
       "video head"
@@ -1819,12 +1823,21 @@ body.mode-monitor #monitorArea:not(.replaying) #localMonitorVideo { display: non
     padding: 0 0 max(0px, env(safe-area-inset-bottom));
     background: none;
   }
+  /* ボタンの列の残りの高さを、VARと録画で使い切る。列が広ければ横に2つ並び(1つが大きく)、狭ければ縦に並ぶ */
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: stretch;
+    align-self: stretch;
+    gap: 8px;
+    padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  }
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .action-btn,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
   body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .undo-btn.show {
-    flex: 0 0 auto;
-    width: 100%;
-    height: clamp(56px, 21dvh, 96px);
+    flex: 1 1 150px;
+    width: auto;
+    height: auto;
     min-height: 56px;
   }
 }
@@ -1880,11 +1893,10 @@ body.mode-monitor #monitorArea:not(.replaying) {
 }
 @media (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) {
-    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     grid-template-areas:
       "video head"
       "video cams"
-      "video ."
       "video hint"
       "video actions";
   }
