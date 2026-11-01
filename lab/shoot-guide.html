@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex,nofollow">
+  <title>撮影ガイド(試作)</title>
+  <style>
+    :root {
+      --navy-950: #070d22; --navy-900: #0c1636; --navy-800: #14224d; --navy-700: #1d3170;
+      --ok: #1f9d55; --guide: #ffd23f; --line: rgba(255,255,255,.22);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--navy-950); color: #fff; font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; overflow: hidden; touch-action: none; }
+    .app { position: fixed; inset: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+    .stage { position: relative; min-height: 0; background: #000; }
+    video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    svg.guide { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .nocam { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #2a2a2a; color: #fff; font-size: 14px; text-align: center; padding: 16px; }
+    .nocam.on { display: flex; }
+    .nocam svg { width: 72px; height: 72px; }
+    .bar { background: var(--navy-900); border-top: 1px solid var(--line); padding: 8px 8px max(8px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 8px; }
+    .checks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    .chk { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; padding: 6px 2px; border-radius: 10px; border: 2px solid var(--line); background: var(--navy-800); color: #fff; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+    .chk svg { width: 30px; height: 30px; stroke: #fff; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .chk .tick { position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--ok); display: none; align-items: center; justify-content: center; }
+    .chk .tick svg { width: 14px; height: 14px; stroke-width: 3.2; }
+    .chk[aria-pressed="true"] { border-color: var(--ok); background: #123a2a; }
+    .chk[aria-pressed="true"] .tick { display: flex; }
+    .go { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 12px; border: 0; background: var(--navy-700); color: #fff; font: inherit; font-size: 17px; font-weight: 800; text-decoration: none; }
+    .go.ready { background: #fff; color: var(--navy-900); }
+    .go svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+    .hint { margin: 0; font-size: 13px; color: #c8d0ea; text-align: center; }
+    .handle { cursor: grab; }
+    @media (orientation: landscape) and (max-height: 540px) {
+      .app { grid-template-rows: none; grid-template-columns: minmax(0, 1fr) 244px; }
+      .bar { border-top: 0; border-left: 1px solid var(--line); padding: 8px max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) 8px; justify-content: space-between; }
+      .checks { grid-template-columns: repeat(2, 1fr); }
+      .chk { min-height: 60px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- 撮影ガイド(試作v0)。映像は保存せず、どこにも送らない。検出はしない。枠(ガイド線)と、撮る前の確認の絵だけ。 -->
+  <div class="app">
+    <div class="stage" id="stage">
+      <video id="v" playsinline muted autoplay></video>
+      <div class="nocam" id="nocam">
+        <svg viewBox="0 0 72 72" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"><rect x="8" y="18" width="40" height="30" rx="5"/><path d="M48 28l16-8v28l-16-8"/><path d="M12 8l48 56" stroke="#ff6b6b"/></svg>
+        <span>カメラの許可が要ります</span>
+      </div>
+      <svg class="guide" id="guide" aria-hidden="true"></svg>
+    </div>
+    <div class="bar">
+      <div class="checks" id="checks"></div>
+      <a class="go" id="go" href="../index.html">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>
+        <span>撮影へ</span>
+      </a>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var NS = 'http://www.w3.org/2000/svg';
+      var KEY = 'shootGuideCorners.v0';
+      var defaults = [[0.22, 0.34], [0.78, 0.34], [0.97, 0.90], [0.03, 0.90]]; // 奥左・奥右・手前右・手前左
+      var corners = defaults.map(function (c) { return c.slice(); });
+      try { var saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && saved.length === 4) corners = saved; } catch (e) {}
+      var stage = document.getElementById('stage');
+      var svg = document.getElementById('guide');
+      var v = document.getElementById('v');
+      var nocam = document.getElementById('nocam');
+
+      // 映像が実際に映る範囲(contain)を、画面上の位置に直す
+      function frame() {
+        var W = stage.clientWidth, H = stage.clientHeight;
+        var vw = v.videoWidth || 4, vh = v.videoHeight || 3;
+        var s = Math.min(W / vw, H / vh);
+        var w = vw * s, h = vh * s;
+        return { x: (W - w) / 2, y: (H - h) / 2, w: w, h: h, W: W, H: H };
+      }
+      function pt(f, c) { return [f.x + c[0] * f.w, f.y + c[1] * f.h]; }
+      function el(name, attrs, parent) { var e = document.createElementNS(NS, name); for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+      var dragging = -1;
+      function draw() {
+        var f = frame();
+        svg.setAttribute('viewBox', '0 0 ' + f.W + ' ' + f.H);
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        var P = corners.map(function (c) { return pt(f, c); });
+        // 試合場の枠
+        el('polygon', { points: P.map(function (p) { return p.join(','); }).join(' '), fill: 'rgba(255,210,63,.10)', stroke: '#ffd23f', 'stroke-width': 3, 'stroke-linejoin': 'round' }, svg);
+        // 選手の大きさの目安: 映像の高さの20%以上(中央の2人分)
+        var hh = f.h * 0.20, footY = f.y + f.h * 0.66;
+        [0.40, 0.60].forEach(function (cx) {
+          var x = f.x + f.w * cx, y0 = footY - hh;
+          var g = el('g', { stroke: '#fff', 'stroke-width': 2.4, fill: 'rgba(255,255,255,.08)', 'stroke-dasharray': '6 5', 'stroke-linecap': 'round' }, svg);
+          el('circle', { cx: x, cy: y0 + hh * 0.09, r: hh * 0.075 }, g);
+          el('path', { d: 'M' + (x - hh * 0.13) + ' ' + (y0 + hh * 0.22) + ' h' + (hh * 0.26) + ' l' + (hh * 0.06) + ' ' + (hh * 0.40) + ' h' + (-hh * 0.38) + ' z' }, g);
+          el('path', { d: 'M' + (x - hh * 0.08) + ' ' + (y0 + hh * 0.62) + ' v' + (hh * 0.38) + ' M' + (x + hh * 0.08) + ' ' + (y0 + hh * 0.62) + ' v' + (hh * 0.38) }, g);
+        });
+        // 角の取っ手(押さえやすい大きさ)
+        P.forEach(function (p, i) {
+          var g = el('g', { class: 'handle', 'data-i': i }, svg);
+          el('circle', { cx: p[0], cy: p[1], r: 28, fill: 'transparent' }, g);
+          el('circle', { cx: p[0], cy: p[1], r: 11, fill: '#ffd23f', stroke: '#000', 'stroke-width': 2 }, g);
+        });
+      }
+
+      function toLocal(ev) { var r = stage.getBoundingClientRect(); return [ev.clientX - r.left, ev.clientY - r.top]; }
+      svg.addEventListener('pointerdown', function (ev) {
+        var f = frame(), p = toLocal(ev), best = -1, bd = 44 * 44;
+        corners.forEach(function (c, i) { var q = pt(f, c), d = (q[0] - p[0]) * (q[0] - p[0]) + (q[1] - p[1]) * (q[1] - p[1]); if (d < bd) { bd = d; best = i; } });
+        if (best >= 0) { dragging = best; svg.setPointerCapture(ev.pointerId); ev.preventDefault(); }
+      });
+      svg.addEventListener('pointermove', function (ev) {
+        if (dragging < 0) return;
+        var f = frame(), p = toLocal(ev);
+        corners[dragging] = [Math.min(1.05, Math.max(-0.05, (p[0] - f.x) / f.w)), Math.min(1.05, Math.max(-0.05, (p[1] - f.y) / f.h))];
+        draw();
+      });
+      function endDrag() { if (dragging >= 0) { dragging = -1; try { localStorage.setItem(KEY, JSON.stringify(corners)); } catch (e) {} } }
+      svg.addEventListener('pointerup', endDrag);
+      svg.addEventListener('pointercancel', endDrag);
+
+      // 確認の絵(押すと緑の印が付く)
+      var items = [
+        { id: 'corner', label: '四隅', icon: '<rect x="6" y="7" width="20" height="18" rx="1"/><circle cx="6" cy="7" r="2.2" fill="#fff"/><circle cx="26" cy="7" r="2.2" fill="#fff"/><circle cx="6" cy="25" r="2.2" fill="#fff"/><circle cx="26" cy="25" r="2.2" fill="#fff"/>' },
+        { id: 'size', label: '大きさ', icon: '<circle cx="12" cy="9" r="3"/><path d="M7 28v-9a5 5 0 0 1 10 0v9"/><path d="M24 5v23M21 8l3-3 3 3M21 25l3 3 3-3"/>' },
+        { id: 'fix', label: '固定', icon: '<path d="M16 4v14M16 18l-9 10M16 18l9 10M16 18v10"/><rect x="11" y="3" width="10" height="6" rx="1.5"/>' },
+        { id: 'bow', label: '礼から', icon: '<circle cx="10" cy="9" r="3"/><path d="M10 13c6 0 9 3 9 8v7M10 13v8l-4 7"/><circle cx="26" cy="8" r="3" fill="#fff"/>' },
+        { id: 'out', label: '場外', icon: '<rect x="5" y="5" width="15" height="15" rx="1"/><circle cx="25" cy="23" r="2.6"/><path d="M21 30v-3a4 4 0 0 1 8 0v3"/><circle cx="9" cy="26" r="2.6"/><path d="M5 31v-2a4 4 0 0 1 8 0v2"/>' }
+      ];
+      var box = document.getElementById('checks'), go = document.getElementById('go');
+      items.forEach(function (it) {
+        var b = document.createElement('button');
+        b.type = 'button'; b.className = 'chk'; b.setAttribute('aria-pressed', 'false'); b.setAttribute('aria-label', it.label);
+        b.innerHTML = '<span class="tick"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><svg viewBox="0 0 32 32">' + it.icon + '</svg><span>' + it.label + '</span>';
+        b.addEventListener('click', function () {
+          b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+          var all = box.querySelectorAll('.chk[aria-pressed="true"]').length === items.length;
+          go.classList.toggle('ready', all);
+        });
+        box.appendChild(b);
+      });
+
+      // カメラ(映像は保存しない・送らない)
+      var stream = null;
+      function startCam() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { nocam.classList.add('on'); return; }
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false })
+          .then(function (s) { stream = s; v.srcObject = s; nocam.classList.remove('on'); })
+          .catch(function () { nocam.classList.add('on'); });
+      }
+      v.addEventListener('loadedmetadata', draw);
+      v.addEventListener('resize', draw);
+      window.addEventListener('resize', draw);
+      window.addEventListener('orientationchange', function () { setTimeout(draw, 200); });
+      window.addEventListener('pagehide', function () { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); });
+      draw(); startCam();
+    })();
+  </script>
+</body>
+</html>
