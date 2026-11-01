@@ -2147,18 +2147,6 @@ body.mode-monitor #monitorArea.delaying .delay-exit {
   .toast.toast-low { bottom: 72px; left: 36%; }
 }
 
-/* 設定とヘルプは、映像をタップしたときだけ出す(2026-10-31)。場所は空けたまま、薄く消す(押す先が動かないように)。
-   並びは [設定][ヘルプ][ズーム][一時停止]。常に出るものを右に寄せる */
-body.mode-monitor #monitorArea:not(.replaying) #btnSettings { order: 1; }
-body.mode-monitor #monitorArea:not(.replaying) #btnHelpInline { order: 2; }
-body.mode-monitor #monitorArea:not(.replaying) .status-row .zoom-toggle { order: 3; }
-body.mode-monitor #monitorArea:not(.replaying) #btnPauseAll { order: 4; }
-body.mode-monitor #monitorArea:not(.replaying):not(.sec-open):not(.first-use) :is(#btnSettings, #btnHelpInline) {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-body.mode-monitor #monitorArea:not(.replaying) :is(#btnSettings, #btnHelpInline) { transition: opacity var(--dur-fast, 150ms) ease, visibility 0s; }
 
 /* 2台以上のライブ中は、切り替えボタンが小さなライブ映像になる(2026-10-31。js/app.js の renderCamSelector) */
 .cam-selector button.has-thumb {
