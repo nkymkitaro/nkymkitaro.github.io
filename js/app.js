@@ -137,7 +137,8 @@ function layoutVarRing() {
 function updateVarRing() {
   if (!varRingLen) return;
   const frames = recorder.getFrames(cameraLink.activeSource).length;
-  const p = Math.max(0, Math.min(1, (frames / recorder.fps) / varSettings.bufferSeconds));
+  // 満タン = 設定した「戻る秒数」ぶんたまった(そこから、その秒数前まで戻れる)。録画の保持の長さ(下限30秒)ではない
+  const p = Math.max(0, Math.min(1, (frames / recorder.fps) / varSettings.rewindSeconds));
   varRingRects[1].style.strokeDashoffset = `${varRingLen * (1 - p)}`;
   varRingBtn.classList.toggle('ring-paused', cameraLink.isPaused);
 }
