@@ -141,10 +141,11 @@ export class ReplayPlayer {
     this._resetDropBaseline();
     this.seekBar.disabled = false;
 
-    const rewindCount = Math.min(Math.round(seconds * this.recorder.fps), frames.length - 1);
-    // 録画バッファは裏で進み続けるので、場面はコマ番号ではなく撮影時刻で覚えておく
+    // 録画バッファは裏で進み続けるので、場面はコマ番号ではなく撮影時刻で覚えておく。
+    // 戻る位置も撮影時刻で決める(コマ数で数えると、端末が遅くてコマが減ったとき、「15秒前」が15秒より前になる)。
+    // たまっている分より多く戻るときは、いちばん古いコマまで
     const startTs = frames[frames.length - 1].ts;
-    const targetTs = frames[frames.length - 1 - rewindCount].ts;
+    const targetTs = Math.max(frames[0].ts, startTs - seconds * 1000);
     const id = this._sweepId;
 
     const finish = () => {

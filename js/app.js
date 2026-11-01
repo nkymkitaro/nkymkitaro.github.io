@@ -134,11 +134,17 @@ function layoutVarRing() {
   varRingRects[1].style.strokeDasharray = `${varRingLen}`;
   updateVarRing();
 }
+// 録画が何秒ぶんたまっているか。コマの数でなく、撮影した時刻の幅で数える
+// (端末が遅くてコマが減っても、「15秒前」が本当に15秒前になる。VARで戻る位置も同じ数え方: js/replay-player.js の rewind)
+function recordedSeconds(camId) {
+  const frames = recorder.getFrames(camId);
+  if (frames.length < 2) return 0;
+  return (frames[frames.length - 1].ts - frames[0].ts) / 1000;
+}
 function updateVarRing() {
   if (!varRingLen) return;
-  const frames = recorder.getFrames(cameraLink.activeSource).length;
   // 満タン = 設定した「戻る秒数」ぶんたまった(そこから、その秒数前まで戻れる)。録画の保持の長さ(下限30秒)ではない
-  const p = Math.max(0, Math.min(1, (frames / recorder.fps) / varSettings.rewindSeconds));
+  const p = Math.max(0, Math.min(1, recordedSeconds(cameraLink.activeSource) / varSettings.rewindSeconds));
   varRingRects[1].style.strokeDashoffset = `${varRingLen * (1 - p)}`;
   varRingBtn.classList.toggle('ring-paused', cameraLink.isPaused);
 }
@@ -157,7 +163,7 @@ function renderRecStatus() {
   if (cameraLink.isPaused) {
     summary = '一時停止中のため、撮影していません';
   } else {
-    const recorded = Math.floor(recorder.getFrames(cameraLink.activeSource).length / recorder.fps);
+    const recorded = Math.floor(recordedSeconds(cameraLink.activeSource));
     summary = recorded >= rewind
       ? `${rewind}秒前まで戻れます`
       : `撮影中です。あと${rewind - recorded}秒で${rewind}秒前まで戻れます`;
