@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>骨格推定のテスト(試作)</title>
+  <style>
+    html, body { margin: 0; background: #070d22; color: #fff; font-family: system-ui, sans-serif; }
+    body { padding: 12px 16px 32px; max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 8px 0; }
+    p, label, .info { font-size: 14px; color: #c8d0e6; margin: 6px 0; }
+    .stage { position: relative; width: 100%; background: #000; touch-action: none; }
+    .stage video, .stage canvas { display: block; width: 100%; height: auto; }
+    .stage canvas { position: absolute; left: 0; top: 0; height: 100%; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
+    button, .file { min-height: 48px; padding: 0 18px; font-size: 16px; font-weight: 700; border-radius: 12px; border: 0; background: #2a3354; color: #fff; display: inline-flex; align-items: center; cursor: pointer; }
+    button.main, .file { background: #fff; color: #000; }
+    select { min-height: 48px; font-size: 16px; border-radius: 12px; border: 0; padding: 0 10px; background: #2a3354; color: #fff; }
+    input[type=file] { display: none; }
+    #stat { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #log { white-space: pre-wrap; font-size: 14px; color: #c8d0e6; }
+  </style>
+</head>
+<body>
+  <h1>骨格推定のテスト(試作)</h1>
+  <p>動画はこの端末の中だけで処理します。外には送りません。モデルは MoveNet MultiPose(最大6人)です。</p>
+  <div class="row">
+    <label class="file">動画を選ぶ<input id="file" type="file" accept="video/*"></label>
+    <button id="play" class="main" type="button" disabled>再生</button>
+    <button id="bench" type="button" disabled>5秒を測る</button>
+  </div>
+  <div class="row">
+    <label>入力の幅
+      <select id="width"><option>320</option><option selected>640</option><option>960</option></select>
+    </label>
+    <button id="clear" type="button">切り出しを解除</button>
+  </div>
+  <p>切り出し: 画像の上をなぞると、その範囲だけ処理します(選手のいる所を囲むと、拾える人数が増えます)。</p>
+  <div class="stage" id="stage">
+    <video id="v" playsinline muted controls></video>
+    <canvas id="c"></canvas>
+  </div>
+  <div class="row"><span id="stat">準備中…</span></div>
+  <div id="log"></div>
+  <script src="../js/vendor/ort/ort.wasm.min.js"></script>
+  <script>
+  (function () {
+    var $ = function (i) { return document.getElementById(i); };
+    var v = $('v'), c = $('c'), ctx = c.getContext('2d'), logEl = $('log'), stat = $('stat');
+    var sess = null, busy = false, running = false, crop = null, drag = null;
+    var off = document.createElement('canvas'), octx = off.getContext('2d', { willReadFrequently: true });
+    var EDGES = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16],[0,1],[0,2],[1,3],[2,4]];
+    var COLORS = ['#ff5a4d', '#4da3ff', '#ffd24d', '#5be37d', '#d16bff', '#ff9f4d'];
+    function log(s) { logEl.textContent = s; }
+    ort.env.wasm.wasmPaths = new URL('../js/vendor/ort/', location.href).href;
+    ort.env.wasm.numThreads = 1;   // GitHub Pages は SharedArrayBuffer に必要な設定を出せないため1本で動かす
+    var t0 = performance.now();
+    ort.InferenceSession.create('models/movenet_multipose_lightning_1.onnx', { executionProviders: ['wasm'] }).then(function (s) {
+      sess = s; stat.textContent = 'モデル準備OK(' + Math.round(performance.now() - t0) + 'ms)。動画を選んでください';
+    }).catch(function (e) { stat.textContent = 'モデルの読み込みに失敗'; log(String(e)); });
+
+    $('file').addEventListener('change', function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      v.src = URL.createObjectURL(f); crop = null;
+      v.onloadedmetadata = function () { c.width = v.videoWidth; c.height = v.videoHeight; $('play').disabled = !sess; $('bench').disabled = !sess; stat.textContent = v.videoWidth + '×' + v.videoHeight + ' / ' + v.duration.toFixed(1) + '秒'; };
+    });
+    $('clear').addEventListener('click', function () { crop = null; ctx.clearRect(0, 0, c.width, c.height); });
+
+    // 切り出し範囲(なぞって選ぶ)
+    function pos(ev) { var r = c.getBoundingClientRect(); return [(ev.clientX - r.left) * c.width / r.width, (ev.clientY - r.top) * c.height / r.height]; }
+    c.style.pointerEvents = 'auto';
+    c.addEventListener('pointerdown', function (ev) { drag = pos(ev); c.setPointerCapture(ev.pointerId); });
+    c.addEventListener('pointermove', function (ev) { if (!drag) return; var p = pos(ev); crop = norm(drag, p); drawBox(); });
+    c.addEventListener('pointerup', function (ev) { if (!drag) return; var p = pos(ev); var r = norm(drag, p); drag = null; crop = (r.w > 40 && r.h > 40) ? r : null; drawBox(); });
+    function norm(a, b) { var x = Math.min(a[0], b[0]), y = Math.min(a[1], b[1]); return { x: x, y: y, w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]) }; }
+    function drawBox() { ctx.clearRect(0, 0, c.width, c.height); if (crop) { ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(2, c.width / 400); ctx.setLineDash([10, 8]); ctx.strokeRect(crop.x, crop.y, crop.w, crop.h); ctx.setLineDash([]); } }
+
+    async function infer() {
+      var W = parseInt($('width').value, 10);
+      var r = crop || { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight };
+      var sc = W / r.w, ch = Math.round(r.h * sc), H = Math.ceil(ch / 32) * 32;
+      off.width = W; off.height = H;
+      octx.fillStyle = '#000'; octx.fillRect(0, 0, W, H);
+      octx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, ch);
+      var px = octx.getImageData(0, 0, W, H).data, d = new Int32Array(W * H * 3);
+      for (var i = 0, j = 0; i < px.length; i += 4) { d[j++] = px[i]; d[j++] = px[i + 1]; d[j++] = px[i + 2]; }
+      var a = performance.now();
+      var out = await sess.run({ input: new ort.Tensor('int32', d, [1, H, W, 3]) });
+      var ms = performance.now() - a, o = out.output_0.data, people = [];
+      for (var p = 0; p < 6; p++) {
+        var q = o.subarray(p * 56, p * 56 + 56); if (q[55] < 0.2) continue;
+        var kp = []; for (var k = 0; k < 17; k++) kp.push([q[k*3+1] * W / sc + r.x, q[k*3] * H / sc + r.y, q[k*3+2]]);
+        people.push({ kp: kp, score: q[55], box: [q[52] * W / sc + r.x, q[51] * H / sc + r.y, q[54] * W / sc + r.x, q[53] * H / sc + r.y] });
+      }
+      return { ms: ms, people: people };
+    }
+    function draw(res) {
+      drawBox(); var lw = Math.max(2, c.width / 300);
+      res.people.forEach(function (pp, n) {
+        ctx.strokeStyle = ctx.fillStyle = COLORS[n % 6]; ctx.lineWidth = lw;
+        EDGES.forEach(function (e) { var a = pp.kp[e[0]], b = pp.kp[e[1]]; if (a[2] > 0.2 && b[2] > 0.2) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); } });
+        pp.kp.forEach(function (k) { if (k[2] > 0.2) { ctx.beginPath(); ctx.arc(k[0], k[1], lw * 1.3, 0, 7); ctx.fill(); } });
+      });
+    }
+    var n = 0, tstart = 0;
+    async function loop() {
+      if (!running) return;
+      if (!busy && !v.paused && !v.ended) {
+        busy = true;
+        try { var res = await infer(); draw(res); n++; stat.textContent = Math.round(res.ms) + 'ms/コマ ・ ' + res.people.length + '人 ・ 処理 ' + (n / ((performance.now() - tstart) / 1000)).toFixed(1) + 'コマ/秒'; }
+        catch (e) { log(String(e)); running = false; }
+        busy = false;
+      }
+      requestAnimationFrame(loop);
+    }
+    $('play').addEventListener('click', function () {
+      if (v.paused) { v.play(); running = true; n = 0; tstart = performance.now(); loop(); $('play').textContent = '停止'; }
+      else { v.pause(); running = false; $('play').textContent = '再生'; }
+    });
+    function seek(t) { return new Promise(function (r) { v.onseeked = r; v.currentTime = t; }); }
+    $('bench').addEventListener('click', async function () {
+      running = false; v.pause(); $('bench').disabled = true;
+      var start = v.currentTime, N = 30, tot = 0, ppl = 0, a = performance.now();
+      for (var i = 0; i < N; i++) { var t = start + i / 6; if (t >= v.duration) break; await seek(t); var res = await infer(); draw(res); tot += res.ms; ppl += res.people.length; }
+      var wall = (performance.now() - a) / 1000;
+      log('5秒の動画(6コマ/秒=' + N + 'コマ)を ' + wall.toFixed(1) + ' 秒で処理 / 推論だけ 1コマ平均 ' + (tot / N).toFixed(0) + 'ms / 1コマ平均 ' + (ppl / N).toFixed(1) + '人\n端末: ' + navigator.userAgent);
+      $('bench').disabled = false;
+    });
+  })();
+  </script>
+</body>
+</html>

@@ -19,3 +19,7 @@ peerjs.min.js
   ライセンス: MIT(peerjs.LICENSE.txt)/ https://github.com/peers/peerjs
   外部のサーバー(unpkg)の遅さで、メインページの読み込みが止まらないよう、このリポジトリに置いている(2026-11-01)。
   使っているのは index.html と lab/multi-rec.html。版を上げるときは、両方の動作(2台の接続)を確かめる。
+
+ort/(ort.wasm.min.js, ort-wasm-simd-threaded.wasm / .mjs)
+  ONNX Runtime Web 1.20.1(npm の onnxruntime-web@1.20.1 の dist をそのまま置いたもの)。ライセンス: MIT / https://github.com/microsoft/onnxruntime
+  端末の中で骨格推定の試験(lab/pose-test.html)を動かすため。外部のCDNは使わない。メインページでは読み込まない。
