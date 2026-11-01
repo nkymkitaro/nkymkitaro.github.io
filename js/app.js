@@ -78,6 +78,7 @@ const varSettings = {
 
 function leaveSetupScreen() {
   document.getElementById('setupArea').style.display = 'none';
+  document.documentElement.classList.remove('auto-start'); // 読み込み中の印を外す(index.html の先頭のスクリプト)
   document.body.classList.remove('mode-setup');
 }
 

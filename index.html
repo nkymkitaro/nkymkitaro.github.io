@@ -19,16 +19,29 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:description" content="スマホで撮って、その場で見返す。2台なら、死角からも。">
 
-  <!-- 開いた直後に、スタート画面(「はじめる」)が一瞬見えないようにする。?front=1 のとき以外は、app.js が撮影画面へ進むまで隠す。
-       app.js が読み込めなかったときのため、3秒たったら必ず外す -->
+  <!-- 開いた直後に、スタート画面(「はじめる」)が見えないようにする。?front=1 のとき以外は、app.js が撮影画面へ進むまで隠し、
+       代わりに読み込み中の印(#bootSplash)を出す。外すのは app.js(leaveSetupScreen)。
+       時間で外すことはしない(以前は3秒で外していて、読み込みが遅いと「はじめる」が見えた)。
+       15秒たっても進まないときは、読み込み直すボタン(↻)を出す(app.js が読めなければ「はじめる」も動かないため) -->
   <script>
     (function () {
       var root = document.documentElement;
       if (/[?&]front=1(&|$)/.test(location.search)) return;
       root.classList.add('auto-start');
-      setTimeout(function () { root.classList.remove('auto-start'); }, 3000);
+      setTimeout(function () { root.classList.add('boot-slow'); }, 15000);
     })();
   </script>
+  <style>
+    /* 読み込み中の印。外部のCSSを待たずに出せるよう、ここに置く */
+    #bootSplash { display: none; }
+    html.auto-start #bootSplash { display: flex; position: fixed; inset: 0; z-index: 10000; flex-direction: column; align-items: center; justify-content: center; gap: 28px; background: #070d22; }
+    #bootSplash img { width: 168px; height: auto; }
+    #bootSplash .boot-spin { width: 36px; height: 36px; border-radius: 50%; border: 4px solid rgba(255,255,255,.25); border-top-color: #fff; animation: bootspin .9s linear infinite; }
+    @keyframes bootspin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { #bootSplash .boot-spin { animation-duration: 2.4s; } }
+    #bootSplash .boot-retry { display: none; width: 56px; height: 56px; border-radius: 50%; border: 2px solid rgba(255,255,255,.5); background: transparent; color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+    html.boot-slow #bootSplash .boot-retry { display: block; }
+  </style>
 
   <!-- PWA / 全画面表示設定 (iOS & Android) -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -46,14 +59,17 @@
   <!-- LINEなどのアプリ内ブラウザで開かれたかの判定。LINEなら、ここで標準ブラウザへ開き直す(描画・計測より前に) -->
   <script src="js/in-app-browser.js"></script>
 
-  <!-- WebRTC通信用ライブラリ (PeerJS) -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <!-- WebRTC通信用ライブラリ (PeerJS 1.5.4)。外部のサーバー(unpkg)でなく、このサイトに置いたものを読む(js/vendor/README.txt)。
+       defer: 画面の表示を止めずに読み、app.js(type=module)より先に実行される -->
+  <script src="js/vendor/peerjs.min.js" defer></script>
 
   <!-- フォント: Murecho(力強い太字ゴシック)。端末ごとの見た目をそろえるため、Webフォントで読み込む。
        重さは本文500・ボタンや見出し800・タイトル900の3つだけに絞り、読み込みを軽くする -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
+  <!-- 画面の表示を止めないよう、読み込みが終わってから当てる(届くまでは端末の字で出る) -->
+  <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet"></noscript>
 
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="lab/lab.css">
@@ -61,6 +77,7 @@
 
 </head>
 <body class="mode-setup">
+  <div id="bootSplash"><img src="icons/logo-mitori-white.png" alt="MITORI"><span class="boot-spin" aria-hidden="true"></span><button type="button" class="boot-retry" aria-label="読み込み直す" onclick="location.reload()">↻</button></div>
 
   <h1><img class="brand-logo" src="icons/logo-mitori-white.png" alt="MITORI" width="334" height="120"></h1>
 
