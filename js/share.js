@@ -25,9 +25,9 @@ export async function shareApp() {
   showToast(copied ? 'コピーしました' : 'コピーできませんでした');
 }
 
-// 保存の直後の知らせ。「仲間に送る」を1つだけ添える(録画の終わりには出さない)
+// 保存の直後の「仲間に送る」。「保存しました」は帯が出すので、ここでは文を出さずボタンだけ(二重にしない)。1つだけ添える(録画の終わりには出さない)
 export function offerAppShare() {
-  showToast('保存しました', { duration: 6000, action: { label: '仲間に送る', onClick: shareApp } });
+  showToast('', { duration: 6000, action: { label: '仲間に送る', onClick: shareApp } });
 }
 
 // 動画ファイルを共有画面で送れる端末か(使えないなら、共有ボタンは出さない)

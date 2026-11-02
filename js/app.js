@@ -203,7 +203,7 @@ const JOIN_FAILURE_MESSAGES = {
   'not-found': 'この番号は見つかりませんでした。番号をご確認ください。',
   full: '満員のため参加できませんでした。',
   // 番号は通ったのに、映像の経路を作れなかった。ネットワークを変えない限りつながらないので、対処まで伝える
-  unreachable: '直接つながりませんでした。同じWi‑Fiか、1台目のスマホのテザリングにつないでください。',
+  unreachable: 'つながりませんでした。',
   closed: 'つながりませんでした。もう一度お試しください。',
   timeout: 'つながりませんでした。もう一度お試しください。',
   network: '通信できませんでした。電波をご確認ください。',
@@ -226,7 +226,7 @@ function startCamera({ focus = true } = {}) {
   // 繋ぎ直しを打ち切った(直接つながらない状態が続いた)。自動では試さなくなるので、その旨と対処を出す
   cameraLink.onReconnectGaveUp = () => {
     camBand.showSub('つなぎ直せませんでした');
-    showToast(JOIN_FAILURE_MESSAGES.unreachable, { duration: LONG_TOAST_MS });
+    showToast(JOIN_FAILURE_MESSAGES.unreachable, { duration: LONG_TOAST_MS, action: { label: 'つなぎ方を見る', onClick: () => openPrep({ quiet: true }) } });
   };
   cameraLink.onReconnected = (number) => {
     track('camera_reconnect');
