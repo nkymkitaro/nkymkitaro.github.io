@@ -207,6 +207,10 @@ canvas {
 .save-btn {
   width: 100%;
 }
+/* 共有(VARの場面を保存せずに送る)。保存の左に並べる。同じ行の保存と同じ高さ、押せる範囲56px・間隔10px */
+.share-btn { flex: 0 0 56px; width: 56px; min-height: 56px; margin: 0 10px 0 0; padding: 0; justify-content: center; }
+.share-btn[hidden] { display: none; }
+.share-btn svg { width: 24px; height: 24px; }
 .icon-btn {
   flex: 0 0 auto;
   width: 48px;
@@ -1443,7 +1447,7 @@ body.mode-monitor #monitorArea.replaying .player-toolbar,
 body.mode-monitor #monitorArea.replaying .primary-actions { display: contents; }
 
 /* 操作の見た目: 映像の上でも読めるよう、暗い地にする */
-body.mode-monitor #monitorArea.replaying :is(.cam-selector button, .speed-btn, .save-btn) {
+body.mode-monitor #monitorArea.replaying :is(.cam-selector button, .speed-btn, .save-btn, .share-btn) {
   background: rgba(28, 28, 30, 0.82);
   border-color: rgba(255, 255, 255, 0.22);
 }
@@ -1477,6 +1481,7 @@ body.mode-monitor #monitorArea.replaying #camSelector button { flex: 0 0 auto; m
 body.mode-monitor #monitorArea.replaying #btnSpeed { grid-area: 4 / 1 / 5 / 2; width: auto; min-width: 0; height: 56px; padding: 0; border-radius: 28px; align-self: stretch; }
 body.mode-monitor #monitorArea.replaying .save-row { grid-area: 4 / 2 / 5 / -1; pointer-events: none; }
 body.mode-monitor #monitorArea.replaying .save-btn { margin: 0; min-height: 56px; pointer-events: auto; }
+body.mode-monitor #monitorArea.replaying .share-btn { margin: 0 10px 0 0; min-height: 56px; pointer-events: auto; }
 body.mode-monitor #monitorArea.replaying #btnStepBack { grid-area: 5 / 1; }
 body.mode-monitor #monitorArea.replaying #btnPlayPause { grid-area: 5 / 2; }
 body.mode-monitor #monitorArea.replaying #btnStepForward { grid-area: 5 / 3; }

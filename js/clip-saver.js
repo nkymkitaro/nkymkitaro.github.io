@@ -211,6 +211,19 @@ async function shareOrDownload(files) {
   });
 }
 
+// 共有用: 保存せずに、書き出したファイルだけ返す(端末内のクリップ置き場にも入れない)
+export async function encodeClipFiles(targets, fps) {
+  const files = [];
+  for (const target of (targets || [])) {
+    if (!target || !target.frames || target.frames.length === 0) continue;
+    const result = await encodeFramesToVideo(target.frames.slice(), fps);
+    if (!result) continue;
+    const filename = buildFilename(target.label, extensionFor(result.mimeType));
+    files.push(new File([result.blob], filename, { type: result.mimeType }));
+  }
+  return files;
+}
+
 // targets: [{ id, label, frames }] のリスト。
 // 「選択中のみ」なら1件、「全カメラ」なら接続中カメラの数ぶん渡す想定。
 // 書き出し中の表示(状態の帯の「保存中」)は呼び出し側が受け持つ。

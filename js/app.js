@@ -8,8 +8,8 @@ import { MultiCamRecorder } from './multi-cam-recorder.js';
 import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 import { enableWakeLock } from './wake-lock.js';
-import { saveClip } from './clip-saver.js';
-import { offerAppShare } from './share.js';
+import { saveClip, encodeClipFiles } from './clip-saver.js';
+import { offerAppShare, canShareVideoFiles, shareVideoFiles } from './share.js';
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
@@ -610,7 +610,7 @@ initInstallPrompt();
 prefetchRelayConfig(); // 中継の試作(?relay=1 のときだけ合言葉を取りに行く。js/relay.js)
 
 // 押した手応え(デザインポリシー 2-4)。主要な操作とコマ送りは、対応端末なら押した瞬間に短く振動させる
-[['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30],
+[['btnRewind', 30], ['btnGoLive', 30], ['btnSaveClip', 30], ['btnShareClip', 30],
  ['btnStepBack', 12], ['btnStepForward', 12], ['btnPlayPause', 12], ['btnSpeed', 0]]
   .forEach(([id, vibrate]) => attachPress(document.getElementById(id), { vibrate }));
 
@@ -894,7 +894,7 @@ const SAVED_NOTICE_MS = 1800; // 「保存しました」を出しておく時�
 // 保存中はサブ帯で「保存中」を出す。手が震えて二度押ししても、二重に書き出さない
 let savingClip = false;
 document.getElementById('btnSaveClip').addEventListener('click', async () => {
-  if (savingClip) return;
+  if (savingClip || sharingClip) return;
   savingClip = true;
   showSubBand('保存中');
   try {
@@ -909,6 +909,29 @@ document.getElementById('btnSaveClip').addEventListener('click', async () => {
   } finally {
     if (subBandText() === '保存中') hideSubBand(); // 失敗・データなしのときは「保存中」だけ消す
     savingClip = false;
+  }
+});
+// 共有: 今見ている場面を、保存せずに共有の画面で送る(使えない端末ではボタンを出さない)
+const btnShareClip = document.getElementById('btnShareClip');
+if (btnShareClip && canShareVideoFiles()) btnShareClip.hidden = false;
+let sharingClip = false;
+if (btnShareClip) btnShareClip.addEventListener('click', async () => {
+  if (sharingClip || savingClip) return;
+  sharingClip = true;
+  showSubBand('準備中');
+  let files = [];
+  try {
+    files = await encodeClipFiles(buildSaveTargets(), recorder.fps);
+  } catch (err) { files = []; }
+  if (subBandText() === '準備中') hideSubBand();
+  try {
+    if (files.length === 0) { showToast('準備できませんでした'); return; }
+    const r = await shareVideoFiles(files, 'MITORI クリップ');
+    // 準備に時間がかかって、押した操作の効力が切れたときは、もう一度押してもらう
+    if (r === 'blocked') showToast('準備ができました', { duration: 8000, action: { label: '共有', onClick: () => shareVideoFiles(files, 'MITORI クリップ') } });
+    else if (r === 'failed') showToast('共有できませんでした');
+  } finally {
+    sharingClip = false;
   }
 });
 document.getElementById('btnPauseAll').addEventListener('click', () => {

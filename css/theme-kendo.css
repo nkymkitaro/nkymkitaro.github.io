@@ -67,7 +67,7 @@ body.mode-monitor #monitorArea:not(.replaying) .var-hint { background: var(--nav
 /* VAR中(見返している画面)も、同じ配色: 映像のまわりは濃い紺、操作は紺の面、LIVEに戻るは赤 */
 body.mode-monitor #monitorArea.replaying { background: var(--navy-950); }
 body.mode-monitor #monitorArea.replaying #displayCanvas { background: transparent; }
-body.mode-monitor #monitorArea.replaying :is(.speed-btn, .save-btn, .icon-btn:not(.icon-btn-primary), .undo-btn) {
+body.mode-monitor #monitorArea.replaying :is(.speed-btn, .save-btn, .share-btn, .icon-btn:not(.icon-btn-primary), .undo-btn) {
   background: var(--navy-800);
   border: 1px solid var(--navy-line);
   color: #fff;
