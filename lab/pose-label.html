@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>骨格の正解づくり(試作)</title>
+  <style>
+    html, body { margin: 0; background: #070d22; color: #fff; font-family: system-ui, "Hiragino Sans", sans-serif; }
+    body { padding: 10px 14px 40px; max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 6px 0; }
+    p, label, .info { font-size: 14px; color: #c8d0e6; margin: 6px 0; line-height: 1.5; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+    button, .file { min-height: 48px; min-width: 48px; padding: 0 16px; font-size: 16px; font-weight: 700; border-radius: 12px; border: 0; background: #2a3354; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; }
+    button.main, .file { background: #fff; color: #000; }
+    button.on { background: #ffd24d; color: #000; }
+    button.red { background: #d6231b; }
+    button:disabled { opacity: .4; }
+    input[type=file] { display: none; }
+    input[type=text] { min-height: 44px; font-size: 16px; border-radius: 10px; border: 0; padding: 0 10px; width: 9em; }
+    input[type=range] { flex: 1 1 200px; min-height: 48px; }
+    .stage { position: relative; background: #000; overflow: auto; max-height: 72vh; touch-action: none; }
+    #c { display: block; width: 100%; height: auto; touch-action: none; }
+    #cur { font-size: 18px; font-weight: 800; min-height: 28px; }
+    #cnt { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #fff; color: #000; padding: 12px 18px; border-radius: 12px; font-weight: 700; display: none; z-index: 9; }
+    details { margin: 8px 0; } summary { font-size: 15px; cursor: pointer; padding: 8px 0; }
+    video { display: none; }
+  </style>
+</head>
+<body>
+  <h1>骨格の正解づくり(試作)</h1>
+  <p>動画はこの端末の中だけで開きます。外には送りません。保存した画像と点は、この端末のブラウザの中に残ります。</p>
+  <details><summary>やり方(30秒)</summary>
+    <p>① 「動画を選ぶ」→ ② 「範囲」で、試合場の選手のいる所をなぞって囲む → ③ 場面を探す(◀▶)→ ④ 「骨格を出す」で仮の点が出る → ⑤ 点をドラッグして正しい位置に直す。隠れて見えない点は「隠れ」にして、推測の位置に置く → ⑥ 「保存」。</p>
+    <p>・仮の点が出ない人は「人を足す」で、人を四角で囲むと標準の形が出ます。それを直します。<br>
+    ・範囲の中に写る選手・審判は、全員に点を付けます。付けない人は、範囲の外にするか、消さずに範囲から外してください。<br>
+    ・近い間合い(つば競り合い・打突のあたり)の場面を、多めにお願いします。<br>
+    ・書き出すと、画像と点の入ったzipができます。点を付けた人の腰まわり・面の下は、名前が読めないようにぼかします。<b>点を付けていない人の名前はぼけません</b>。範囲の中の人は全員に点を付けるか、範囲を狭くしてください。書き出した画像は、必ず目で見て、名前が読めないことを確かめてから、外(Colabなど)に出してください。</p></details>
+  <div class="row">
+    <label class="file">動画を選ぶ<input id="file" type="file" accept="video/*"></label>
+    <label>名前 <input id="who" type="text" placeholder="例: 中山"></label>
+    <span id="cnt">保存 0枚</span>
+  </div>
+  <div class="row">
+    <button id="bCrop" type="button">範囲</button>
+    <button id="bDet" type="button" class="main" disabled>骨格を出す</button>
+    <button id="bAdd" type="button">人を足す</button>
+    <button id="bDel" type="button">この人を消す</button>
+    <button id="bSave" type="button" class="main" disabled>保存</button>
+    <button id="bUndo" type="button">最後の保存を消す</button>
+  </div>
+  <div class="row">
+    <button id="mB1" type="button">◀ 1秒</button><button id="mB2" type="button">◀ 0.2秒</button>
+    <input id="seek" type="range" min="0" max="1000" value="0">
+    <button id="mF2" type="button">0.2秒 ▶</button><button id="mF1" type="button">1秒 ▶</button><button id="mR" type="button">ランダム</button>
+    <button id="zm" type="button">拡大 ×1</button>
+  </div>
+  <div class="stage" id="stage"><canvas id="c"></canvas></div>
+  <div class="row"><span id="cur">動画を選んでください</span></div>
+  <div class="row">
+    <button id="v2" type="button">見えている</button><button id="v1" type="button">隠れている(推測の位置)</button><button id="v0" type="button">写っていない</button>
+  </div>
+  <div class="row">
+    <label><input id="blTare" type="checkbox" checked> 書き出しで、腰まわり(垂)をぼかす</label>
+    <label><input id="blMen" type="checkbox" checked> 面の下をぼかす</label>
+    <label><input id="blShow" type="checkbox" checked> ぼかす範囲を表示</label>
+  </div>
+  <div class="row"><button id="bExp" type="button" class="main">書き出す(zip)</button><span class="info" id="expInfo"></span></div>
+  <div id="toast"></div>
+  <video id="v" playsinline muted></video>
+  <script src="../js/vendor/ort/ort.wasm.min.js"></script>
+  <script>
+  (function () {
+    var $ = function (i) { return document.getElementById(i); };
+    var NAMES = ['鼻','左目','右目','左耳','右耳','左肩','右肩','左ひじ','右ひじ','左手首','右手首','左腰','右腰','左ひざ','右ひざ','左足首','右足首'];
+    var CNAMES = ['nose','left_eye','right_eye','left_ear','right_ear','left_shoulder','right_shoulder','left_elbow','right_elbow','left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'];
+    var EDGES = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16],[0,1],[0,2],[1,3],[2,4]];
+    var TEMPLATE = [[.5,.06],[.52,.05],[.48,.05],[.55,.06],[.45,.06],[.64,.2],[.36,.2],[.7,.36],[.3,.36],[.62,.46],[.38,.46],[.58,.52],[.42,.52],[.58,.74],[.42,.74],[.58,.95],[.42,.95]];
+    var v = $('v'), c = $('c'), ctx = c.getContext('2d');
+    var sess = null, crop = null, persons = [], sel = { p: -1, k: -1 }, mode = '', drag = null, zoom = 1, fname = '', saved = 0, db = null, curT = 0;
+    var off = document.createElement('canvas'), octx = off.getContext('2d', { willReadFrequently: true });
+    function toast(s) { var t = $('toast'); t.textContent = s; t.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(function () { t.style.display = 'none'; }, 2200); }
+    try { $('who').value = localStorage.getItem('poseLabelWho') || ''; } catch (e) {}
+    $('who').addEventListener('input', function () { try { localStorage.setItem('poseLabelWho', $('who').value); } catch (e) {} });
+
+    // ---- 保存先(この端末のブラウザの中)----
+    var dbReq = indexedDB.open('poseLabel.v0', 1);
+    dbReq.onupgradeneeded = function () { dbReq.result.createObjectStore('items', { keyPath: 'id', autoIncrement: true }); };
+    dbReq.onsuccess = function () { db = dbReq.result; count(); };
+    function tx(m) { return db.transaction('items', m).objectStore('items'); }
+    function count() { if (!db) return; tx('readonly').count().onsuccess = function (e) { saved = e.target.result; $('cnt').textContent = '保存 ' + saved + '枚(目標 300枚)'; }; }
+
+    // ---- 骨格モデル(仮の点を出す)----
+    ort.env.wasm.wasmPaths = new URL('../js/vendor/ort/', location.href).href; ort.env.wasm.numThreads = 1;
+    ort.InferenceSession.create('models/movenet_multipose_lightning_1.onnx', { executionProviders: ['wasm'] }).then(function (s) { sess = s; upd(); }).catch(function (e) { toast('仮の点が使えません。手で足してください'); });
+
+    function upd() { $('bDet').disabled = !(sess && v.videoWidth); $('bSave').disabled = !(v.videoWidth); }
+    $('file').addEventListener('change', function (e) {
+      var f = e.target.files[0]; if (!f) return; fname = f.name; v.src = URL.createObjectURL(f); crop = null; persons = []; sel = { p: -1, k: -1 };
+      v.onloadedmetadata = function () { c.width = v.videoWidth; c.height = v.videoHeight; v.currentTime = Math.min(1, v.duration / 2); upd(); };
+    });
+    v.addEventListener('seeked', function () { curT = v.currentTime; draw(); $('cur').textContent = fname + ' ・ ' + curT.toFixed(2) + '秒 / ' + v.duration.toFixed(1) + '秒'; $('seek').value = Math.round(curT / v.duration * 1000); });
+    function go(t) { if (!v.videoWidth) return; persons = []; sel = { p: -1, k: -1 }; v.currentTime = Math.max(0, Math.min(v.duration - 0.05, t)); }
+    $('mB1').onclick = function () { go(curT - 1); }; $('mB2').onclick = function () { go(curT - 0.2); };
+    $('mF2').onclick = function () { go(curT + 0.2); }; $('mF1').onclick = function () { go(curT + 1); };
+    $('mR').onclick = function () { go(Math.random() * v.duration); };
+    $('seek').oninput = function () { go($('seek').value / 1000 * v.duration); };
+    $('zm').onclick = function () { zoom = zoom >= 3 ? 1 : zoom + 1; c.style.width = (zoom * 100) + '%'; $('zm').textContent = '拡大 ×' + zoom; };
+
+    // ---- ぼかす範囲(書き出しと表示で同じ計算)----
+    function pbox(p) { var xs = [], ys = []; p.kp.forEach(function (k) { if (k[2] > 0) { xs.push(k[0]); ys.push(k[1]); } }); if (!xs.length) return null; return { x0: Math.min.apply(0, xs), x1: Math.max.apply(0, xs), y0: Math.min.apply(0, ys), y1: Math.max.apply(0, ys) }; }
+    function blurRects(p) {
+      var b = pbox(p), r = []; if (!b) return r; var h = Math.max(b.y1 - b.y0, 40), k = p.kp;
+      if ($('blTare').checked) { var hp = [k[11], k[12]].filter(function (q) { return q[2] > 0; }); if (hp.length) { var cx = hp.reduce(function (a, q) { return a + q[0]; }, 0) / hp.length, cy = hp.reduce(function (a, q) { return a + q[1]; }, 0) / hp.length, w = Math.max(hp.length > 1 ? Math.abs(hp[0][0] - hp[1][0]) * 2.4 : 0, h * 0.22); r.push([cx - w / 2, cy - h * 0.03, w, h * 0.24]); } }
+      if ($('blMen').checked && k[0][2] > 0) { var s = h * 0.16; r.push([k[0][0] - s * 0.8, k[0][1] + s * 0.05, s * 1.6, s * 0.9]); }
+      return r;
+    }
+
+    // ---- 描画 ----
+    function draw() {
+      if (!v.videoWidth) return; ctx.drawImage(v, 0, 0, c.width, c.height);
+      var u = Math.max(2, c.width / 450);
+      if (crop) { ctx.strokeStyle = '#fff'; ctx.lineWidth = u; ctx.setLineDash([u * 5, u * 4]); ctx.strokeRect(crop.x, crop.y, crop.w, crop.h); ctx.setLineDash([]); }
+      persons.forEach(function (p, i) {
+        var on = i === sel.p; ctx.lineWidth = u * (on ? 1.8 : 1.2);
+        EDGES.forEach(function (e) { var a = p.kp[e[0]], b = p.kp[e[1]]; if (a[2] > 0 && b[2] > 0) { ctx.strokeStyle = on ? '#ffd24d' : 'rgba(255,255,255,.75)'; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); } });
+        p.kp.forEach(function (q, k) {
+          if (q[2] === 0) return; var col = k < 5 ? '#fff' : (k % 2 === 1 ? '#4da3ff' : '#ff9f4d');
+          ctx.beginPath(); ctx.arc(q[0], q[1], u * 2.6, 0, 7);
+          if (q[2] === 2) { ctx.fillStyle = col; ctx.fill(); } else { ctx.lineWidth = u * 1.4; ctx.strokeStyle = col; ctx.stroke(); }
+          if (on && k === sel.k) { ctx.beginPath(); ctx.arc(q[0], q[1], u * 5, 0, 7); ctx.strokeStyle = '#ffd24d'; ctx.lineWidth = u * 1.4; ctx.stroke(); }
+        });
+        if ($('blShow').checked) { ctx.strokeStyle = '#ff4dd2'; ctx.lineWidth = u; ctx.setLineDash([u * 3, u * 3]); blurRects(p).forEach(function (q) { ctx.strokeRect(q[0], q[1], q[2], q[3]); }); ctx.setLineDash([]); }
+      });
+      var s = sel.p >= 0 && sel.k >= 0 ? (NAMES[sel.k] + ':' + ['写っていない', '隠れている', '見えている'][persons[sel.p].kp[sel.k][2]]) : '';
+      $('cur').textContent = fname + ' ・ ' + curT.toFixed(2) + '秒 ・ 人' + persons.length + (s ? ' ・ ' + s : '');
+    }
+    $('blTare').onchange = $('blMen').onchange = $('blShow').onchange = draw;
+
+    // ---- 点の操作 ----
+    function pos(ev) { var r = c.getBoundingClientRect(); return [(ev.clientX - r.left) * c.width / r.width, (ev.clientY - r.top) * c.height / r.height]; }
+    function hit(p) { var best = null, bd = 1e9, lim = Math.max(18, c.width / 45) * 1.3; persons.forEach(function (pe, i) { pe.kp.forEach(function (q, k) { if (q[2] === 0) return; var d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd && d < lim) { bd = d; best = { p: i, k: k }; } }); }); return best; }
+    c.addEventListener('pointerdown', function (ev) {
+      var p = pos(ev); c.setPointerCapture(ev.pointerId);
+      if (mode === 'crop' || mode === 'add') { drag = { m: mode, a: p, b: p }; return; }
+      var h = hit(p); if (h) { sel = h; drag = { m: 'pt' }; draw(); } else { sel = { p: nearPerson(p), k: -1 }; draw(); }
+    });
+    c.addEventListener('pointermove', function (ev) {
+      if (!drag) return; var p = pos(ev);
+      if (drag.m === 'pt') { var q = persons[sel.p].kp[sel.k]; q[0] = p[0]; q[1] = p[1]; if (q[2] === 0) q[2] = 2; draw(); }
+      else { drag.b = p; draw(); var r = rect(drag.a, drag.b); ctx.strokeStyle = '#ffd24d'; ctx.lineWidth = Math.max(2, c.width / 400); ctx.strokeRect(r.x, r.y, r.w, r.h); }
+    });
+    c.addEventListener('pointerup', function () {
+      if (!drag) return; var d = drag; drag = null;
+      if (d.m === 'crop') { var r = rect(d.a, d.b); crop = (r.w > 60 && r.h > 60) ? r : null; setMode(''); draw(); }
+      if (d.m === 'add') { var r2 = rect(d.a, d.b); if (r2.w > 15 && r2.h > 40) { persons.push({ kp: TEMPLATE.map(function (t) { return [r2.x + t[0] * r2.w, r2.y + t[1] * r2.h, 1]; }) }); sel = { p: persons.length - 1, k: -1 }; } setMode(''); draw(); }
+    });
+    function rect(a, b) { return { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]) }; }
+    function nearPerson(p) { var best = -1, bd = 1e9; persons.forEach(function (pe, i) { var b = pbox(pe); if (!b) return; if (p[0] >= b.x0 - 20 && p[0] <= b.x1 + 20 && p[1] >= b.y0 - 20 && p[1] <= b.y1 + 20) { var d = Math.hypot(p[0] - (b.x0 + b.x1) / 2, p[1] - (b.y0 + b.y1) / 2); if (d < bd) { bd = d; best = i; } } }); return best; }
+    function setMode(m) { mode = m; $('bCrop').classList.toggle('on', m === 'crop'); $('bAdd').classList.toggle('on', m === 'add'); }
+    $('bCrop').onclick = function () { setMode(mode === 'crop' ? '' : 'crop'); };
+    $('bAdd').onclick = function () { setMode(mode === 'add' ? '' : 'add'); };
+    $('bDel').onclick = function () { if (sel.p >= 0) { persons.splice(sel.p, 1); sel = { p: -1, k: -1 }; draw(); } else toast('消す人を、点か体の近くをタップして選んでください'); };
+    function setV(n) { if (sel.p >= 0 && sel.k >= 0) { persons[sel.p].kp[sel.k][2] = n; draw(); } else toast('先に点をタップしてください'); }
+    $('v2').onclick = function () { setV(2); }; $('v1').onclick = function () { setV(1); }; $('v0').onclick = function () { setV(0); };
+    document.addEventListener('keydown', function (e) { if (e.target.tagName === 'INPUT') return; if (e.key === '1') setV(2); else if (e.key === '2') setV(1); else if (e.key === '3') setV(0); else if (e.key === 'ArrowLeft') go(curT - 0.2); else if (e.key === 'ArrowRight') go(curT + 0.2); else if (e.key === 's' || e.key === 'S') $('bSave').click(); });
+
+    // ---- 仮の点 ----
+    $('bDet').onclick = async function () {
+      $('bDet').disabled = true;
+      try {
+        var W = 512, r = crop || { x: 0, y: 0, w: v.videoWidth, h: v.videoHeight }, sc = W / r.w, ch = Math.round(r.h * sc), H = Math.ceil(ch / 64) * 64;
+        off.width = W; off.height = H; octx.fillStyle = '#000'; octx.fillRect(0, 0, W, H); octx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, ch);
+        var px = octx.getImageData(0, 0, W, H).data, d = new Int32Array(W * H * 3);
+        for (var i = 0, j = 0; i < px.length; i += 4) { d[j++] = px[i]; d[j++] = px[i + 1]; d[j++] = px[i + 2]; }
+        var o = (await sess.run({ input: new ort.Tensor('int32', d, [1, H, W, 3]) })).output_0.data; persons = []; sel = { p: -1, k: -1 };
+        for (var p = 0; p < 6; p++) { var q = o.subarray(p * 56, p * 56 + 56); if (q[55] < 0.2) continue; var kp = []; for (var k = 0; k < 17; k++) kp.push([q[k * 3 + 1] * W / sc + r.x, q[k * 3] * H / sc + r.y, q[k * 3 + 2] > 0.3 ? 2 : 1]); persons.push({ kp: kp }); }
+        toast(persons.length + '人。違う人は「この人を消す」、足りない人は「人を足す」'); draw();
+      } catch (e) { toast('失敗: ' + e); }
+      upd();
+    };
+
+    // ---- 保存・取り消し ----
+    $('bSave').onclick = function () {
+      if (!persons.length) { toast('人がいません(人を足してください)'); return; }
+      var cv = document.createElement('canvas'); cv.width = v.videoWidth; cv.height = v.videoHeight; cv.getContext('2d').drawImage(v, 0, 0);
+      cv.toBlob(function (blob) {
+        var item = { video: fname, t: curT, w: cv.width, h: cv.height, crop: crop, who: $('who').value, img: blob, people: persons.map(function (p) { return { kp: p.kp.map(function (q) { return q.slice(); }) }; }), at: Date.now() };
+        tx('readwrite').add(item).onsuccess = function () { count(); toast('保存しました。次の場面へ'); go(curT + 1.5); };
+      }, 'image/jpeg', 0.92);
+    };
+    $('bUndo').onclick = function () { var s = tx('readwrite'); s.openCursor(null, 'prev').onsuccess = function (e) { var cu = e.target.result; if (cu) { cu.delete(); count(); toast('最後の1枚を消しました'); } }; };
+
+    // ---- 書き出し(zip。COCO形式)----
+    var T = new Uint32Array(256); for (var n = 0; n < 256; n++) { var cc = n; for (var k = 0; k < 8; k++) cc = cc & 1 ? 0xEDB88320 ^ (cc >>> 1) : cc >>> 1; T[n] = cc >>> 0; }
+    function crc(b) { var x = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) x = T[(x ^ b[i]) & 255] ^ (x >>> 8); return (x ^ 0xFFFFFFFF) >>> 0; }
+    function zip(files) {
+      var enc = new TextEncoder(), parts = [], cen = [], off2 = 0;
+      files.forEach(function (f) { var nm = enc.encode(f.name), cr = crc(f.data), lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint32(14, cr, true); lh.setUint32(18, f.data.length, true); lh.setUint32(22, f.data.length, true); lh.setUint16(26, nm.length, true);
+        parts.push(lh.buffer, nm, f.data);
+        var ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint32(16, cr, true); ch.setUint32(20, f.data.length, true); ch.setUint32(24, f.data.length, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off2, true); cen.push(ch.buffer, nm);
+        off2 += 30 + nm.length + f.data.length; });
+      var cs = 0; cen.forEach(function (b) { cs += b.byteLength; });
+      var end = new DataView(new ArrayBuffer(22)); end.setUint32(0, 0x06054b50, true); end.setUint16(8, files.length, true); end.setUint16(10, files.length, true); end.setUint32(12, cs, true); end.setUint32(16, off2, true);
+      return new Blob(parts.concat(cen, [end.buffer]), { type: 'application/zip' });
+    }
+    function pix(g, x, y, w, h) { x = Math.max(0, x | 0); y = Math.max(0, y | 0); w = Math.min(g.canvas.width - x, w | 0); h = Math.min(g.canvas.height - y, h | 0); if (w < 2 || h < 2) return; var t = document.createElement('canvas'); t.width = Math.max(1, w / 10 | 0); t.height = Math.max(1, h / 10 | 0); var tg = t.getContext('2d'); tg.drawImage(g.canvas, x, y, w, h, 0, 0, t.width, t.height); g.imageSmoothingEnabled = false; g.drawImage(t, 0, 0, t.width, t.height, x, y, w, h); g.imageSmoothingEnabled = true; }
+    $('bExp').onclick = async function () {
+      if (!saved) { toast('保存した画像がありません'); return; }
+      $('bExp').disabled = true; $('expInfo').textContent = '書き出し中…';
+      var items = await new Promise(function (r) { tx('readonly').getAll().onsuccess = function (e) { r(e.target.result); }; });
+      var files = [], images = [], anns = [], aid = 1, enc = new TextEncoder();
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i], bmp = await createImageBitmap(it.img), cr = it.crop || { x: 0, y: 0, w: it.w, h: it.h }, cw = Math.round(cr.w), chh = Math.round(cr.h);
+        var cv = document.createElement('canvas'); cv.width = cw; cv.height = chh; var g = cv.getContext('2d'); g.drawImage(bmp, cr.x, cr.y, cr.w, cr.h, 0, 0, cw, chh);
+        var ppl = it.people.map(function (p) { return { kp: p.kp.map(function (q) { return [q[0] - cr.x, q[1] - cr.y, q[2]]; }) }; });
+        ppl.forEach(function (p) { blurRects(p).forEach(function (q) { pix(g, q[0], q[1], q[2], q[3]); }); });
+        var blob = await new Promise(function (r) { cv.toBlob(r, 'image/jpeg', 0.92); }), nm = 'images/' + String(i + 1).padStart(5, '0') + '.jpg';
+        files.push({ name: nm, data: new Uint8Array(await blob.arrayBuffer()) });
+        images.push({ id: i + 1, file_name: nm, width: cw, height: chh, source_t: Math.round(it.t * 100) / 100, annotator: it.who || '' });
+        ppl.forEach(function (p) { var fl = [], nk = 0; p.kp.forEach(function (q) { var vv = q[2]; if (vv > 0) nk++; fl.push(vv > 0 ? Math.round(q[0] * 10) / 10 : 0, vv > 0 ? Math.round(q[1] * 10) / 10 : 0, vv); }); var b = pbox(p) || { x0: 0, x1: 0, y0: 0, y1: 0 }, bw = (b.x1 - b.x0) * 1.15, bh = (b.y1 - b.y0) * 1.1; anns.push({ id: aid++, image_id: i + 1, category_id: 1, keypoints: fl, num_keypoints: nk, bbox: [Math.max(0, b.x0 - bw * 0.07), Math.max(0, b.y0 - bh * 0.05), bw, bh], iscrowd: 0, area: bw * bh }); });
+      }
+      var coco = { info: { description: 'kendo pose labels (v0)', note: 'v: 2=見えている 1=隠れている(推測) 0=写っていない。名前の部分はぼかし済み(設定による)' }, images: images, annotations: anns, categories: [{ id: 1, name: 'person', keypoints: CNAMES, skeleton: EDGES.map(function (e) { return [e[0] + 1, e[1] + 1]; }) }] };
+      files.push({ name: 'annotations.json', data: enc.encode(JSON.stringify(coco)) });
+      var z = zip(files), a = document.createElement('a'); a.href = URL.createObjectURL(z); a.download = 'pose-labels-' + (($('who').value || 'x').replace(/[^\w぀-ヿ一-鿿]/g, '')) + '-' + new Date().toISOString().slice(0, 10) + '.zip'; document.body.appendChild(a); a.click(); a.remove();
+      $('expInfo').textContent = images.length + '枚・' + anns.length + '人分を書き出しました(' + (z.size / 1048576).toFixed(1) + 'MB)'; $('bExp').disabled = false;
+    };
+  })();
+  </script>
+</body>
+</html>
