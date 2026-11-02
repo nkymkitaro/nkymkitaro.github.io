@@ -186,6 +186,20 @@ function renderRecStatus() {
   if (el.innerHTML !== html) el.innerHTML = html;
 }
 
+// --- 左手で使う(2026-11-03 依頼 lefty-and-press-feel): 横向きの親機の画面の左右を、鏡のように入れ替える。その端末だけに覚える(css/lefty.css) ---
+const LEFTY_KEY = 'kendo-var-lefty';
+const btnLefty = document.getElementById('btnLefty');
+function applyLefty(on) {
+  document.body.classList.toggle('lefty', on);
+  if (btnLefty) btnLefty.setAttribute('aria-checked', String(on));
+}
+applyLefty(readLocal(LEFTY_KEY) === '1'); // 読めない・保存できない端末では、オフとして動く
+if (btnLefty) btnLefty.addEventListener('click', () => {
+  const on = !document.body.classList.contains('lefty');
+  applyLefty(on);
+  writeLocal(LEFTY_KEY, on ? '1' : '0');
+});
+
 // --- カメラで参加する画面(子機)。「参加する前」と「送信中」を丸ごと切り替える ---
 const camBand = createStateBand({
   bandId: 'camStateBand',

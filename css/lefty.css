@@ -1,0 +1,78 @@
+/* =========================================================
+   左手で使う(2026-11-03 依頼: 2026-11-03-to-coder-lefty-and-press-feel.md)と、押した瞬間の手触り
+   - body.lefty のとき、横向きの親機の画面だけ、左右を鏡のように入れ替える(縦向き・子機は変えない)
+   - 列の中の並びと大きさ、映像の幅と縦横比は、今のまま。位置は --lefty-vw(映像の幅)1か所から決める
+   - 色は足さない。説明文もない
+   ========================================================= */
+
+/* ---- ⚙の一番上の切り替え ---- */
+.lefty-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 56px;
+  margin: 0 0 10px;
+  padding: 0 16px;
+  border: 1px solid var(--navy-line, rgba(255,255,255,0.2));
+  border-radius: 14px;
+  background: var(--navy-800, #14224d);
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+}
+.lefty-knob { position: relative; flex: none; width: 52px; height: 30px; border-radius: 15px; background: rgba(255,255,255,0.25); transition: background-color var(--dur-base) var(--ease-out); }
+.lefty-knob::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform var(--dur-base) var(--ease-spring); }
+.lefty-toggle[aria-checked="true"] .lefty-knob { background: var(--accent-live); }
+.lefty-toggle[aria-checked="true"] .lefty-knob::after { transform: translateX(22px); }
+@media (prefers-reduced-motion: reduce) {
+  .lefty-knob, .lefty-knob::after { transition: none; }
+}
+
+/* ---- 横向きの鏡写し(親機の撮影画面) ---- */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.lefty.mode-monitor #monitorArea:not(.replaying) {
+    --lefty-vw: min(calc((100dvh - env(safe-area-inset-top)) * var(--video-ar, 1.3333) + env(safe-area-inset-left) + env(safe-area-inset-right)), calc(100% - 244px));
+    grid-template-columns: minmax(0, 1fr) var(--lefty-vw);
+    grid-template-areas:
+      "head video"
+      "cams video"
+      "hint video"
+      "actions video";
+    padding-right: 0;
+    padding-left: max(8px, env(safe-area-inset-left));
+  }
+  /* 状態の帯は、映像の左上の角のまま(帯は映像の枠の中に付くので、列が左に来ても何も変えない) */
+  /* 「←」: 映像の左下の角(列の右隣) */
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .back-start { left: calc(100% - var(--lefty-vw) + 12px); }
+  /* 「カメラを追加」: 右下へ。映像の右下の角に置く */
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .add-cam {
+    position: absolute;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    z-index: 3;
+    width: auto;
+    min-width: 48px;
+    padding: 0 16px;
+  }
+  /* 倍率のスライダーは、「カメラを追加」の上に */
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .zoom-host { margin: 0 12px 70px 12px; justify-self: end; max-width: calc(100% - 24px); }
+}
+
+/* ---- 押した瞬間の手触り: VARと録画だけ、少し暗くする(沈む大きさは既存の --press-scale。当たり判定は変えない) ---- */
+#btnRewind.press, .lab-rec-btn.press {
+  transition:
+    transform var(--dur-base) var(--ease-spring),
+    background-color var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    filter var(--dur-base) var(--ease-out);
+}
+#btnRewind.press.is-pressed, .lab-rec-btn.press.is-pressed {
+  filter: brightness(0.88);
+  transition-duration: var(--dur-fast);
+}
+@media (prefers-reduced-motion: reduce) {
+  /* 沈みだけ。戻りの行き過ぎは付けない */
+  #btnRewind.press, .lab-rec-btn.press { transition-timing-function: var(--ease-out); }
+}
