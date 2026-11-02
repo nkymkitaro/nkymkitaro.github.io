@@ -17,6 +17,7 @@ import { showToast } from '../../js/toast.js';
 import { attachPress } from '../../js/press-feedback.js';
 import { enableWakeLock } from '../../js/wake-lock.js';
 import { track } from '../../js/analytics.js';
+import { offerAppShare, canShareVideoFiles, shareVideoFiles } from '../../js/share.js';
 
 const PEER_PREFIX = 'kendo-var-room-';
 // 試験用の入口(「試験用」のボタン)は、試作ページ(<html data-lab>)だけに出す。通常のページには出さない
@@ -32,6 +33,7 @@ const ICON = {
   play: svgFill('<path d="M8 5l11 7-11 7z"/>'),
   save: svgLine('<path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/>'),
   trash: svgLine('<path d="M5 7h14"/><path d="M10 7V4h4v3"/><path d="M7 7l1 13h8l1-13"/>'),
+  share: svgLine('<path d="M12 15V4"/><path d="M7 8l5-5 5 5"/><path d="M5 13v7h14v-7"/>'),
   undo: svgLine('<path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 0 1 0 10h-3"/>'),
   cancel: svgLine('<path d="M6 6l12 12"/><path d="M18 6L6 18"/>'),
 };
@@ -630,9 +632,30 @@ async function initParent(app) {
           refreshSub();
           await new Promise((r) => setTimeout(r, 2200));
         }
+        offerAppShare(); // 保存の直後だけ「仲間に送る」を出す
       }
     } finally {
       saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; refreshUnsaved(); render();
+    }
+  }
+
+  // ---- 共有(保存せず、共有の画面でファイルのまま送る) ----
+  async function shareTake(t) {
+    if (savingIds.has(t.id)) return;
+    savingIds.add(t.id);
+    saving = { text: '準備中' };
+    refreshSub(); takesSig = ''; render();
+    try {
+      let res;
+      try { res = await buildTakeFiles(store, t, {}); } catch (err) {
+        showToast('準備できませんでした。もう一度押してください。');
+        return;
+      }
+      const r = await shareVideoFiles(res.files);
+      if (r === 'blocked') showToast('準備ができました', { duration: 8000, action: { label: '共有', onClick: () => shareVideoFiles(res.files) } });
+      else if (r === 'failed') showToast('共有できませんでした。保存を使ってください。');
+    } finally {
+      saving = null; savingIds.delete(t.id); refreshSub(); takesSig = ''; render();
     }
   }
 
@@ -829,6 +852,7 @@ async function initParent(app) {
           mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, isUnsaved(t)),
           mk(ICON.trash, '消す', () => removeTakes([t.id])),
         );
+        if (canShareVideoFiles()) row.insertBefore(mk(ICON.share, '共有', () => shareTake(t), savingIds.has(t.id) || !!making), row.lastChild);
         li.appendChild(row);
         if (t.gaveUp) {
           const r = document.createElement('button');

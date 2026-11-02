@@ -219,7 +219,7 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
   const usable = (targets || []).filter((t) => t && t.frames && t.frames.length > 0);
   if (usable.length === 0) {
     showToast('保存できる映像がまだありません。');
-    return;
+    return false;
   }
 
   const files = [];
@@ -235,7 +235,7 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
 
   if (files.length === 0) {
     showToast('保存できませんでした。このスマホは対応していない可能性があります。');
-    return;
+    return false;
   }
 
   tapFeedback([30, 60, 30]); // 書き出しが終わったことを手に伝える(2回振動)
@@ -245,4 +245,5 @@ export async function saveClip(targets, fps, { onEncoded } = {}) {
     showToast(files.length === 1 ? `保存しました: ${files[0].name}` : `${files.length}件を保存しました`);
   }
   await shareOrDownload(files);
+  return true;
 }

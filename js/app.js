@@ -9,6 +9,7 @@ import { ReplayPlayer } from './replay-player.js';
 import { showToast } from './toast.js';
 import { enableWakeLock } from './wake-lock.js';
 import { saveClip } from './clip-saver.js';
+import { offerAppShare } from './share.js';
 import { attachPress } from './press-feedback.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
@@ -897,13 +898,14 @@ document.getElementById('btnSaveClip').addEventListener('click', async () => {
   savingClip = true;
   showSubBand('保存中');
   try {
-    await saveClip(buildSaveTargets(), recorder.fps, {
+    const saved = await saveClip(buildSaveTargets(), recorder.fps, {
       // 書き出しが終わった時点で「保存しました」を短く出す(共有画面が開く前に知らせる)
       onEncoded: (count) => {
         showSubBand(count > 1 ? `${count}件を保存しました` : '保存しました', { autoHideMs: SAVED_NOTICE_MS });
         track('clip_save', { count, all_cameras: varSettings.saveScopeKey === 'all' });
       },
     });
+    if (saved) offerAppShare(); // 保存の直後だけ「仲間に送る」を出す(共有画面を閉じたあと)
   } finally {
     if (subBandText() === '保存中') hideSubBand(); // 失敗・データなしのときは「保存中」だけ消す
     savingClip = false;
