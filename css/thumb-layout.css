@@ -1,0 +1,146 @@
+/* =========================================================
+   親指の輪(2026-11-02 依頼 2026-10-31-to-coder-thumb-layout.md、仕様 claude/specs/thumb-layout-spec.md)
+   - VARと録画を、同じ大きさ(直径 --thumb-d)の円にする。横向きは右の列(土台は動画処理コーダーの配置)に縦に、縦向きは下に横に並べる
+   - 横向きの右の列に、左の縁を斜めに切った紺のパネルを敷く
+   - ボタンの面は少し透ける(値は theme-kendo.css の --a-*)。背景のぼかしは使わない
+   - 左手用: body.lefty のとき、左右を鏡のように入れ替える(位置は --edge-* の変数1か所で決める)
+   - 色は紺・白・赤・黒のみ。働き・計測は変えない
+   ========================================================= */
+
+/* ---- 円のボタン(縦・横とも) ---- */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind,
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn {
+  flex: none;
+  width: var(--thumb-d);
+  height: var(--thumb-d);
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  border-radius: 50%;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+}
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind { font-size: clamp(15px, calc(var(--thumb-d) * 0.23), 24px); font-weight: 900; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn { font-size: clamp(14px, calc(var(--thumb-d) * 0.21), 22px); font-weight: 900; border-width: 4px; border-color: #fff; }
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > #btnRewind svg:not(.var-ring),
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn svg { width: calc(var(--thumb-d) * 0.25); height: calc(var(--thumb-d) * 0.25); }
+/* VARの面: 白(少し透ける)。輪は円の外周に、--ring-w の太さで */
+body.mode-monitor #btnRewind::before {
+  inset: calc(var(--ring-w) + 2px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, var(--a-var));
+}
+body.mode-monitor #monitorArea.lab-recording:not(.replaying) #btnRewind::before { background: rgba(20, 34, 77, var(--a-rec)); }
+.var-ring rect { stroke-width: var(--ring-w); }
+/* 録画の面: 紺(少し透ける)。白い縁と赤い丸は不透明 */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .lab-rec-btn:not(.is-recording) { background: rgba(20, 34, 77, var(--a-rec)); }
+/* 「VARに戻る」(取り消し)は円にしない */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .undo-btn.show { border-radius: 28px; align-self: stretch; width: auto; height: 56px; min-height: 56px; }
+/* 上の3つ・戻る・カメラを追加: 紺の面(少し透ける) */
+body.mode-monitor #monitorArea:not(.replaying) .status-row .icon-btn,
+body.mode-monitor #monitorArea:not(.replaying) .cam-selector button,
+.back-start, .add-cam, .cam-dock .zoom-toggle { background: rgba(12, 22, 54, var(--a-btn)); }
+/* 押した手応え: 円は沈んで(0.94倍)、離すと弾んで戻る(既存の press-feedback の値) */
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions > .action-btn:active { transform: scale(0.94); }
+
+/* ---- 縦向き: 下の段に、右寄せで横に並べる(左手用は左寄せ) ---- */
+@media (orientation: portrait) {
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions {
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding-top: 8px;
+  }
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .primary-actions { justify-content: flex-start; }
+}
+
+/* ---- 横向き: 右の列に、斜めのパネルを敷く。円は列の中央に縦に並べる ---- */
+@media (orientation: landscape) and (max-height: 540px) {
+  /* 高さが足りない端末(568×320など)では、円を小さくする(2つ+間隔が列に収まる大きさ。押せる範囲48px以上) */
+  :root { --thumb-d: clamp(72px, calc((100dvh - 190px) / 2), 104px); }
+  body.mode-monitor #monitorArea:not(.replaying) {
+    --edge-r: max(8px, env(safe-area-inset-right));
+  }
+  /* パネル: 2列目の全行に敷く(グリッドの項目になる)。左の縁を、内側へ --panel-slant だけ斜めに切る */
+  body.mode-monitor #monitorArea:not(.replaying)::before {
+    content: '';
+    grid-column: 2;
+    grid-row: 1 / -1;
+    z-index: 2;
+    margin: 0 calc(-1 * var(--edge-r)) 0 calc(-1 * var(--panel-slant));
+    background: rgba(7, 13, 34, var(--a-panel));
+    clip-path: polygon(var(--panel-slant) 0, 100% 0, 100% 100%, 0 100%);
+    pointer-events: none;
+    animation: thumb-panel-in var(--dur-base) var(--ease-spring) both;
+  }
+  body.mode-monitor #monitorArea:not(.replaying) :is(.status-row, .cam-dock, .var-hint, .primary-actions) { z-index: 3; }
+  body.mode-monitor #monitorArea:not(.replaying) .primary-actions { align-items: center; justify-content: flex-end; gap: 12px; }
+  /* 2台以上つながったら、カメラの切り替えで列の高さを使うので、VARと録画は横に並べる(重ならないように) */
+  body.mode-monitor #monitorArea.has-children:not(.replaying) { --thumb-d: clamp(72px, calc((100dvh - 190px) / 2), 96px); }
+  body.mode-monitor #monitorArea.has-children:not(.replaying) .primary-actions { flex-direction: row; justify-content: center; gap: 10px; }
+  body.mode-monitor #monitorArea.has-children:not(.replaying) .primary-actions > .undo-btn.show { flex: 1 1 100%; }
+  /* 一言は、列の3行目に置く(パネルが列を占めるので、自動の置き場所だと列が増えてしまう) */
+  body.mode-monitor #monitorArea:not(.replaying) .var-hint { grid-column: 2; grid-row: 3; align-self: end; }
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .var-hint { grid-column: 1; }
+
+  /* 左手用: 左右を入れ替える。列の幅の式は style.css と同じ(右の列が左へ来る) */
+  body.lefty.mode-monitor #monitorArea:not(.replaying) {
+    --edge-l: max(8px, env(safe-area-inset-left));
+    grid-template-columns:
+      minmax(0, 1fr)
+      min(calc((100dvh - env(safe-area-inset-top)) * var(--video-ar, 1.3333) + env(safe-area-inset-left) + env(safe-area-inset-right)), calc(100% - 244px));
+    grid-template-areas:
+      "head video"
+      "cams video"
+      ". video"
+      "actions video";
+    padding-right: 0;
+    padding-left: var(--edge-l);
+  }
+  body.lefty.mode-monitor #monitorArea:not(.replaying)::before {
+    grid-column: 1;
+    margin: 0 calc(-1 * var(--panel-slant)) 0 calc(-1 * var(--edge-l));
+    clip-path: polygon(0 0, calc(100% - var(--panel-slant)) 0, 100% 100%, 0 100%);
+    animation-name: thumb-panel-in-left;
+  }
+  /* 「戻る」(映像の左下)は右下へ。状態の帯は映像の右上へ(斜めに切る側も入れ替える) */
+  body.lefty.mode-monitor #monitorArea:not(.replaying) .back-start { left: auto; right: max(12px, env(safe-area-inset-right)); }
+}
+
+/* ---- 左手用: 状態の帯(横向きだけ。右上へ) ---- */
+@media (orientation: landscape) and (max-height: 540px) { /* 縦向きは、右上に一時停止・設定・ヘルプがあるので、帯は左上のまま */
+  body.lefty:not(.camera-sending) #monitorArea:not(.replaying) .state-bands { left: auto; right: 0; align-items: flex-end; }
+  body.lefty:not(.camera-sending) #monitorArea:not(.replaying) .state-band { clip-path: polygon(0 0, 100% 0, 100% 100%, 14px 100%); padding-left: 26px; padding-right: 14px; }
+}
+
+/* ---- 左手用のスイッチ(⚙のシートの上): 説明文なし。押せる範囲は高さ56px ---- */
+.lefty-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 56px;
+  margin: 0 0 10px;
+  padding: 0 16px;
+  border: 1px solid var(--navy-line, rgba(255,255,255,0.2));
+  border-radius: 14px;
+  background: var(--navy-800, #14224d);
+  color: #fff;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 800;
+}
+.lefty-knob { position: relative; flex: none; width: 52px; height: 30px; border-radius: 15px; background: rgba(255,255,255,0.25); transition: background-color var(--dur-base) var(--ease-out); }
+.lefty-knob::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform var(--dur-base) var(--ease-spring); }
+.lefty-toggle[aria-checked="true"] .lefty-knob { background: var(--accent-live); }
+.lefty-toggle[aria-checked="true"] .lefty-knob::after { transform: translateX(22px); }
+
+/* ---- パネルが入る動き(0.2秒。端から入って、わずかに行き過ぎて止まる)。「動きを減らす」では動かさない ---- */
+@keyframes thumb-panel-in { from { transform: translateX(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes thumb-panel-in-left { from { transform: translateX(-40%); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  body.mode-monitor #monitorArea:not(.replaying)::before { animation: none; }
+}

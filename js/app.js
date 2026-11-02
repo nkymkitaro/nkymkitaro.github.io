@@ -130,7 +130,7 @@ function layoutVarRing() {
   varRingRects.forEach((r) => {
     r.setAttribute('x', 1.5); r.setAttribute('y', 1.5);
     r.setAttribute('width', w - 3); r.setAttribute('height', h - 3);
-    r.setAttribute('rx', 10);
+    r.setAttribute('rx', varRingBtn.classList.contains('thumb-round') ? (Math.min(w, h) - 3) / 2 : 10);
   });
   varRingLen = varRingRects[0].getTotalLength();
   varRingRects[1].style.strokeDasharray = `${varRingLen}`;
@@ -936,6 +936,21 @@ document.getElementById('btnLineContact').addEventListener('click', () => track(
 document.getElementById('btnHelpInline').addEventListener('click', openHelp); // 横向き時の親機用
 document.getElementById('btnCloseHelp').addEventListener('click', closeHelp);
 helpOverlay.addEventListener('click', closeHelp);
+
+// --- 左手で使う(2026-11-02 依頼 thumb-layout): 親機の画面の左右を、鏡のように入れ替える。その端末だけに覚える ---
+const LEFTY_KEY = 'kendo-var-lefty';
+const btnLefty = document.getElementById('btnLefty');
+function applyLefty(on) {
+  document.body.classList.toggle('lefty', on);
+  btnLefty.setAttribute('aria-checked', String(on));
+  layoutVarRing(); // 位置が変わるので、輪を描き直す
+}
+applyLefty(readLocal(LEFTY_KEY) === '1');
+btnLefty.addEventListener('click', () => {
+  const on = !document.body.classList.contains('lefty');
+  applyLefty(on);
+  writeLocal(LEFTY_KEY, on ? '1' : '0');
+});
 
 // --- 遅れて映す(2026-10-30 依頼 delay-display): ⚙から秒数を選ぶと、いま − N秒 の映像を全画面で流し続ける ---
 const DELAY_OPTIONS = [10, 20, 30];
