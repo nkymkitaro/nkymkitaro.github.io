@@ -15,14 +15,6 @@
   --surface: var(--navy-900);
   --surface-2: var(--navy-800);
   --glass: rgba(255, 255, 255, 0.1);
-  /* 親指の輪(2026-11-02 依頼 thumb-layout。仕様 2-2): ボタンの面の不透明度。文字・アイコン・赤い丸は不透明 */
-  --a-panel: 0.84;
-  --a-var: 0.9;
-  --a-rec: 0.88;
-  --a-btn: 0.85;
-  --thumb-d: 104px;   /* VAR・録画の円の直径(同じ大きさ) */
-  --ring-w: 5px;      /* VARの輪の太さ */
-  --panel-slant: 28px; /* パネルの斜めの縁(横向き) */
 }
 body.mode-monitor { background: var(--navy-950); }
 
