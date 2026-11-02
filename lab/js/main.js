@@ -596,7 +596,10 @@ async function initParent(app) {
   async function saveTake(t) {
     if (savingIds.has(t.id)) return; // 二度押ししても、保存は1回だけ
     savingIds.add(t.id);
-    track('rec_save');
+    // 録画の長さ(秒の整数)。止めた時刻が無い・負のときは付けない(0 は入れない)
+    const recMs = t.stoppedAt && t.startedAt ? t.stoppedAt - t.startedAt : 0;
+    const recSec = Math.round(recMs / 1000);
+    track('rec_save', recSec >= 1 ? { rec_sec: recSec } : undefined);
     setSheet(null); // 帯と下の「中止」が見えるように、シートを閉じる(画面の絵の7)
     takesSig = ''; render();
     const started = performance.now();
