@@ -158,7 +158,7 @@ export class CameraLink {
       if (this.activeSource === camEntry.id) {
         // ライブ表示中に切断された場合、固まった最後のコマを映し続けないよう親機に戻す
         this.activeSource = 'local';
-        showToast(`${camEntry.label}がつながっていないため、カメラ${LOCAL_CAMERA_NUMBER}の映像に戻しました。`);
+        showToast(`${camEntry.label} ✕ カメラ${LOCAL_CAMERA_NUMBER}に戻しました`);
       }
       this._notifyCamsChanged();
     };
@@ -446,7 +446,7 @@ export class CameraLink {
     const src = this.getAllSources().find((s) => s.id === id);
     if (!src) return false;
     if (!src.connected) {
-      showToast(`${src.label}はつながっていません。`);
+      // つながっていないカメラは、ボタンの✕で分かる。文字の知らせは出さない
       return false;
     }
     this.activeSource = id;

@@ -1325,7 +1325,7 @@ html.needs-prep .prep-area { display: flex; flex-direction: column; }
 .state-band[data-state="paused"] { background: var(--surface-2); color: var(--text); }
 /* 子機の帯はグレースケールだけ(赤・アンバーは親機の状態用。ポリシー 2-1) */
 .state-band[data-state="sending"] { background: var(--text); color: #000; }
-.state-band[data-state="lost"] { background: var(--surface-2); color: var(--text); }
+.state-band[data-state="lost"] { background: var(--surface-2); color: var(--text); font-size: 1.6rem; font-weight: 900; line-height: 1; }
 .state-band[data-state="live"]::before {
   content: '';
   width: 0.45em;

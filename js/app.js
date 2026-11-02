@@ -176,7 +176,7 @@ function renderRecStatus() {
   if (sources.length > 1) {
     camsHtml = '<div class="rec-cams">' + sources.map((src) => {
       let state;
-      if (!src.connected) state = '<span class="rec-cam-off">つながっていません</span>';
+      if (!src.connected) state = '<span class="rec-cam-off">✕</span>';
       else if (cameraLink.isPaused) state = '<span class="rec-cam-off">停止中</span>';
       else state = '<span class="rec-cam-on"><span class="rec-dot"></span>撮影中</span>';
       return `<span class="rec-cam">${src.label} ${state}</span>`;
@@ -190,7 +190,7 @@ function renderRecStatus() {
 const camBand = createStateBand({
   bandId: 'camStateBand',
   subId: 'camSubBand',
-  labels: { sending: '撮影中', paused: '一時停止中', lost: 'つながっていません' },
+  labels: { sending: '撮影中', paused: '一時停止中', lost: '✕' },
 });
 const cameraStatusEl = document.getElementById('cameraStatus');
 let codeInput = null;
@@ -203,7 +203,7 @@ const JOIN_FAILURE_MESSAGES = {
   'not-found': 'この番号は見つかりませんでした。番号をご確認ください。',
   full: '満員のため参加できませんでした。',
   // 番号は通ったのに、映像の経路を作れなかった。ネットワークを変えない限りつながらないので、対処まで伝える
-  unreachable: '直接つながりませんでした。同じWi‑Fiか、はじめたスマホのテザリングにつないでください。',
+  unreachable: '直接つながりませんでした。同じWi‑Fiか、1台目のスマホのテザリングにつないでください。',
   closed: 'つながりませんでした。もう一度お試しください。',
   timeout: 'つながりませんでした。もう一度お試しください。',
   network: '通信できませんでした。電波をご確認ください。',

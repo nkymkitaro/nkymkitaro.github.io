@@ -977,7 +977,7 @@ async function initChild(app) {
     if (sub) {
       if (st.recording && !connected) {
         if (!sub.dataset.lab) { subPrev = { text: sub.textContent, hidden: sub.hidden }; sub.dataset.lab = '1'; }
-        sub.textContent = '見ているスマホとつながっていません'; sub.hidden = false;
+        sub.textContent = '見ているスマホ ✕'; sub.hidden = false;
       } else if (sub.dataset.lab) { // つながったら、元の表示(カメラの番号)に戻す
         sub.textContent = subPrev.text; sub.hidden = subPrev.hidden; delete sub.dataset.lab;
       }
