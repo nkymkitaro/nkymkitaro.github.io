@@ -60,6 +60,10 @@ const player = new ReplayPlayer(document.getElementById('displayCanvas'), record
 // --- VAR設定(親機からいつでも調整できる) ---
 const REWIND_OPTIONS = [10, 15, 30]; // 秒。さかのぼれる長さは、これに合わせて自動で決める(2026-10-30。2つの設定がぶつかるのを防ぐ)
 const MIN_BUFFER_SEC = DEFAULT_BUFFER_SEC; // ためる長さの下限。戻る秒数が短くても、この長さはためる
+// 画質「最大」のときだけ、ためる長さも戻る秒数・ディレイも10秒に絞る(4Kの写真は重いため。中山さんの案 2026-11-03)
+const MAX_QUALITY_SEC = 10;
+function isMaxQuality() { return varSettings.qualityKey === 'max'; }
+function rewindOptions() { return isMaxQuality() ? [MAX_QUALITY_SEC] : REWIND_OPTIONS; }
 const BUFFER_HEAVY_SEC = 60; // 戻る秒数にこの長さを選んだときは「重くなることがあります。」を出す
 // 録画の画質。カメラは既定で640×480で取り込むので、640pxより上げても細かくならない(2026-10-14 に「高」を外し、2026-11-03 に、取り込みの大きさも替える形で戻した)。
 // 「低」は、重い・熱くなる端末向けの逃げ道(以前の標準の320px)
@@ -69,6 +73,8 @@ const QUALITY_OPTIONS = [
   { key: 'low', label: '低', width: 320, quality: 0.6, capture: [640, 480] },
   { key: 'standard', label: '標準', width: 640, quality: 0.6, capture: [640, 480] },
   { key: 'high', label: '高', width: 1280, quality: 0.65, capture: [1280, 720] },
+  // 「最大」: カメラの最大の大きさ(端末が出せる範囲)。写真の幅は取り込みの幅のまま(大きくは引き伸ばさない)
+  { key: 'max', label: '最大', width: 3840, quality: 0.6, capture: [3840, 2160] },
 ];
 const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
@@ -577,10 +583,10 @@ function renderQualitySelector() {
 // 戻る秒数を選ぶと、さかのぼれる長さも合わせて決まる(戻る秒数と同じ。ただし下限あり)
 function selectRewindSeconds(sec) {
   varSettings.rewindSeconds = sec;
-  varSettings.bufferSeconds = Math.max(MIN_BUFFER_SEC, sec);
+  varSettings.bufferSeconds = isMaxQuality() ? MAX_QUALITY_SEC : Math.max(MIN_BUFFER_SEC, sec);
   recorder.setDurationSec(varSettings.bufferSeconds);
   updateRewindLabel();
-  renderSecondsSelector('rewindSecSelector', REWIND_OPTIONS, varSettings.rewindSeconds, selectRewindSeconds);
+  renderSecondsSelector('rewindSecSelector', rewindOptions(), varSettings.rewindSeconds, selectRewindSeconds);
   updateBufferNote();
 }
 
@@ -594,6 +600,10 @@ function selectQuality(key) {
   varSettings.qualityKey = key;
   const opt = QUALITY_OPTIONS.find((o) => o.key === key);
   recorder.setQuality(opt.width, opt.quality);
+  // 「最大」に入る・出るときは、戻る秒数・ためる長さ・ディレイの選択肢を合わせる
+  if (isMaxQuality()) varSettings.rewindSeconds = MAX_QUALITY_SEC;
+  selectRewindSeconds(varSettings.rewindSeconds);
+  renderDelaySelector();
   renderQualitySelector();
   applyCaptureSize(opt.capture); // 親機のカメラの取り込みの大きさ(対応していない端末では何もしない)
 }
@@ -628,7 +638,7 @@ function selectSaveScope(key) {
 }
 
 function renderAllSettingsSelectors() {
-  renderSecondsSelector('rewindSecSelector', REWIND_OPTIONS, varSettings.rewindSeconds, selectRewindSeconds);
+  renderSecondsSelector('rewindSecSelector', rewindOptions(), varSettings.rewindSeconds, selectRewindSeconds);
   renderQualitySelector();
   renderSaveScopeSelector();
   updateBufferNote();

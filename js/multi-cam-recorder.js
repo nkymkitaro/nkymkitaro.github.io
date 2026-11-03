@@ -122,13 +122,15 @@ export class MultiCamRecorder {
       const video = cam.getVideoEl();
       if (!video || !video.videoWidth || video.readyState < video.HAVE_CURRENT_DATA) continue;
 
-      const scale = this.width / video.videoWidth;
+      // 元の映像より大きくは引き伸ばさない(「高」「最大」で、小さい映像の写真がむだに大きくならないように)
+      const outW = Math.min(this.width, video.videoWidth);
+      const scale = outW / video.videoWidth;
       const height = Math.round(video.videoHeight * scale);
-      if (cam.canvas.width !== this.width || cam.canvas.height !== height) {
-        cam.canvas.width = this.width;
+      if (cam.canvas.width !== outW || cam.canvas.height !== height) {
+        cam.canvas.width = outW;
         cam.canvas.height = height;
       }
-      cam.ctx.drawImage(video, 0, 0, this.width, height);
+      cam.ctx.drawImage(video, 0, 0, outW, height);
       cam.canvas.toBlob(
         (blob) => {
           if (!blob) return;
