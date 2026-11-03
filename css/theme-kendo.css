@@ -102,3 +102,16 @@ body.mode-monitor #monitorArea.delaying #displayCanvas { background: transparent
 
 /* ズームは撮影中のカメラ用。VAR再生中・ディレイ中は出さない(帯と重なって見えた不具合の修正) */
 body.mode-monitor #monitorArea:is(.replaying, .delaying) .zoom-toggle { display: none !important; }
+
+/* カメラの切り替え(インカメ): 録画中は押せない。切り替え中は少し薄く */
+body.mode-monitor #monitorArea.lab-recording #btnFlipCam { opacity: 0.4; pointer-events: none; }
+#btnFlipCam.is-busy { opacity: 0.5; pointer-events: none; }
+/* 横向き: カメラ切り替えが出ているときは、上のボタンが5つになり1つだけ次の行に落ちるので、3つずつに並べる */
+@media (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) .status-row:has(#btnFlipCam:not([hidden])) {
+    display: grid;
+    grid-template-columns: repeat(3, 48px);
+    justify-content: space-between;
+    row-gap: 10px;
+  }
+}

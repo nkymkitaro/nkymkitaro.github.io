@@ -436,6 +436,30 @@ export class CameraLink {
     return this.isPaused;
   }
 
+  // 親機のカメラの向きを替える(背面 'environment' / 前面 'user')。映像の枠(<video>)はそのままで、中の流れだけ替える。
+  // 同時に2つのカメラを開けない端末があるので、先に今の流れを止める。替えられなければ、元の向きに戻す。
+  // 戻り値: 実際に使っている向き。どちらも開けなかったときは null
+  async switchLocalCamera(facing, size) {
+    const [w, h] = size || [640, 480];
+    const old = this.localMonitorVideo.srcObject;
+    if (old) old.getTracks().forEach((t) => t.stop());
+    const open = (f) => navigator.mediaDevices.getUserMedia({
+      video: { facingMode: f, width: { ideal: w }, height: { ideal: h } },
+      audio: false,
+    });
+    let used = facing;
+    let stream = null;
+    try { stream = await open(facing); } catch (err) {
+      used = facing === 'user' ? 'environment' : 'user';
+      try { stream = await open(used); } catch (err2) { console.error(err2); return null; }
+    }
+    this.localMonitorVideo.srcObject = stream;
+    this._setLocalTrackEnabled(!this.isPaused); // 一時停止中に替えても、止まったまま
+    try { await this.localMonitorVideo.play(); } catch (err) { /* 自動再生が許されないときは、そのまま */ }
+    this._notifyCamsChanged();
+    return used;
+  }
+
   _setLocalTrackEnabled(enabled) {
     const stream = this.localMonitorVideo.srcObject;
     if (stream) stream.getVideoTracks().forEach((t) => { t.enabled = enabled; });
