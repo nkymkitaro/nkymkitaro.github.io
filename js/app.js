@@ -73,8 +73,8 @@ const QUALITY_OPTIONS = [
   { key: 'low', label: '低', width: 320, quality: 0.6, capture: [640, 480] },
   { key: 'standard', label: '標準', width: 640, quality: 0.6, capture: [640, 480] },
   { key: 'high', label: '高', width: 1280, quality: 0.65, capture: [1280, 720] },
-  // 「最大」: カメラの最大の大きさ(端末が出せる範囲)。写真の幅は取り込みの幅のまま(大きくは引き伸ばさない)
-  { key: 'max', label: '最大', width: 3840, quality: 0.6, capture: [3840, 2160] },
+  // 「最大」: カメラの最大の大きさ(端末が出せる範囲)で取り込む。VARの写真は1920pxまで(4Kのまま残すと重く、2026-11-03 に実機で落ちたため抑えた)
+  { key: 'max', label: '最大', width: 1920, quality: 0.6, capture: [3840, 2160] },
 ];
 const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
