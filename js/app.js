@@ -1125,5 +1125,26 @@ if (diagOn) {
   setInterval(() => {
     const v = cameraLink.localMonitorVideo;
     if (v && v.videoWidth) diagSet('カメラの取り込み', `${v.videoWidth}x${v.videoHeight}`);
+    // ズームの確認用(2026-11-03、光学ズームが使えるかの切り分け): 使っているカメラ・いまの倍率・倍率の範囲
+    try {
+      const t = v && v.srcObject && v.srcObject.getVideoTracks()[0]; // 親機のカメラ
+      if (t) {
+        const st = t.getSettings(); const cp = t.getCapabilities ? t.getCapabilities() : {};
+        diagSet('カメラ名', t.label || '不明');
+        diagSet('カメラの向き', st.facingMode || '不明');
+        diagSet('いまのズーム', st.zoom != null ? Number(st.zoom).toFixed(2) : 'なし');
+        diagSet('ズームの範囲', cp.zoom ? `${cp.zoom.min}〜${cp.zoom.max} 刻み${cp.zoom.step}` : 'なし');
+        diagSet('カメラが対応している項目', Object.keys(cp).join(','));
+      }
+    } catch (e) { /* 取れないときは出さない */ }
   }, 1000);
+  // 端末にあるカメラの一覧(レンズごとに別のカメラとして出る端末もある)
+  if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+    const listCams = () => navigator.mediaDevices.enumerateDevices().then((ds) => {
+      const cams = ds.filter((d) => d.kind === 'videoinput');
+      diagSet('カメラの数', cams.length);
+      cams.forEach((d, i) => diagSet(`カメラ一覧${i + 1}`, d.label || '(名前なし)'));
+    }).catch(() => {});
+    listCams(); setTimeout(listCams, 4000); // 許可が出たあとに名前が見えるようになる
+  }
 }
