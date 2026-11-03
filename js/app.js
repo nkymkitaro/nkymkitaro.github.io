@@ -1055,6 +1055,7 @@ function startDelayDisplay(sec) {
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });
+  recorder.setDurationSec(sec + 3); // ディレイの間は、いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
   monitorArea.classList.add('delaying');
   setBandState('delayWait');
   enterBrowserFullscreen();
@@ -1062,6 +1063,7 @@ function startDelayDisplay(sec) {
 function stopDelayDisplay() {
   if (!player.delayMode) return;
   player.stopDelay();
+  recorder.setDurationSec(varSettings.bufferSeconds); // VAR用の長さに戻す(捨てた分は、ためなおし)
   monitorArea.classList.remove('delaying');
   exitBrowserFullscreen();
   updateStateBand();

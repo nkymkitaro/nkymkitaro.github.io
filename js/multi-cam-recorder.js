@@ -9,6 +9,7 @@ export class MultiCamRecorder {
   constructor({ fps = 15, durationSec = 15, width = 320, quality = 0.6 } = {}) {
     this.fps = fps;
     this.maxFrames = fps * durationSec;
+    this.durationSec = durationSec;
     this.width = width;
     this.quality = quality;
     this.cams = new Map(); // id -> { label, getVideoEl, canvas, ctx, frames: [{ts, blob}], paused, dropped }
@@ -26,7 +27,13 @@ export class MultiCamRecorder {
 
   // 上限を超えたぶんを古い順に捨てる。捨てた数は dropped に足す(再生側がコマ番号を合わせ直すため)
   _trim(cam) {
-    const over = cam.frames.length - this._limit();
+    // 数(枚数)だけでなく、時間でも古いコマを捨てる。圧縮が間に合わずコマを飛ばしたとき、
+    // 枚数だけで切ると、決めた長さより長くためてしまうため(2026-11-03)
+    const keepMs = (this.durationSec + (this.holding ? this.holdExtraSec : 0) + 1) * 1000;
+    const cutoff = performance.now() - keepMs;
+    let old = 0;
+    while (old < cam.frames.length && cam.frames[old].ts < cutoff) old++;
+    const over = Math.max(old, cam.frames.length - this._limit());
     if (over > 0) {
       cam.frames.splice(0, over);
       cam.dropped += over;
@@ -85,6 +92,7 @@ export class MultiCamRecorder {
 
   // 裏録画バッファの長さ(秒)を変更する。短くした場合は超過分をすぐ切り詰める。
   setDurationSec(durationSec) {
+    this.durationSec = durationSec;
     this.maxFrames = this.fps * durationSec;
     for (const cam of this.cams.values()) this._trim(cam);
   }
