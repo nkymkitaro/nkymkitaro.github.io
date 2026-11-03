@@ -104,6 +104,12 @@ export class MultiCamRecorder {
     this.quality = quality;
   }
 
+  // ディレイ(動画方式)の間は、写真をためない(CPUと熱を減らす)。止めるときは、ためた写真も捨てる(あとで古い場面が混ざらないように)
+  setSuspended(on) {
+    this.suspended = on;
+    if (on) for (const cam of this.cams.values()) cam.frames.length = 0;
+  }
+
   start() {
     if (this.timer) return;
     const intervalMs = 1000 / this.fps;
@@ -126,6 +132,7 @@ export class MultiCamRecorder {
   }
 
   _captureAll() {
+    if (this.suspended) return;
     const now = performance.now();
     for (const cam of this.cams.values()) {
       if (cam.paused) continue;

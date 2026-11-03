@@ -12,6 +12,7 @@ import { saveClip, encodeClipFiles } from './clip-saver.js';
 import { offerAppShare, canShareVideoFiles, shareVideoFiles } from './share.js';
 import { attachPress } from './press-feedback.js';
 import { diagOn, diagSet } from './diag.js';
+import { DelayCodec } from './delay-codec.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
 import { maybeShowHomeNudge } from './home-nudge.js';
@@ -1044,18 +1045,30 @@ function renderDelaySelector() {
   });
 }
 renderDelaySelector();
-function startDelayDisplay(sec) {
-  if (player.isReplay || player.delayMode) return;
+let delayStarting = false;
+async function startDelayDisplay(sec) {
+  if (player.isReplay || player.delayMode || delayStarting) return;
+  delayStarting = true;
   diagSet('ディレイ秒', sec);
   closeSettings();
+  // 動画専用の部品が使える端末では、そちらで圧縮する(使えなければ、今までの写真方式)。映像の長い辺は、選んだ画質に合わせる
+  const opt = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey) || QUALITY_OPTIONS[1];
+  let codec = null;
+  try { codec = await DelayCodec.create(recorder, opt.maxEdge || Math.max(...opt.capture)); } catch (err) { codec = null; }
+  delayStarting = false;
+  if (player.isReplay || player.delayMode) return;
+  if (!codec) diagSet('ディレイ方式', '写真');
   const bandText = document.querySelector('#stateBand .state-band-text');
   player.startDelay(sec, {
+    codec,
+    onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(sec + 3); },
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });
-  recorder.setDurationSec(sec + 3); // ディレイの間は、いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
+  if (codec) recorder.setSuspended(true); // 動画方式の間は、写真をためない(CPUと熱を減らす)
+  else recorder.setDurationSec(sec + 3); // 写真方式: いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
   monitorArea.classList.add('delaying');
   setBandState('delayWait');
   enterBrowserFullscreen();
@@ -1063,6 +1076,7 @@ function startDelayDisplay(sec) {
 function stopDelayDisplay() {
   if (!player.delayMode) return;
   player.stopDelay();
+  recorder.setSuspended(false);
   recorder.setDurationSec(varSettings.bufferSeconds); // VAR用の長さに戻す(捨てた分は、ためなおし)
   monitorArea.classList.remove('delaying');
   exitBrowserFullscreen();

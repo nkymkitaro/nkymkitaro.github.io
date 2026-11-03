@@ -5,6 +5,9 @@
 import { tapFeedback } from './haptics.js';
 import { diagTime, diagSet, diagAdd } from './diag.js';
 
+// 写真(ImageBitmap)は width/height、動画のコマ(VideoFrame)は displayWidth/displayHeight
+const dw_ = (d) => d.displayWidth || d.width;
+const dh_ = (d) => d.displayHeight || d.height;
 const SEEK_HAPTIC_INTERVAL_MS = 50; // シークを指でなぞったときの振動の間隔(ブーッと鳴り続けないように間引く)
 // 並べて見るとき、ほかのカメラで「同じ瞬間」とみなすずれの上限。これより離れたコマしかなければ「映像なし」にする
 // (切断などで、その時刻のコマがないカメラに、別の時刻の映像を出さないため)
@@ -527,8 +530,8 @@ export class ReplayPlayer {
     let tileH = 0;
     items.forEach((it) => {
       if (!it.drawable) return;
-      tileW = Math.max(tileW, it.drawable.width);
-      tileH = Math.max(tileH, it.drawable.height);
+      tileW = Math.max(tileW, dw_(it.drawable));
+      tileH = Math.max(tileH, dh_(it.drawable));
     });
     if (!tileW || !tileH) { tileW = 640; tileH = 480; }
     const layout = this._chooseGrid(items.length, tileW, tileH);
@@ -557,8 +560,11 @@ export class ReplayPlayer {
 
   // ---- 遅れて映す(2026-10-30 依頼 delay-display)。いま − N秒 のコマを、順に出し続ける ----
   // 新しくためる仕組みは作らず、VARと同じ録画バッファを読む。VARには入らない(isReplay は false のまま)
-  startDelay(sec, { onState } = {}) {
+  startDelay(sec, { onState, codec = null, onFallback = null } = {}) {
     this.stopDelay();
+    this._codec = codec; // 動画方式(js/delay-codec.js)。null なら写真方式
+    this._delayOnFallback = onFallback;
+    if (codec) codec.start(sec);
     this.delayMode = true;
     this.delaySec = sec;
     this._delayReady = null;
@@ -580,6 +586,7 @@ export class ReplayPlayer {
     this.delayMode = false;
     cancelAnimationFrame(this._delayRaf);
     this._delayToken++;
+    if (this._codec) { this._codec.dispose(); this._codec = null; }
     for (const entry of this._delayCache.values()) {
       if (entry.drawable && entry.drawable.close) entry.drawable.close();
     }
@@ -593,6 +600,12 @@ export class ReplayPlayer {
     const created = [];
     const tickT0 = performance.now();
     try {
+      if (this._codec) {
+        if (this._codec.failed) { // 動画方式が失敗。写真方式に戻す(写真は、ためなおし)
+          this._codec.dispose(); this._codec = null;
+          if (this._delayOnFallback) this._delayOnFallback();
+        } else { this._delayTickCodec(); return; }
+      }
       const targetTs = performance.now() - this.delaySec * 1000;
       const ids = this.gridCamIds();
       // N秒たつまでは出さない(いちばん古いコマが、まだ「いま − N秒」に届いていない)
@@ -631,15 +644,15 @@ export class ReplayPlayer {
       if (items.length === 1) {
         const d = items[0].drawable;
         if (d) {
-          this._fitCanvasTo(d.width, d.height);
+          this._fitCanvasTo(dw_(d), dh_(d));
           this.ctx.drawImage(d, 0, 0, this.canvas.width, this.canvas.height);
         }
       } else if (items.length > 1) {
         let tileW = 0; let tileH = 0;
         items.forEach((it) => {
           if (!it.drawable) return;
-          tileW = Math.max(tileW, it.drawable.width);
-          tileH = Math.max(tileH, it.drawable.height);
+          tileW = Math.max(tileW, dw_(it.drawable));
+          tileH = Math.max(tileH, dh_(it.drawable));
         });
         if (!tileW || !tileH) { tileW = 640; tileH = 480; }
         const layout = this._chooseGrid(items.length, tileW, tileH);
@@ -671,6 +684,43 @@ export class ReplayPlayer {
     }
   }
 
+  // 動画方式の1回ぶん。戻したコマはその場で描く(awaitを挟まない。次の呼び出しで閉じられるため)
+  _delayTickCodec() {
+    const codec = this._codec;
+    const targetTs = performance.now() - this.delaySec * 1000;
+    const ids = codec.ids();
+    const olds = ids.map((id) => codec.oldestTs(id));
+    const ready = olds.some((t) => t <= targetTs + 150);
+    const remain = ready ? 0 : (ids.length ? Math.max(1, Math.ceil(this.delaySec - (performance.now() - Math.min(...olds)) / 1000)) : this.delaySec);
+    if (ready !== this._delayReady || remain !== this._delayRemain) {
+      this._delayReady = ready;
+      this._delayRemain = remain;
+      if (this._delayOnState) this._delayOnState(ready, remain);
+    }
+    if (!ready) { this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height); return; }
+    const items = ids.map((id) => ({ id, drawable: codec.frameFor(id, targetTs) }));
+    if (items.length === 1) {
+      const d = items[0].drawable;
+      if (d) {
+        this._fitCanvasTo(dw_(d), dh_(d));
+        this.ctx.drawImage(d, 0, 0, this.canvas.width, this.canvas.height);
+      }
+    } else if (items.length > 1) {
+      let tileW = 0; let tileH = 0;
+      items.forEach((it) => {
+        if (!it.drawable) return;
+        tileW = Math.max(tileW, dw_(it.drawable));
+        tileH = Math.max(tileH, dh_(it.drawable));
+      });
+      if (!tileW || !tileH) { tileW = 640; tileH = 480; }
+      const layout = this._chooseGrid(items.length, tileW, tileH);
+      layout.tileW = tileW;
+      layout.tileH = tileH;
+      this._fitCanvasTo(layout.cols * tileW, layout.rows * tileH);
+      this._paintTiles(items, layout);
+    }
+  }
+
   // 並べた映像を canvas に描く(VARの「並べて見る」と、遅れて映すで共通)。tileW・tileH は layout に入れて渡す
   _paintTiles(items, layout) {
     const { tileW, tileH } = layout;
@@ -691,9 +741,9 @@ export class ReplayPlayer {
       ctx.fillStyle = '#111';
       ctx.fillRect(x, y, w, h);
       if (it.drawable) {
-        const s = Math.min(w / it.drawable.width, h / it.drawable.height);
-        const dw = it.drawable.width * s;
-        const dh = it.drawable.height * s;
+        const s = Math.min(w / dw_(it.drawable), h / dh_(it.drawable));
+        const dw = dw_(it.drawable) * s;
+        const dh = dh_(it.drawable) * s;
         ctx.drawImage(it.drawable, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
       } else {
         ctx.fillStyle = '#8e8e93';
