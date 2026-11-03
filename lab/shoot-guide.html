@@ -30,6 +30,12 @@
     .go { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 12px; border: 0; background: var(--navy-700); color: #fff; font: inherit; font-size: 17px; font-weight: 800; text-decoration: none; }
     .go.ready { background: #fff; color: var(--navy-900); }
     .go svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; }
+    .acts { display: flex; gap: 8px; }
+    .acts > * { flex: 1 1 0; min-width: 0; }
+    .rec { cursor: pointer; font-family: inherit; }
+    .rec .dot { width: 18px; height: 18px; border-radius: 50%; background: #d6231b; flex: none; }
+    .rec.on { background: #d6231b; color: #fff; }
+    .rec.on .dot { border-radius: 3px; background: #fff; width: 16px; height: 16px; }
     .hint { margin: 0; font-size: 13px; color: #c8d0ea; text-align: center; }
     .handle { cursor: grab; }
     @media (orientation: landscape) and (max-height: 540px) {
@@ -41,7 +47,7 @@
   </style>
 </head>
 <body>
-  <!-- 撮影ガイド(試作v0)。映像は保存せず、どこにも送らない。検出はしない。枠(ガイド線)と、撮る前の確認の絵だけ。 -->
+  <!-- 撮影ガイド(試作)。検出はしない。枠(ガイド線)と、撮る前の確認の絵と、録画(枠は映像に入れない)。録画は端末の中だけ。止めると、共有画面かダウンロードで端末に保存する。どこにも送らない。 -->
   <div class="app">
     <div class="stage" id="stage">
       <video id="v" playsinline muted autoplay></video>
@@ -53,10 +59,13 @@
     </div>
     <div class="bar">
       <div class="checks" id="checks"></div>
-      <a class="go" id="go" href="../index.html">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>
-        <span>撮影へ</span>
-      </a>
+      <div class="acts">
+        <button type="button" class="go rec" id="rec"><span class="dot"></span><span id="recLabel">録画</span></button>
+        <a class="go" id="go" href="../index.html">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>
+          <span>撮影へ</span>
+        </a>
+      </div>
     </div>
   </div>
   <script>
@@ -157,6 +166,42 @@
       window.addEventListener('resize', draw);
       window.addEventListener('orientationchange', function () { setTimeout(draw, 200); });
       window.addEventListener('pagehide', function () { if (stream) stream.getTracks().forEach(function (t) { t.stop(); }); });
+
+      // 録画: ガイドの枠は入れず、カメラの映像だけを録る。端末の外へは送らない(止めたら、共有画面かダウンロードで端末に保存)
+      var recBtn = document.getElementById('rec'), recLabel = document.getElementById('recLabel');
+      var rec = null, chunks = [], recT0 = 0, recTimer = 0;
+      function pickMime() {
+        if (!window.MediaRecorder) return '';
+        var c = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+        for (var i = 0; i < c.length; i++) { try { if (MediaRecorder.isTypeSupported(c[i])) return c[i]; } catch (e) {} }
+        return '';
+      }
+      function tick() { var t = Math.floor((Date.now() - recT0) / 1000); recLabel.textContent = '録画停止 ' + Math.floor(t / 60) + ':' + ('0' + (t % 60)).slice(-2); }
+      function saveFile(blob, ext) {
+        var d = new Date(), z = function (n) { return ('0' + n).slice(-2); };
+        var name = 'MITORI-' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + z(d.getSeconds()) + '.' + ext;
+        var file = new File([blob], name, { type: blob.type });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file] }).catch(function () { download(); });
+        } else { download(); }
+        function download() { var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+      }
+      recBtn.addEventListener('click', function () {
+        if (rec) { rec.stop(); return; }
+        if (!stream) return;
+        var mime = pickMime();
+        try { rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 }) : new MediaRecorder(stream); } catch (e) { rec = null; recLabel.textContent = '録画できません'; return; }
+        chunks = [];
+        rec.ondataavailable = function (ev) { if (ev.data && ev.data.size) chunks.push(ev.data); };
+        rec.onstop = function () {
+          clearInterval(recTimer);
+          var type = rec.mimeType || mime || 'video/webm';
+          rec = null; recBtn.classList.remove('on'); recLabel.textContent = '録画';
+          if (chunks.length) saveFile(new Blob(chunks, { type: type }), /mp4/.test(type) ? 'mp4' : 'webm');
+        };
+        rec.start(1000); recT0 = Date.now(); recBtn.classList.add('on'); tick(); recTimer = setInterval(tick, 500);
+      });
+      window.addEventListener('pagehide', function () { if (rec) try { rec.stop(); } catch (e) {} });
       draw(); startCam();
     })();
   </script>
