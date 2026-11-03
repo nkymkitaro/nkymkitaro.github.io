@@ -11,6 +11,7 @@ import { enableWakeLock } from './wake-lock.js';
 import { saveClip, encodeClipFiles } from './clip-saver.js';
 import { offerAppShare, canShareVideoFiles, shareVideoFiles } from './share.js';
 import { attachPress } from './press-feedback.js';
+import { diagOn, diagSet } from './diag.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
 import { maybeShowHomeNudge } from './home-nudge.js';
@@ -598,6 +599,7 @@ function updateBufferNote() {
 
 function selectQuality(key) {
   varSettings.qualityKey = key;
+  diagSet('画質', key);
   const opt = QUALITY_OPTIONS.find((o) => o.key === key);
   recorder.setQuality(opt.width, opt.quality);
   // 「最大」に入る・出るときは、戻る秒数・ためる長さ・ディレイの選択肢を合わせる
@@ -1044,6 +1046,7 @@ function renderDelaySelector() {
 renderDelaySelector();
 function startDelayDisplay(sec) {
   if (player.isReplay || player.delayMode) return;
+  diagSet('ディレイ秒', sec);
   closeSettings();
   const bandText = document.querySelector('#stateBand .state-band-text');
   player.startDelay(sec, {
@@ -1095,4 +1098,14 @@ document.addEventListener('keydown', (e) => {
 {
   const m = /[?&]mockcams=(\d)/.exec(window.location.search);
   if (m) import('./dev-mock.js').then((mod) => mod.installMockCams(cameraLink, Number(m[1]))).catch(() => {});
+}
+
+// ?diag=1 のとき: カメラの取り込みの大きさと、端末の情報を数字に出す(js/diag.js)
+if (diagOn) {
+  diagSet('画質', varSettings.qualityKey);
+  diagSet('端末', navigator.userAgent.slice(0, 80));
+  setInterval(() => {
+    const v = cameraLink.localMonitorVideo;
+    if (v && v.videoWidth) diagSet('カメラの取り込み', `${v.videoWidth}x${v.videoHeight}`);
+  }, 1000);
 }

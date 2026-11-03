@@ -3,6 +3,7 @@
 // ライブ中は選択中カメラの映像をそのまま描画し(startLiveLoop)、
 // リプレイ中は録画バッファから該当コマをデコードして描画する。
 import { tapFeedback } from './haptics.js';
+import { diagTime, diagSet, diagAdd } from './diag.js';
 
 const SEEK_HAPTIC_INTERVAL_MS = 50; // シークを指でなぞったときの振動の間隔(ブーッと鳴り続けないように間引く)
 // 並べて見るとき、ほかのカメラで「同じ瞬間」とみなすずれの上限。これより離れたコマしかなければ「映像なし」にする
@@ -590,6 +591,7 @@ export class ReplayPlayer {
     this._delayBusy = true;
     const token = ++this._delayToken;
     const created = [];
+    const tickT0 = performance.now();
     try {
       const targetTs = performance.now() - this.delaySec * 1000;
       const ids = this.gridCamIds();
@@ -616,7 +618,9 @@ export class ReplayPlayer {
         if (!frame) return { id, frame: null, drawable: null };
         const cached = this._delayCache.get(id);
         if (cached && cached.frame === frame) return { id, frame, drawable: cached.drawable };
+        const dT0 = performance.now();
         const drawable = await blobToDrawable(frame.blob);
+        diagTime('ディレイの読み出しms', performance.now() - dT0);
         created.push(drawable);
         return { id, frame, drawable };
       }));
@@ -663,6 +667,7 @@ export class ReplayPlayer {
       created.forEach((d) => d.close && d.close());
     } finally {
       this._delayBusy = false;
+      diagTime('ディレイの1回ms', performance.now() - tickT0);
     }
   }
 

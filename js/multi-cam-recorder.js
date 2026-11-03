@@ -1,3 +1,4 @@
+import { diagOn, diagSet, diagAdd, diagTime } from './diag.js';
 // MultiCamRecorder: 接続中の全カメラの映像を、常にバックグラウンドで
 // 直近 durationSec 秒ぶんだけ録画し続けるクラス。
 //
@@ -132,9 +133,10 @@ export class MultiCamRecorder {
       }
       // 前の写真の圧縮が終わっていないときは、このコマは飛ばす(「高」「最大」で圧縮が間に合わないと、
       // 待ちが積み上がって、メモリが増え、画面が固まるため。2026-11-03)
-      if (cam.encoding && now - cam.encodingSince < 1500) continue; // 1.5秒たっても終わらないときは、取りこぼしとして続ける
+      if (cam.encoding && now - cam.encodingSince < 1500) { diagAdd('写真を飛ばした回数'); continue; } // 1.5秒たっても終わらないときは、取りこぼしとして続ける
       cam.encoding = true;
       cam.encodingSince = now;
+      const t0 = performance.now();
       cam.ctx.drawImage(video, 0, 0, outW, height);
       cam.canvas.toBlob(
         (blob) => {
@@ -142,6 +144,12 @@ export class MultiCamRecorder {
           if (!blob) return;
           cam.frames.push({ ts: now, blob });
           this._trim(cam);
+          if (diagOn) {
+            diagTime('写真の圧縮ms', performance.now() - t0);
+            diagSet('写真の大きさ', `${outW}x${height}`);
+            diagSet('写真1枚KB(直近)', Math.round(blob.size / 1024));
+            diagSet(`写真の枚数 ${cam.label || ''}`, cam.frames.length);
+          }
         },
         'image/jpeg',
         this.quality
