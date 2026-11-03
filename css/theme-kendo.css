@@ -115,3 +115,8 @@ body.mode-monitor #monitorArea.lab-recording #btnFlipCam { opacity: 0.4; pointer
     row-gap: 10px;
   }
 }
+
+/* 10秒ディレイの画面のカメラ切り替え: 「×」の左隣(同じ大きさ、間隔10px)。カメラが1つの端末では出さない */
+body.mode-monitor #monitorArea.delaying .delay-flip { right: calc(max(16px, env(safe-area-inset-right)) + 66px); }
+.delay-flip[hidden] { display: none !important; }
+body.mode-monitor #monitorArea.delaying #btnDelayFlip.is-busy { opacity: 0.5; pointer-events: none; }

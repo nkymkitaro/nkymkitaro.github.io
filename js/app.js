@@ -612,27 +612,28 @@ function selectQuality(key) {
 // 映像は左右を反転しない(VAR・保存した動画の左右が、実際と同じになるように)。録画中・VAR中は押せない
 let facingMode = 'environment';
 const btnFlipCam = document.getElementById('btnFlipCam');
+const btnDelayFlip = document.getElementById('btnDelayFlip'); // 10秒ディレイの画面にも同じボタンを出す
 async function initFlipCam() {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
-    if (devs.filter((d) => d.kind === 'videoinput').length >= 2) btnFlipCam.hidden = false; // カメラが1つの端末では出さない
+    if (devs.filter((d) => d.kind === 'videoinput').length >= 2) { btnFlipCam.hidden = false; if (btnDelayFlip) btnDelayFlip.hidden = false; } // カメラが1つの端末では出さない
   } catch (err) { /* 数えられないときは出さない */ }
+}
+let flipping = false;
+async function flipCamera() {
+  if (flipping || document.getElementById('monitorArea').classList.contains('lab-recording')) return;
+  flipping = true;
+  [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.add('is-busy'));
+  const opt = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey) || QUALITY_OPTIONS[1];
+  const used = await cameraLink.switchLocalCamera(facingMode === 'user' ? 'environment' : 'user', opt.capture);
+  if (used) facingMode = used; else showToast('カメラを切り替えられませんでした');
+  if (hostZoom) hostZoom.refresh(); // 前面カメラはズームがないことが多い。倍率は1倍から
+  [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.remove('is-busy'));
+  flipping = false;
 }
 if (btnFlipCam && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
   initFlipCam();
-  attachPress(btnFlipCam, { vibrate: 12 });
-  let flipping = false;
-  btnFlipCam.addEventListener('click', async () => {
-    if (flipping || document.getElementById('monitorArea').classList.contains('lab-recording')) return;
-    flipping = true;
-    btnFlipCam.classList.add('is-busy');
-    const opt = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey) || QUALITY_OPTIONS[1];
-    const used = await cameraLink.switchLocalCamera(facingMode === 'user' ? 'environment' : 'user', opt.capture);
-    if (used) facingMode = used; else showToast('カメラを切り替えられませんでした');
-    if (hostZoom) hostZoom.refresh(); // 前面カメラはズームがないことが多い。倍率は1倍から
-    btnFlipCam.classList.remove('is-busy');
-    flipping = false;
-  });
+  [btnFlipCam, btnDelayFlip].forEach((b) => { if (!b) return; attachPress(b, { vibrate: 12 }); b.addEventListener('click', flipCamera); });
 }
 
 // 親機のカメラの取り込みの大きさを替える。映像の流れは作り直さず、いまの流れに指示する
