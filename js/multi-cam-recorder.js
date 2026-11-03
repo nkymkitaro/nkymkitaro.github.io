@@ -130,9 +130,15 @@ export class MultiCamRecorder {
         cam.canvas.width = outW;
         cam.canvas.height = height;
       }
+      // 前の写真の圧縮が終わっていないときは、このコマは飛ばす(「高」「最大」で圧縮が間に合わないと、
+      // 待ちが積み上がって、メモリが増え、画面が固まるため。2026-11-03)
+      if (cam.encoding && now - cam.encodingSince < 1500) continue; // 1.5秒たっても終わらないときは、取りこぼしとして続ける
+      cam.encoding = true;
+      cam.encodingSince = now;
       cam.ctx.drawImage(video, 0, 0, outW, height);
       cam.canvas.toBlob(
         (blob) => {
+          cam.encoding = false;
           if (!blob) return;
           cam.frames.push({ ts: now, blob });
           this._trim(cam);
