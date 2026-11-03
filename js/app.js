@@ -11,7 +11,7 @@ import { enableWakeLock } from './wake-lock.js';
 import { saveClip, encodeClipFiles } from './clip-saver.js';
 import { offerAppShare, canShareVideoFiles, shareVideoFiles } from './share.js';
 import { attachPress } from './press-feedback.js';
-import { diagOn, diagSet } from './diag.js';
+import { diagOn, diagSet, diagTime } from './diag.js';
 import { DelayCodec } from './delay-codec.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
@@ -1075,7 +1075,9 @@ async function startDelayDisplay(sec) {
 }
 function stopDelayDisplay() {
   if (!player.delayMode) return;
+  const t0 = performance.now();
   player.stopDelay();
+  diagTime('ディレイ終了: 止める部分ms', performance.now() - t0);
   recorder.setSuspended(false);
   recorder.setDurationSec(varSettings.bufferSeconds); // VAR用の長さに戻す(捨てた分は、ためなおし)
   monitorArea.classList.remove('delaying');

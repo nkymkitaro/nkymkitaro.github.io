@@ -222,9 +222,11 @@ export class DelayCodec {
   frameFor(id, targetMs) { const ch = this.channels.get(id); return ch ? ch.frameFor(targetMs) : null; }
 
   dispose() {
+    const t0 = performance.now();
     clearInterval(this.timer);
     this.timer = null;
     for (const ch of this.channels.values()) ch.close();
     this.channels.clear();
+    diagTime('動画の部品を閉じるms', performance.now() - t0); // 終了の瞬間に固まる原因の切り分け用(2026-11-03)
   }
 }
