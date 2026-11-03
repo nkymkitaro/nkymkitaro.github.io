@@ -61,11 +61,14 @@ const player = new ReplayPlayer(document.getElementById('displayCanvas'), record
 const REWIND_OPTIONS = [10, 15, 30]; // 秒。さかのぼれる長さは、これに合わせて自動で決める(2026-10-30。2つの設定がぶつかるのを防ぐ)
 const MIN_BUFFER_SEC = DEFAULT_BUFFER_SEC; // ためる長さの下限。戻る秒数が短くても、この長さはためる
 const BUFFER_HEAVY_SEC = 60; // 戻る秒数にこの長さを選んだときは「重くなることがあります。」を出す
-// 録画の画質。カメラは640×480で取り込むので、640pxより上げても細かくならない(「高」は外した、2026-10-14)。
+// 録画の画質。カメラは既定で640×480で取り込むので、640pxより上げても細かくならない(2026-10-14 に「高」を外し、2026-11-03 に、取り込みの大きさも替える形で戻した)。
 // 「低」は、重い・熱くなる端末向けの逃げ道(以前の標準の320px)
+// 「高」(2026-11-03、中山さんの案): 親機のカメラを1280×720で取り込み、VARの画も1280pxで残す。
+// 重くなる(メモリ・熱)ので、既定は「標準」のまま。子機のカメラは640×480のまま(親機の設定は子機に伝えない)
 const QUALITY_OPTIONS = [
-  { key: 'low', label: '低', width: 320, quality: 0.6 },
-  { key: 'standard', label: '標準', width: 640, quality: 0.6 },
+  { key: 'low', label: '低', width: 320, quality: 0.6, capture: [640, 480] },
+  { key: 'standard', label: '標準', width: 640, quality: 0.6, capture: [640, 480] },
+  { key: 'high', label: '高', width: 1280, quality: 0.65, capture: [1280, 720] },
 ];
 const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
@@ -592,6 +595,18 @@ function selectQuality(key) {
   const opt = QUALITY_OPTIONS.find((o) => o.key === key);
   recorder.setQuality(opt.width, opt.quality);
   renderQualitySelector();
+  applyCaptureSize(opt.capture); // 親機のカメラの取り込みの大きさ(対応していない端末では何もしない)
+}
+
+// 親機のカメラの取り込みの大きさを替える。映像の流れは作り直さず、いまの流れに指示する
+async function applyCaptureSize([w, h]) {
+  try {
+    const st = cameraLink.localMonitorVideo && cameraLink.localMonitorVideo.srcObject;
+    const track = st && st.getVideoTracks()[0];
+    if (track) await track.applyConstraints({ width: { ideal: w }, height: { ideal: h } });
+  } catch (err) {
+    console.warn('取り込みの大きさを替えられませんでした', err);
+  }
 }
 
 function renderSaveScopeSelector() {
