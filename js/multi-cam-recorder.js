@@ -98,8 +98,9 @@ export class MultiCamRecorder {
   }
 
   // 録画する映像の幅(px)とJPEG品質を変更する。次の撮影サイクルから反映される。
-  setQuality(width, quality) {
+  setQuality(width, quality, maxEdge = 0) {
     this.width = width;
+    this.maxEdge = maxEdge; // 長い辺の上限(0なら上限なし)。「最大」で、縦持ち・横持ちとも同じ重さにするため
     this.quality = quality;
   }
 
@@ -132,8 +133,9 @@ export class MultiCamRecorder {
       if (!video || !video.videoWidth || video.readyState < video.HAVE_CURRENT_DATA) continue;
 
       // 元の映像より大きくは引き伸ばさない(「高」「最大」で、小さい映像の写真がむだに大きくならないように)
-      const outW = Math.min(this.width, video.videoWidth);
-      const scale = outW / video.videoWidth;
+      let scale = Math.min(1, this.width / video.videoWidth);
+      if (this.maxEdge) scale = Math.min(scale, this.maxEdge / Math.max(video.videoWidth, video.videoHeight));
+      const outW = Math.round(video.videoWidth * scale);
       const height = Math.round(video.videoHeight * scale);
       if (cam.canvas.width !== outW || cam.canvas.height !== height) {
         cam.canvas.width = outW;

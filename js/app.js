@@ -74,8 +74,8 @@ const QUALITY_OPTIONS = [
   { key: 'low', label: '低', width: 320, quality: 0.6, capture: [640, 480] },
   { key: 'standard', label: '標準', width: 640, quality: 0.6, capture: [640, 480] },
   { key: 'high', label: '高', width: 1280, quality: 0.65, capture: [1280, 720] },
-  // 「最大」: 2560×1440で取り込む(端末が出せなければ、出せる範囲)。VARの写真は1920pxまで。4Kは、実機で落ちた・もっさりしたため外した(2026-11-03)
-  { key: 'max', label: '最大', width: 1920, quality: 0.6, capture: [2560, 1440] },
+  // 「最大」: 2560×1440で取り込む(端末が出せなければ、出せる範囲)。VARの写真は長い辺1920pxまで(縦持ちで1440×2560だと、1枚約100msかかりコマ落ち・発熱したため。2026-11-03)。4Kは、実機で落ちた・もっさりしたため外した(2026-11-03)
+  { key: 'max', label: '最大', width: 1920, quality: 0.6, capture: [2560, 1440], maxEdge: 1920 },
 ];
 const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
@@ -601,7 +601,7 @@ function selectQuality(key) {
   varSettings.qualityKey = key;
   diagSet('画質', key);
   const opt = QUALITY_OPTIONS.find((o) => o.key === key);
-  recorder.setQuality(opt.width, opt.quality);
+  recorder.setQuality(opt.width, opt.quality, opt.maxEdge || 0);
   // 「最大」に入る・出るときは、戻る秒数・ためる長さ・ディレイの選択肢を合わせる
   if (isMaxQuality()) varSettings.rewindSeconds = MAX_QUALITY_SEC;
   selectRewindSeconds(varSettings.rewindSeconds);
