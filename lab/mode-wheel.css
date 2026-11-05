@@ -1,0 +1,110 @@
+/* モードホイール(試験ページ。仕様 claude/specs/var-symbol-spec.md、見本 claude/design-samples/2026-11-05-mode-wheel-*.html)
+   撮影画面の下の操作を、真ん中のボタン1つ+リボルバー切替にする。lab/mode-wheel.html だけが読む。本番の css は変えない。
+   色は紺・白だけ(赤は録画の状態だけ。影の明るい紺 #2c4aa0 は紺の系統) */
+:root { --mw-n9: #0c1636; --mw-shade: #2c4aa0; --mw-skew: -14deg; --mw-main: 100px; --mw-wheel-w: 112px; }
+
+/* 元の下の操作・上の行は隠し、ホイールに置き換える(働きは、元のボタンを押して使う) */
+body.mode-monitor #monitorArea .primary-actions,
+body.mode-monitor #monitorArea .status-row,
+body.mode-monitor #monitorArea .var-hint,
+body.mode-monitor #monitorArea .zoom-host,
+body.mode-monitor #monitorArea .delay-exit { display: none !important; } /* ディレイを止めるのは、横の枠の■(元の×は、押して使うだけ) */
+
+.mw { display: none; }
+body.mode-monitor #monitorArea:not(.replaying) .mw { display: block; position: absolute; inset: 0; pointer-events: none; z-index: 4; font-family: inherit; user-select: none; -webkit-user-select: none; }
+.mw > * { pointer-events: auto; }
+
+.mw-zone { position: absolute; left: 0; right: 0; bottom: 0; height: calc(250px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, rgba(12,22,54,0), rgba(12,22,54,.78) 35%); pointer-events: none; }
+.mw-top { position: absolute; right: max(10px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 8px); display: flex; gap: 8px; }
+.mw-ic { width: 48px; height: 48px; margin: 0; padding: 0; border: 0; border-radius: 14px; background: rgba(12,22,54,.6); color: #fff; display: flex; align-items: center; justify-content: center; }
+.mw-ic svg { width: 24px; height: 24px; }
+
+/* 秒数の札 */
+/* 元のカメラ切り替えと「カメラを追加」「←」は、映像の下端(ホイールの上)に */
+body.mode-monitor #monitorArea:not(.replaying) .cam-dock { position: absolute; left: max(12px, env(safe-area-inset-left)); bottom: calc(256px + env(safe-area-inset-bottom)); z-index: 3; display: flex; gap: 8px; padding: 0; }
+body.mode-monitor #monitorArea:not(.replaying) .back-start { position: static; }
+.mw-secs { position: absolute; left: 0; right: 0; bottom: calc(190px + env(safe-area-inset-bottom)); display: flex; justify-content: center; pointer-events: none; }
+.mw-chip { display: flex; gap: 2px; background: rgba(12,22,54,.72); border-radius: 99px; padding: 3px; pointer-events: auto; }
+.mw-chip button { min-width: 48px; height: 34px; margin: 0; padding: 0 8px; border: 0; border-radius: 99px; background: transparent; color: #c9d2ee; font: inherit; font-size: 14px; font-weight: 800; }
+.mw-chip button.sel { background: rgba(255,255,255,.92); color: var(--mw-n9); }
+.mw-chip.closed button.sel { background: transparent; color: #fff; }
+
+/* 真ん中のボタン */
+.mw-main { position: absolute; left: 50%; bottom: calc(78px + env(safe-area-inset-bottom)); width: var(--mw-main); height: var(--mw-main); margin: 0 0 0 calc(var(--mw-main) / -2); padding: 0; border: 0; background: transparent; color: inherit; display: block; }
+.mw-main .shape, .mw-main .out { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: transform var(--dur-fast) var(--ease-out), filter var(--dur-fast); }
+.mw-main svg { width: 100%; height: 100%; }
+.mw-main:active .shape { transform: scale(.9); filter: brightness(.88); }
+.mw-main.dim .shape { opacity: .4; }
+.mw-main.swap .shape { animation: mw-spin-in .34s var(--ease-spring); }
+.mw-main .out { animation: mw-spin-out .2s ease-in forwards; pointer-events: none; }
+@keyframes mw-spin-out { to { transform: rotate(var(--r)) scale(.3); opacity: 0; } }
+@keyframes mw-spin-in { 0% { transform: rotate(calc(var(--r) * -1)) scale(.3); opacity: 0; } 70% { transform: rotate(0) scale(1.08); opacity: 1; } 100% { transform: none; opacity: 1; } }
+.mw-main.full .shape svg { animation: mw-bounce .4s var(--ease-spring); }
+@keyframes mw-bounce { 0% { transform: scale(1); } 40% { transform: scale(1.12); } 100% { transform: scale(1); } }
+
+/* 名前のホイール */
+.mw-wheel { position: absolute; left: 0; right: 0; bottom: calc(22px + env(safe-area-inset-bottom)); height: 48px; perspective: 400px; touch-action: none; }
+.mw-wheel .m { position: absolute; left: 50%; top: 0; width: var(--mw-wheel-w); height: 44px; margin-left: calc(var(--mw-wheel-w) / -2); display: flex; align-items: center; justify-content: center; }
+.mw-wheel .m .pl, .mw-wheel .m .sh { position: absolute; inset: 0; transform: skewX(var(--mw-skew)); transition: background-color var(--dur-base); }
+.mw-wheel .m b { position: relative; display: flex; align-items: center; gap: 5px; font-weight: 900; font-style: italic; font-size: 17px; letter-spacing: .04em; color: #c9d2ee; }
+.mw-wheel .m b i { width: 8px; height: 8px; border-radius: 50%; }
+.mw-wheel .m b i.rec { background: #d6231b; }
+.mw-wheel .m b i.dl { background: #fff; }
+.mw-wheel .m.sel .pl { background: #fff; transform: skewX(var(--mw-skew)) rotate(-3deg); }
+.mw-wheel .m.sel .sh { background: var(--mw-shade); transform: skewX(var(--mw-skew)) rotate(-3deg) translate(5px, 5px); }
+.mw-wheel .m.sel b { color: var(--mw-n9); }
+
+/* 横の枠(止める) */
+.mw-slot { position: absolute; bottom: calc(92px + env(safe-area-inset-bottom)); width: 84px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.mw-slot.dl { left: max(10px, env(safe-area-inset-left)); }
+.mw-slot.rc { right: max(10px, env(safe-area-inset-right)); }
+.mw-slot .bx { width: 56px; height: 56px; margin: 0; padding: 0; border: 0; border-radius: 16px; background: #17275a; display: flex; align-items: center; justify-content: center; }
+.mw-slot .bx.rec { box-shadow: inset 0 0 0 3px #d6231b; }
+.mw-slot .bx.dly { box-shadow: inset 0 0 0 3px #fff; }
+.mw-slot .bx:active { transform: scale(.9); }
+.mw-slot[hidden] { display: none; }
+.mw-slot.pop .bx { animation: mw-pop .4s var(--ease-spring); }
+@keyframes mw-pop { 0% { transform: scale(.4); } 100% { transform: scale(1); } }
+.mw-slot .lb { height: 14px; font-size: 12px; font-weight: 800; color: rgba(255,255,255,.85); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mw-blink { animation: mw-blink 1s steps(1) infinite; color: #d6231b; }
+@keyframes mw-blink { 50% { opacity: .25; } }
+
+.mw-fly { position: absolute; width: 110px; height: 44px; pointer-events: none; transition: transform .45s cubic-bezier(.5,0,.2,1), opacity .45s; z-index: 6; }
+.mw-fly .pl { position: absolute; inset: 0; transform: skewX(var(--mw-skew)); background: #fff; }
+.mw-fly b { position: relative; display: flex; height: 100%; align-items: center; justify-content: center; font-weight: 900; font-style: italic; font-size: 17px; color: var(--mw-n9); }
+.mw-note { position: absolute; left: 50%; bottom: calc(210px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #fff; color: var(--mw-n9); font-size: 13px; font-weight: 800; padding: 8px 12px; border-radius: 10px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity var(--dur-base); }
+.mw-note.show { opacity: 1; }
+
+/* 横向き: 右の列(約150px)。名前のホイールは列の右端に縦、その左に 録画の枠・秒数の札・VAR・ディレイの枠 */
+@media (orientation: landscape) and (max-height: 540px) {
+  :root { --mw-main: 84px; --mw-wheel-w: 58px; }
+  .mw-zone { left: auto; width: calc(150px + env(safe-area-inset-right)); top: 0; height: auto; background: linear-gradient(90deg, rgba(12,22,54,0), rgba(12,22,54,.78) 40%); }
+  .mw-top { right: calc(150px + env(safe-area-inset-right) + 12px); }
+  .mw-wheel { left: auto; right: max(8px, env(safe-area-inset-right)); bottom: auto; top: 50%; width: 58px; height: 160px; margin-top: -80px; }
+  .mw-wheel .m { top: 50%; left: 0; width: 58px; height: 46px; margin: -23px 0 0 0; }
+  .mw-wheel .m b { font-size: 12px; letter-spacing: 0; gap: 3px; white-space: nowrap; }
+  .mw-main { left: auto; right: calc(max(8px, env(safe-area-inset-right)) + 66px); bottom: auto; top: 50%; margin: calc(var(--mw-main) / -2) 0 0 0; }
+  .mw-secs { left: auto; right: calc(max(8px, env(safe-area-inset-right)) + 66px); width: var(--mw-main); bottom: auto; top: calc(50% - var(--mw-main) / 2 - 40px); }
+  .mw-slot, .mw-slot.rc, .mw-slot.dl { bottom: auto; width: var(--mw-main); right: calc(max(8px, env(safe-area-inset-right)) + 66px); left: auto; }
+  .mw-slot.rc { top: calc(50% - var(--mw-main) / 2 - 40px - 74px); }
+  .mw-slot.dl { top: calc(50% + var(--mw-main) / 2 + 6px); }
+  .mw-note { left: auto; right: calc(150px + env(safe-area-inset-right) + 12px); bottom: auto; top: 64px; transform: none; }
+  /* 元のカメラ切り替えと「カメラを追加」は、映像の左下に */
+  body.mode-monitor #monitorArea:not(.replaying) .cam-dock { position: absolute; left: max(68px, calc(env(safe-area-inset-left) + 68px)); bottom: max(12px, env(safe-area-inset-bottom)); z-index: 3; display: flex; gap: 8px; padding: 0; }
+  body.mode-monitor #monitorArea:not(.replaying) .cam-selector { display: flex; gap: 8px; }
+}
+@media (orientation: landscape) and (max-height: 400px) {
+  :root { --mw-main: 72px; }
+  .mw-slot .bx { width: 48px; height: 48px; border-radius: 14px; }
+  .mw-slot.rc { top: calc(50% - var(--mw-main) / 2 - 40px - 66px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mw-main.swap .shape, .mw-main .out, .mw-main.full .shape svg, .mw-slot.pop .bx { animation-duration: .01s; }
+  .mw-fly { transition-duration: .01s; }
+}
+
+/* 録画中の帯は「REC 0:12」を出さず、「LIVE」のまま(録画の時間は横の枠にある)。文字を書き換えると元の部品と取り合いになるので、見た目だけ差し替える */
+.state-band[data-state="rec"] .state-band-text { font-size: 0; }
+.state-band[data-state="rec"] .state-band-text::after { content: 'LIVE'; font-size: 1.5rem; }
+@media (max-height: 420px) { .state-band[data-state="rec"] .state-band-text::after { font-size: 1.2rem; } }
+#stateSubBand[data-rec] { display: none !important; }
