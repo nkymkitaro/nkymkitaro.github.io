@@ -34,9 +34,15 @@ const SHAPE = {
   rec: () => '<svg viewBox="0 0 88 88" width="88" height="88" aria-hidden="true"><circle cx="44" cy="44" r="40" fill="none" stroke="#fff" stroke-width="6"/><circle cx="44" cy="44" r="31" fill="#d6231b"/></svg>',
   delay: () => `<svg viewBox="0 0 100 100" width="86" height="86" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="26" fill="#fff"/>${person(40, 0.3)}${person(60, 1)}</svg>`,
 };
+// 横向きの名前の列で、選んでいないモードは文字でなく絵(中山さん 2026-11-05「文字のくどさ」)
+const ICON_MODE = {
+  rec: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="rgba(201,210,238,.75)" stroke-width="2"/><circle cx="12" cy="12" r="4.5" fill="#d6231b"/></svg>',
+  delay: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><rect x="8" y="4" width="12" height="12" rx="3" stroke="rgba(201,210,238,.4)"/><rect x="4" y="8" width="12" height="12" rx="3" stroke="rgba(201,210,238,.85)"/></svg>',
+  var: 'VAR',
+};
 const stopIcon = (c) => `<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="3" fill="${c}"/></svg>`;
 const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/><path d="M8.5 10.5l4 2.5-4 2.5z" fill="#fff"/></svg>';
-const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>';
+const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M18.93 9.39 L21.80 10.01 L21.80 13.99 L18.93 14.61 L18.74 15.05 L20.33 17.53 L17.53 20.33 L15.05 18.74 L14.61 18.93 L13.99 21.80 L10.01 21.80 L9.39 18.93 L8.95 18.74 L6.47 20.33 L3.67 17.53 L5.26 15.05 L5.07 14.61 L2.20 13.99 L2.20 10.01 L5.07 9.39 L5.26 8.95 L3.67 6.47 L6.47 3.67 L8.95 5.26 L9.39 5.07 L10.01 2.20 L13.99 2.20 L14.61 5.07 L15.05 5.26 L17.53 3.67 L20.33 6.47 L18.74 8.95 Z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 function init() {
   const app = window.kendoVarApp;
@@ -44,15 +50,14 @@ function init() {
   if (!app || !area) return;
   const landMq = window.matchMedia('(orientation: landscape) and (max-height: 540px)');
   const isLand = () => landMq.matches;
-  const step = () => (isLand() ? 52 : 112); // 札1つ分の送り幅
+  const step = () => (isLand() ? 56 : 112); // 札1つ分の送り幅
 
   const root = document.createElement('div');
   root.className = 'mw';
   root.innerHTML = `<div class="mw-zone"></div>
-    <div class="mw-top"><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
+    <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
     <div class="mw-slot dl" hidden><button type="button" class="bx dly" aria-label="ディレイを止める">${stopIcon('#fff')}</button><span class="lb"></span></div>
     <div class="mw-slot rc" hidden><button type="button" class="bx rec" aria-label="録画を止める">${stopIcon('#d6231b')}</button><span class="lb"></span></div>
-    <div class="mw-secs"></div>
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
     <div class="mw-wheel" role="listbox" aria-label="モード"></div>
     <div class="mw-note" role="status"></div>`;
@@ -138,7 +143,7 @@ function init() {
   function updateSlots() {
     slotRc.hidden = !st.rec; slotDl.hidden = !st.delay;
     if (st.rec) slotRc.querySelector('.lb').innerHTML = `<span class="mw-blink">●</span> ${fmt(Date.now() - st.recT)}`;
-    if (st.delay) slotDl.querySelector('.lb').textContent = `ディレイ ${delaySec()}秒`;
+    if (st.delay) slotDl.querySelector('.lb').textContent = `${delaySec()}秒`;
   }
   function renderAll() { renderShape(); renderSecs(); updateSlots(); drawWheel(); fixBand(); }
 
@@ -154,7 +159,8 @@ function init() {
     items.forEach(({ e, o }) => {
       const mi = mod3(base + o); const x = (o - frac) * W; const a = Math.min(1, Math.abs(x) / W);
       const dot = MODES[mi].k === 'rec' && st.rec ? '<i class="rec"></i>' : MODES[mi].k === 'delay' && st.delay ? '<i class="dl"></i>' : '';
-      e.querySelector('b').innerHTML = MODES[mi].lb + dot;
+      const selNow = Math.abs(x) < W * 0.3;
+      e.querySelector('b').innerHTML = (land && !selNow ? ICON_MODE[MODES[mi].k] : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
       e.style.opacity = Math.max(0, 1 - 0.45 * Math.abs(x) / W);
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
@@ -243,7 +249,12 @@ function init() {
   slotRc.querySelector('.bx').addEventListener('click', () => { const b = labRec(); if (b) b.click(); });
   slotDl.querySelector('.bx').addEventListener('click', () => { const x = $('#btnDelayExit'); if (x) x.click(); });
   q('#mwGear').addEventListener('click', () => { const b = $('#btnSettings'); if (b) b.click(); });
-  q('#mwList').addEventListener('click', () => { const b = $('#btnOpenRecList'); if (b) b.click(); });
+  // 一覧ボタンは、録画の一覧だけを出す(最長・録画開始は出さない。録画はホイールから始める)。⚙の「録画の一覧と設定」から開いたときは今までどおり
+  q('#mwList').addEventListener('click', () => { const b = $('#btnOpenRecList'); if (b) { document.body.classList.add('mw-listonly'); const sh = $('#labSheet'); const hd = sh && sh.querySelector('.help-sheet-handle'); if (hd && !sh.querySelector('.mw-sheet-title')) hd.insertAdjacentHTML('afterend', '<p class="mw-sheet-title">録画の一覧</p>'); b.click(); } });
+  { const b = $('#btnOpenRecList'); if (b) b.addEventListener('click', (e) => { if (e.isTrusted) document.body.classList.remove('mw-listonly'); }); }
+  // 「カメラを追加」は、文字をなくしてアイコンだけ(カメラ+)。読み上げの名前は残す
+  { const a = $('#btnAddCamera'); const sv = a && a.querySelector('svg');
+    if (sv) { sv.setAttribute('stroke-width', '2'); sv.setAttribute('stroke-linejoin', 'round'); sv.innerHTML = '<path d="M5 7h2.2l1.6-2.4h6.4L16.8 7H19a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 19 20H5a2.5 2.5 0 0 1-2.5-2.5v-8A2.5 2.5 0 0 1 5 7z"/><path d="M12 10.3v6.4M8.8 13.5h6.4"/>'; } }
 
   // ---- 本番の状態を見て、合わせる ----
   function sync() {
@@ -252,6 +263,8 @@ function init() {
     let changed = false;
     if (rec !== st.rec) { st.rec = rec; if (rec) st.recT = Date.now(); changed = true; if (rec && pending && pending.key === 'rec') startFly('rec'); }
     if (del !== st.delay) { st.delay = del; changed = true; if (del && pending && pending.key === 'delay') startFly('delay'); }
+    area.classList.toggle('mw-idle', !(rec && del)); // 録画+ディレイの両方をしている間だけ、←・カメラを映像の左下へ。それ以外は真ん中のボタンの横(CSS)
+    area.classList.toggle('mw-r', rec && !del); area.classList.toggle('mw-d', del && !rec);
     if (pending && Date.now() - pending.t > 4000) pending = null;
     if (changed) renderAll(); else { updateSlots(); updateFill(); fixAll(); }
   }
@@ -261,11 +274,80 @@ function init() {
     renderAll();
     flyTo(lb, slot, () => { slot.classList.remove('pop'); void slot.offsetWidth; slot.classList.add('pop'); snapTo(nearestVar(), 480); });
   }
-  setInterval(sync, 250);
-  landMq.addEventListener('change', drawWheel);
+  // ---- 配置: 画面の大きさとカメラの縦横比から、映像とボタンの場所・大きさを決める(モック「撮影画面の配置モック」2026-11-05) ----
+  // 縦向き: 映像は上にいっぱい(縦横比のまま)。残りの高さで真ん中のボタンを 88〜120px。下の帯は最低210px(足りなければ映像を小さく)
+  // 横向き: 16:9 の映像を置いても右に120px以上残るなら16:9、残らなければ4:3。映像は左に高さいっぱい、残りの幅がボタンの列
+  const stage = $('.stage-video');
+  const px = (el, x, y, w, h, extra) => { if (!el) return; Object.assign(el.style, { position: el.dataset.mwFixed ? 'fixed' : 'absolute', left: `${Math.round(x)}px`, top: `${Math.round(y)}px`, right: 'auto', bottom: 'auto', margin: '0', ...(w != null ? { width: `${Math.round(w)}px`, height: `${Math.round(h)}px` } : {}), ...(extra || {}) }); };
+  const clear = (el) => { if (el) ['position', 'left', 'top', 'right', 'bottom', 'margin', 'width', 'height', 'padding', 'zIndex', 'minWidth', 'transform'].forEach((k) => { el.style[k] = ''; }); };
+  const videoAr = () => { const v = parseFloat(area.style.getPropertyValue('--video-ar')); return v > 0 ? v : (isLand() ? 4 / 3 : 3 / 4); };
+  let wantAr = 0;
+  async function askAspect(ar) {
+    // 親機のカメラの取り込みを 16:9(854×480)か 4:3(640×480)に。標準・低の画質のときだけ(高・最大はそのまま)
+    if (ar === wantAr || askAspect.busy) return;
+    try {
+      const v = app.cameraLink.localMonitorVideo; const tr = v && v.srcObject && v.srcObject.getVideoTracks()[0];
+      if (!tr) return; // カメラの準備ができていない。次の fit() でもう一度
+      const g = tr.getSettings(); wantAr = ar;
+      if (Math.min(g.width || 0, g.height || 0) > 480) return;
+      askAspect.busy = true;
+      await tr.applyConstraints(ar > 1.5 ? { width: { ideal: 854 }, height: { ideal: 480 } } : { width: { ideal: 640 }, height: { ideal: 480 } });
+    } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally { askAspect.busy = false; }
+  }
+  const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
+  [camBtn, backBtn, stage, secs].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
+  const bandEl = $('#stateBand');
+  function fit() {
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn];
+    if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
+    const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
+    const both = st.rec && st.delay;
+    let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
+    if (!land) {
+      if (ar > 1) ar = 1 / ar;
+      vw = W; vh = W / ar;
+      if (H - vh < 210) { vh = H - 210; vw = vh * ar; }
+      vx = (W - vw) / 2;
+      const wheelY = H - 48 - 18;
+      m = Math.max(88, Math.min(120, Math.round((H - vh) * 0.36)));
+      mx = (W - m) / 2; my = vh + Math.max(12, Math.round((wheelY - vh - m) / 2));
+      px(stage, vx, 0, vw, vh, { padding: '0', zIndex: '0' });
+      px(wheel, 0, wheelY, W, 48);
+      const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
+      px(slotDl, 14, boxY, 76, 78); px(slotRc, W - 90, boxY, 76, 78);
+      clear(secs);
+      if (backBtn) px(backBtn, 20, sideY, side, side);
+      if (camBtn) { if (both) px(camBtn, vx + 12, vh - 68, 56, 56); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
+      root.style.setProperty('--mw-bx', '56px');
+    } else {
+      if (ar < 1) ar = 1 / ar;
+      askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
+      vh = H; vw = H * ar; vx = 0;
+      let col = W - vw;
+      const over = col < 120; if (over) col = 150; // 余白が足りない端末は、列を半透明で映像に重ねる
+      if (!over) px(stage, 0, 0, vw, vh, { padding: '0', zIndex: '0' }); else px(stage, 0, 0, Math.min(W, vw), vh, { padding: '0', zIndex: '0' });
+      const wheelW = 48; const gap = 14; const pad = 6; const avail = col - 8 - wheelW - gap - pad;
+      m = Math.max(64, Math.min(104, Math.round(Math.min(avail, H * 0.24))));
+      mx = W - col + pad + (avail - m) / 2; my = (H - m) / 2;
+      const bx = H < 380 ? 52 : 56; root.style.setProperty('--mw-bx', `${bx}px`);
+      const scx = mx + m / 2;
+      px(wheel, W - 8 - wheelW, H / 2 - 84, wheelW, 168);
+      px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 24);
+      px(slotDl, scx - 38, my + m + 14, 76, bx);
+      if (bandEl) { const r = bandEl.getBoundingClientRect(); px(secs, r.right + 8, 8, null, null, { zIndex: '6' }); }
+      if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
+      if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
+      root.classList.toggle('mw-over', over);
+    }
+    root.style.setProperty('--mw-main', `${m}px`);
+    px(main, mx, my, m, m);
+  }
+  window.addEventListener('resize', fit);
+  setInterval(() => { sync(); fit(); }, 250);
+  landMq.addEventListener('change', () => { drawWheel(); fit(); });
 
   // アプリを開いたときは、必ずVARから
-  st.pos = 1; drawWheel(); renderAll();
+  st.pos = 1; drawWheel(); renderAll(); fit();
 }
 
 if (window.kendoVarApp) init();
