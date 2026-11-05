@@ -5,9 +5,7 @@
 
 /* 元の下の操作・上の行は隠し、ホイールに置き換える(働きは、元のボタンを押して使う) */
 body.mode-monitor #monitorArea .primary-actions,
-body.mode-monitor #monitorArea .status-row,
 body.mode-monitor #monitorArea .var-hint,
-body.mode-monitor #monitorArea .zoom-host,
 body.mode-monitor #monitorArea .delay-exit { display: none !important; } /* ディレイを止めるのは、横の枠の■(元の×は、押して使うだけ) */
 
 .mw { display: none; }
@@ -212,3 +210,10 @@ body.mode-monitor #monitorArea:not(.replaying) #displayCanvas { object-position:
   .mw-slot .lb { height: 16px; }
 }
 @media (max-width: 380px) { .mw .mw-top .mw-chip.closed button.sel { min-width: 52px; padding: 0 8px; } }
+
+/* ズーム(中山さん 2026-11-05「ズームのボタンが死んどる」): ボタンは映像の右下、スライダーは映像の下側。場所は fit() が決める */
+body.mode-monitor #monitorArea:not(.replaying):not(.delaying) .zoom-toggle { z-index: 6; margin: 0; background: rgba(10,18,48,.62); border: 0; border-radius: 14px; }
+body.mode-monitor #monitorArea:not(.replaying):not(.delaying) .zoom-host { z-index: 6; }
+/* 横向きのズームのボタンは、元の上の行(.status-row)に入る。上の行のほかのボタンは隠し、ズームだけ出す */
+body.mode-monitor #monitorArea .status-row { display: contents !important; }
+body.mode-monitor #monitorArea .status-row > :not(.zoom-toggle) { display: none !important; }

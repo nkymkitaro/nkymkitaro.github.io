@@ -126,7 +126,7 @@ function init() {
   }
   function renderSecs() {
     const k = MODES[cur].k;
-    if (k === 'rec') { secs.innerHTML = ''; return; }
+    if (k === 'rec' || (k === 'var' && st.delay)) { secs.innerHTML = ''; return; } // ディレイ中はVARが使えないので、VARの秒数は出さない(左上の帯とも重ならない)
     const opts = k === 'var' ? rewindBtns().map(secOf) : delayOpts();
     if (!opts.length) { secs.innerHTML = ''; return; }
     const curV = k === 'var' ? rewindSec() : delaySec();
@@ -297,14 +297,20 @@ function init() {
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
   const bandEl = $('#stateBand');
+  const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
+  function placeZoom(vx, vw, vh, both) {
+    // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
+    const zb = zoomBtn(); const zs = zoomBar();
+    if (zb) { zb.dataset.mwFixed = '1'; px(zb, vx + vw - 12 - 48, vh - 12 - 48, 48, 48); }
+    if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
+  }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn];
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar()];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
     if (!land) {
-      if (ar > 1) ar = 1 / ar;
       vw = W; vh = W / ar;
       if (H - vh < 210) { vh = H - 210; vw = vh * ar; }
       vx = (W - vw) / 2;
@@ -319,8 +325,8 @@ function init() {
       if (backBtn) px(backBtn, 20, sideY, side, side);
       if (camBtn) { if (both) px(camBtn, vx + 12, vh - 68, 56, 56); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
       root.style.setProperty('--mw-bx', '56px');
+      placeZoom(vx, vw, vh, both);
     } else {
-      if (ar < 1) ar = 1 / ar;
       askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar; vx = 0;
       let col = W - vw;
@@ -338,6 +344,7 @@ function init() {
       if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
       if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);
+      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both);
     }
     root.style.setProperty('--mw-main', `${m}px`);
     px(main, mx, my, m, m);
