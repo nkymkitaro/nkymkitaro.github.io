@@ -61,6 +61,7 @@ function init() {
   root.className = 'mw';
   root.innerHTML = `<div class="mw-zone"></div>
     <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
+    <button type="button" class="mw-ic mw-flip" id="mwFlip" aria-label="カメラを切り替え" hidden></button>
     <div class="mw-slot dl" hidden><button type="button" class="bx dly" aria-label="ディレイを止める">${stopIcon('#fff')}</button><span class="lb"></span></div>
     <div class="mw-slot rc" hidden><button type="button" class="bx rec" aria-label="録画を止める">${stopIcon('#d6231b')}</button><span class="lb"></span></div>
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
@@ -262,8 +263,21 @@ function init() {
   { const a = $('#btnAddCamera'); const sv = a && a.querySelector('svg');
     if (sv) { sv.setAttribute('stroke-width', '2'); sv.setAttribute('stroke-linejoin', 'round'); sv.innerHTML = '<path d="M5 7h2.2l1.6-2.4h6.4L16.8 7H19a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 19 20H5a2.5 2.5 0 0 1-2.5-2.5v-8A2.5 2.5 0 0 1 5 7z"/><path d="M12 10.3v6.4M8.8 13.5h6.4"/>'; } }
 
+  // 自撮り(カメラの切り替え): 元のボタン(#btnFlipCam。ディレイ中は #btnDelayFlip)を押して使う。映像の右下、ズームのボタンの上
+  const flip = q('#mwFlip'); const flipSrc = () => $('#btnFlipCam'); const flipDelaySrc = () => $('#btnDelayFlip');
+  { const o = flipSrc(); if (o) flip.innerHTML = o.innerHTML; }
+  flip.addEventListener('click', () => { const b = st.delay ? flipDelaySrc() : flipSrc(); if (b) b.click(); });
+  // 一時停止・使い方は、⚙の中へ(ふだんは使わない)。元のボタンを押して使う
+  { const sh = $('#settingsSheet'); const bar = $('#btnLefty');
+    if (sh && bar) {
+      const mk = (id, text, src) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'link-btn prep-link'; b.textContent = text; b.addEventListener('click', () => { const o = $(src); if (o) { if (src === '#btnPauseAll') { const c = $('#btnCloseSettings'); if (c) c.click(); } o.click(); } }); return b; };
+      bar.insertAdjacentElement('afterend', mk('mwHelp', '使い方', '#btnHelpInline'));
+      bar.insertAdjacentElement('afterend', mk('mwPause', '撮影を一時停止', '#btnPauseAll'));
+    } }
+
   // ---- 本番の状態を見て、合わせる ----
   function sync() {
+    { const o = flipSrc(); flip.hidden = !o || o.hidden; }
     const rec = area.classList.contains('lab-recording');
     let del = false; try { del = !!app.player.delayMode; } catch (err) { del = false; }
     let changed = false;
@@ -301,7 +315,7 @@ function init() {
     } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally { askAspect.busy = false; }
   }
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
-  [camBtn, backBtn, stage, secs].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
+  [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
   const bandEl = $('#stateBand');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
@@ -313,10 +327,11 @@ function init() {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
     const zb = zoomBtn(); const zs = zoomBar();
     if (zb) { zb.dataset.mwFixed = '1'; px(zb, vx + vw - 12 - 48, vh - 12 - 48, 48, 48); }
+    px(flip, vx + vw - 12 - 48, vh - 12 - 48 - 10 - 48, 48, 48);
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow];
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
