@@ -40,6 +40,11 @@ const ICON_MODE = {
   delay: '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke-width="2" aria-hidden="true"><rect x="8" y="4" width="12" height="12" rx="3" stroke="rgba(201,210,238,.4)"/><rect x="4" y="8" width="12" height="12" rx="3" stroke="rgba(201,210,238,.85)"/></svg>',
   var: 'VAR',
 };
+// 横向きで選んでいるとき(白い札の上)の絵。紺で描く
+const ICON_MODE_SEL = {
+  rec: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#0c1636" stroke-width="2.4"/><circle cx="12" cy="12" r="4.8" fill="#d6231b"/></svg>',
+  delay: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="2.4" aria-hidden="true"><rect x="8" y="4" width="12" height="12" rx="3" stroke="rgba(12,22,54,.45)"/><rect x="4" y="8" width="12" height="12" rx="3" stroke="#0c1636"/></svg>',
+};
 const stopIcon = (c) => `<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="3" fill="${c}"/></svg>`;
 const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/><path d="M8.5 10.5l4 2.5-4 2.5z" fill="#fff"/></svg>';
 const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M18.93 9.39 L21.80 10.01 L21.80 13.99 L18.93 14.61 L18.74 15.05 L20.33 17.53 L17.53 20.33 L15.05 18.74 L14.61 18.93 L13.99 21.80 L10.01 21.80 L9.39 18.93 L8.95 18.74 L6.47 20.33 L3.67 17.53 L5.26 15.05 L5.07 14.61 L2.20 13.99 L2.20 10.01 L5.07 9.39 L5.26 8.95 L3.67 6.47 L6.47 3.67 L8.95 5.26 L9.39 5.07 L10.01 2.20 L13.99 2.20 L14.61 5.07 L15.05 5.26 L17.53 3.67 L20.33 6.47 L18.74 8.95 Z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -160,7 +165,8 @@ function init() {
       const mi = mod3(base + o); const x = (o - frac) * W; const a = Math.min(1, Math.abs(x) / W);
       const dot = MODES[mi].k === 'rec' && st.rec ? '<i class="rec"></i>' : MODES[mi].k === 'delay' && st.delay ? '<i class="dl"></i>' : '';
       const selNow = Math.abs(x) < W * 0.3;
-      e.querySelector('b').innerHTML = (land && !selNow ? ICON_MODE[MODES[mi].k] : MODES[mi].lb) + dot;
+      const k = MODES[mi].k;
+      e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_SEL[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
       e.style.opacity = Math.max(0, 1 - 0.45 * Math.abs(x) / W);
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
@@ -297,6 +303,11 @@ function init() {
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
   const bandEl = $('#stateBand');
+  const topRow = q('.mw-top');
+  const safeProbe = document.createElement('div');
+  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
+  document.body.appendChild(safeProbe);
+  const safe = () => { const c = getComputedStyle(safeProbe); return { b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
   const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
   function placeZoom(vx, vw, vh, both) {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
@@ -305,7 +316,7 @@ function init() {
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar()];
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
@@ -314,18 +325,24 @@ function init() {
       vw = W; vh = W / ar;
       if (H - vh < 210) { vh = H - 210; vw = vh * ar; }
       vx = (W - vw) / 2;
-      const wheelY = H - 48 - 18;
-      m = Math.max(88, Math.min(120, Math.round((H - vh) * 0.36)));
-      mx = (W - m) / 2; my = vh + Math.max(12, Math.round((wheelY - vh - m) / 2));
-      px(stage, vx, 0, vw, vh, { padding: '0', zIndex: '0' });
+      // 余った高さ(ブラウザのバーが消えて画面が伸びたときなど)は、下の帯だけに回さない。
+      // 下の帯は 260px まで。それより余る分は上に回し(最大72px。LIVEの帯・一覧・⚙が映像にかからない)、まだ余れば上下に半分ずつ
+      const ZONE = 260; let vy = 0;
+      const spare = H - vh - ZONE;
+      if (spare > 0) vy = Math.min(72, spare) + Math.max(0, Math.round((spare - 72) / 2));
+      const vb = vy + vh; // 映像の下端
+      const wheelY = H - 48 - 18 - safe().b; // 下のジェスチャーバーにかからないように
+      m = Math.max(88, Math.min(120, Math.round((H - vb) * 0.36)));
+      mx = (W - m) / 2; my = vb + Math.max(12, Math.round((wheelY - vb - m) / 2));
+      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
       px(wheel, 0, wheelY, W, 48);
       const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
       px(slotDl, 14, boxY, 76, 78); px(slotRc, W - 90, boxY, 76, 78);
-      clear(secs);
+      clear(secs); clear(topRow);
       if (backBtn) px(backBtn, 20, sideY, side, side);
-      if (camBtn) { if (both) px(camBtn, vx + 12, vh - 68, 56, 56); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
+      if (camBtn) { if (both) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
       root.style.setProperty('--mw-bx', '56px');
-      placeZoom(vx, vw, vh, both);
+      placeZoom(vx, vw, vb, both);
     } else {
       askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar; vx = 0;
@@ -341,11 +358,14 @@ function init() {
       px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 24);
       px(slotDl, scx - 38, my + m + 14, 76, bx);
       if (bandEl) { const r = bandEl.getBoundingClientRect(); px(secs, r.right + 8, 8, null, null, { zIndex: '6' }); }
+      // 一覧・⚙は、右の列の上(映像と列の境目にまたがらないように)
+      if (topRow) px(topRow, W - 8 - safe().r - 104, 8, 104, 48);
       if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
-      if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
+      if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);
       placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both);
     }
+    if (camBtn && !both) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);
     px(main, mx, my, m, m);
   }
