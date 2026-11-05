@@ -60,7 +60,8 @@ function init() {
   const root = document.createElement('div');
   root.className = 'mw';
   root.innerHTML = `<div class="mw-zone"></div>
-    <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic mw-flip" id="mwFlip" aria-label="カメラを切り替え" hidden></button><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
+    <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
+    <button type="button" class="mw-ic mw-flip" id="mwFlip" aria-label="カメラを切り替え" hidden></button>
     <div class="mw-slot dl" hidden><button type="button" class="bx dly" aria-label="ディレイを止める">${stopIcon('#fff')}</button><span class="lb"></span></div>
     <div class="mw-slot rc" hidden><button type="button" class="bx rec" aria-label="録画を止める">${stopIcon('#d6231b')}</button><span class="lb"></span></div>
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
@@ -262,7 +263,7 @@ function init() {
   { const a = $('#btnAddCamera'); const sv = a && a.querySelector('svg');
     if (sv) { sv.setAttribute('stroke-width', '2'); sv.setAttribute('stroke-linejoin', 'round'); sv.innerHTML = '<path d="M5 7h2.2l1.6-2.4h6.4L16.8 7H19a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 19 20H5a2.5 2.5 0 0 1-2.5-2.5v-8A2.5 2.5 0 0 1 5 7z"/><path d="M12 10.3v6.4M8.8 13.5h6.4"/>'; } }
 
-  // 自撮り(カメラの切り替え): 元のボタン(#btnFlipCam。ディレイ中は #btnDelayFlip)を押して使う。右上、一覧の左(中山さん 2026-11-06)
+  // 自撮り(カメラの切り替え): 元のボタン(#btnFlipCam。ディレイ中は #btnDelayFlip)を押して使う。映像の右下、ズームの上(中山さん 2026-11-06 案2)
   const flip = q('#mwFlip'); const flipSrc = () => $('#btnFlipCam'); const flipDelaySrc = () => $('#btnDelayFlip');
   { const o = flipSrc(); if (o) flip.innerHTML = o.innerHTML; }
   flip.addEventListener('click', () => { const b = st.delay ? flipDelaySrc() : flipSrc(); if (b) b.click(); });
@@ -270,8 +271,14 @@ function init() {
   { const sh = $('#settingsSheet'); const bar = $('#btnLefty');
     if (sh && bar) {
       const mk = (id, text, src) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'link-btn prep-link'; b.textContent = text; b.addEventListener('click', () => { const o = $(src); if (o) { if (src === '#btnPauseAll') { const c = $('#btnCloseSettings'); if (c) c.click(); } o.click(); } }); return b; };
-      bar.insertAdjacentElement('afterend', mk('mwHelp', '使い方', '#btnHelpInline'));
-      bar.insertAdjacentElement('afterend', mk('mwPause', '撮影を一時停止', '#btnPauseAll'));
+      // ズーム・自撮りのボタンを出すか(邪魔なら消せる。中山さん 2026-11-06)。この端末の中だけに覚える
+      const KEY = 'kendoVar.mwCamTools';
+      let on = true; try { on = localStorage.getItem(KEY) !== 'off'; } catch (err) { on = true; }
+      const tg = document.createElement('button'); tg.type = 'button'; tg.id = 'mwCamTools'; tg.className = 'lefty-toggle'; tg.setAttribute('role', 'switch');
+      tg.innerHTML = '<span>ズーム・自撮りのボタン</span><span class="lefty-knob" aria-hidden="true"></span>';
+      const apply = () => { tg.setAttribute('aria-checked', String(on)); document.body.classList.toggle('mw-no-camtools', !on); };
+      tg.addEventListener('click', () => { on = !on; try { localStorage.setItem(KEY, on ? 'on' : 'off'); } catch (err) { /* 覚えられない端末は、今だけ */ } apply(); });
+      bar.after(tg); tg.after(mk('mwPause', '撮影を一時停止', '#btnPauseAll'), mk('mwHelp', '使い方', '#btnHelpInline')); apply(); // 並び: 左手で使う・ズームと自撮り(切り替え2つ)→ 一時停止・使い方
     } }
 
   // ---- 本番の状態を見て、合わせる ----
@@ -314,7 +321,7 @@ function init() {
     } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally { askAspect.busy = false; }
   }
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
-  [camBtn, backBtn, stage, secs].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
+  [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
   const bandEl = $('#stateBand');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
@@ -326,10 +333,13 @@ function init() {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
     const zb = zoomBtn(); const zs = zoomBar();
     if (zb) { zb.dataset.mwFixed = '1'; px(zb, vx + vw - 12 - 48, vh - 12 - 48, 48, 48); }
+    // 自撮りは、ズームの上(ズームのボタンが出ていなければ、その場所)
+    const zShown = zb && getComputedStyle(zb).display !== 'none';
+    px(flip, vx + vw - 12 - 48, vh - 12 - 48 - (zShown ? 58 : 0), 48, 48);
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow];
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
@@ -372,7 +382,7 @@ function init() {
       px(slotDl, scx - 38, my + m + 14, 76, bx);
       if (bandEl) { const r = bandEl.getBoundingClientRect(); px(secs, r.right + 8, 8, null, null, { zIndex: '6' }); }
       // 一覧・⚙は、右の列の上(映像と列の境目にまたがらないように)
-      if (topRow) px(topRow, W - 8 - safe().r - (flip.hidden ? 104 : 160), 8, flip.hidden ? 104 : 160, 48);
+      if (topRow) px(topRow, W - 8 - safe().r - 104, 8, 104, 48);
       if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
       if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);

@@ -219,3 +219,5 @@ body.mode-monitor #monitorArea .status-row { display: contents !important; }
 body.mode-monitor #monitorArea .status-row > :not(.zoom-toggle) { display: none !important; }
 
 .mw .mw-flip[hidden] { display: none; }
+/* ⚙の「ズーム・自撮りのボタン」をオフにしたときは、どちらも出さない */
+body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .mw-flip) { display: none !important; }
