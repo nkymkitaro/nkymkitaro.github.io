@@ -392,7 +392,7 @@ function syncRecorderPauseState(sources) {
 
 // 状態の帯を、今の状態(リプレイ中 / 一時停止中 / LIVE)に合わせる
 function updateStateBand() {
-  if (player.delayMode) return; // 遅れて映している間の帯は、下の startDelayDisplay が出す
+  if (player.delayMode && !player.isReplay) return; // 遅れて映している間の帯は、下の startDelayDisplay が出す
   if (player.isReplay) setBandState('replay');
   else if (cameraLink.isPaused) setBandState('paused');
   else setBandState('live');
@@ -881,7 +881,24 @@ function hideBackToReplay() {
   backToReplayPoint = null;
 }
 
-document.getElementById('btnRewind').addEventListener('click', () => {
+let varPreparing = false;
+document.getElementById('btnRewind').addEventListener('click', async () => {
+  if (player.delayMode) { // ディレイ中のVAR(2026-11-06 依頼): ディレイは止めず、ためてある動画から直近の写真を作って、今のVARに入る
+    if (player.isReplay || varPreparing) return;
+    if (player.delayHasCodec()) {
+      varPreparing = true;
+      const t0 = performance.now();
+      let ok = false;
+      try { ok = await player.prepareVarFromDelay(varSettings.rewindSeconds); } catch (err) { console.error(err); }
+      diagTime('ディレイ中のVAR: 写真を作るms', performance.now() - t0);
+      varPreparing = false;
+      if (!ok || !player.delayMode) { showToast('見返せる映像がまだありません。'); return; }
+    }
+    monitorArea.classList.remove('delaying'); // VARの操作を出す(ディレイの全画面の隠しを外す)
+  }
+  enterVar();
+});
+function enterVar() {
   // 一瞬止めて(ため)から、キュッと巻き戻してリプレイに入る。値は css/style.css の --var-hold / --var-sweep
   recorder.hold(); // 見返している間は、録画の古いコマを捨てない(場面がずれないように)
   chooseReplayView(); // 2台以上なら並べて見る形から(最後に1つずつ見る形を使っていたら、そちら)
@@ -891,6 +908,7 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   });
   if (!ok) {
     recorder.release();
+    if (player.delayMode) monitorArea.classList.add('delaying');
     showToast('見返せる映像がまだありません。');
     return;
   }
@@ -900,13 +918,14 @@ document.getElementById('btnRewind').addEventListener('click', () => {
   hideBackToReplay();
   enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
   setReplayUI(true, { newVar: true });
-});
+}
 document.getElementById('btnGoLive').addEventListener('click', () => {
   // 押し間違いに備えて、見ていた場面を少しの間だけ控えておく
   const point = player.getResumePoint();
   player.goLive();
   recorder.release(); // 録画を既定の長さに切り詰める
   setReplayUI(false);
+  if (player.delayMode) { returnToDelay(); return; } // ディレイ中だったときは、ディレイの表示に戻る
   exitBrowserFullscreen();
   if (point) {
     hideBackToReplay();
@@ -918,6 +937,11 @@ document.getElementById('btnGoLive').addEventListener('click', () => {
   maybeAskRole(); // 見返し終わった直後に、立場を聞く(条件は role-survey.js)
   maybeShowHomeNudge(); // 初めて見終えたとき1回だけ、ホーム画面への追加を勧める(条件は home-nudge.js)
 });
+function returnToDelay() {
+  monitorArea.classList.add('delaying');
+  if (player.delayHasCodec()) recorder.setSuspended(true); // 動画方式: VAR用に作った写真は捨てる(ディレイ中は写真をためない)
+  player.resumeDelayAfterVar();
+}
 function resumeLastVar() {
   dismissRoleSurvey(); // 戻る操作の直後に、立場の問いが出てしまわないようにする
   const point = backToReplayPoint;
@@ -1061,14 +1085,15 @@ async function startDelayDisplay(sec) {
   const bandText = document.querySelector('#stateBand .state-band-text');
   player.startDelay(sec, {
     codec,
-    onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(sec + 3); },
+    varSec: varSettings.rewindSeconds,
+    onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); },
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });
   if (codec) recorder.setSuspended(true); // 動画方式の間は、写真をためない(CPUと熱を減らす)
-  else recorder.setDurationSec(sec + 3); // 写真方式: いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
+  else recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); // 写真方式(ディレイ中もVARで戻れるよう、VARの秒数ぶんは持つ): いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
   monitorArea.classList.add('delaying');
   setBandState('delayWait');
   enterBrowserFullscreen();

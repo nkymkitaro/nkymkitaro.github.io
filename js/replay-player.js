@@ -560,11 +560,11 @@ export class ReplayPlayer {
 
   // ---- 遅れて映す(2026-10-30 依頼 delay-display)。いま − N秒 のコマを、順に出し続ける ----
   // 新しくためる仕組みは作らず、VARと同じ録画バッファを読む。VARには入らない(isReplay は false のまま)
-  startDelay(sec, { onState, codec = null, onFallback = null } = {}) {
+  startDelay(sec, { onState, codec = null, onFallback = null, varSec = 0 } = {}) {
     this.stopDelay();
     this._codec = codec; // 動画方式(js/delay-codec.js)。null なら写真方式
     this._delayOnFallback = onFallback;
-    if (codec) codec.start(sec);
+    if (codec) codec.start(sec, varSec);
     this.delayMode = true;
     this.delaySec = sec;
     this._delayReady = null;
@@ -575,10 +575,31 @@ export class ReplayPlayer {
     let last = 0;
     const loop = (now) => {
       if (!this.delayMode) return;
-      if (now - last >= 60 && !this._delayBusy) { last = now; this._delayTick(); }
+      if (!this.isReplay && now - last >= 60 && !this._delayBusy) { last = now; this._delayTick(); }
       this._delayRaf = requestAnimationFrame(loop);
     };
     this._delayRaf = requestAnimationFrame(loop);
+  }
+
+  // ディレイ中にVARを押せるか(動画方式のときは、押したときに動画から写真を作る)
+  delayHasCodec() { return !!this._codec && !this._codec.failed; }
+
+  // 動画方式のディレイ中にVARへ入る前に、ためてある動画の直近 seconds 秒を写真にして、録画バッファに入れる
+  async prepareVarFromDelay(seconds) {
+    const codec = this._codec;
+    if (!codec) return true;
+    const r = this.recorder;
+    const map = await codec.exportAll(seconds * 1000, { fps: r.fps, width: r.width, quality: r.quality, maxEdge: r.maxEdge || 0 });
+    let any = false;
+    for (const [id, frames] of map) { r.injectFrames(id, frames); if (frames.length) any = true; }
+    return any;
+  }
+
+  // VARを閉じたあと、ディレイの表示に戻る(戻し役をやりなおし、帯の状態も出し直す)
+  resumeDelayAfterVar() {
+    this._delayReady = null;
+    this._delayRemain = null;
+    if (this._codec) this._codec.resync();
   }
 
   stopDelay() {
@@ -637,7 +658,7 @@ export class ReplayPlayer {
         created.push(drawable);
         return { id, frame, drawable };
       }));
-      if (token !== this._delayToken || !this.delayMode) {
+      if (token !== this._delayToken || !this.delayMode || this.isReplay) {
         created.forEach((d) => d.close && d.close());
         return;
       }

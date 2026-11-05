@@ -110,6 +110,12 @@ export class MultiCamRecorder {
     if (on) for (const cam of this.cams.values()) cam.frames.length = 0;
   }
 
+  // ディレイ中にVARを押したとき、ためてある動画から作った写真を、そのカメラのコマとして入れる
+  injectFrames(id, frames) {
+    const cam = this.cams.get(id);
+    if (cam) cam.frames = frames;
+  }
+
   start() {
     if (this.timer) return;
     const intervalMs = 1000 / this.fps;

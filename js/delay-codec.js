@@ -97,6 +97,57 @@ class Channel {
 
   oldestTs() { return this.chunks.length ? this.chunks[0].ts : null; }
 
+  // 戻し役をやりなおさせる(VARを見ている間は戻しを止めていたため、次の frameFor で、区切りのコマから戻し直す)
+  resync() { this._closeDecoder(); this.lastGood = performance.now(); }
+
+  // VAR用: 直近 spanMs ぶんを、別の戻し役で全部戻し、写真(JPEG)に直して返す([{ ts, blob }]。ts は録画バッファと同じ時計)。
+  // ディレイ表示の戻し役には触らない。fps は間引き後のコマ数(VARの再生と同じ)
+  async exportFrames(spanMs, { fps, width, quality, maxEdge }) {
+    const list = this.chunks.slice();
+    const cfg = this.decCfg;
+    if (!list.length || !cfg) return [];
+    const endTs = list[list.length - 1].ts;
+    const startTs = endTs - spanMs;
+    let from = 0;
+    for (let i = 0; i < list.length; i++) { if (list[i].key && list[i].ts <= startTs) from = i; }
+    const gap = 1000 / fps - 2;
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const jobs = [];
+    let lastKept = -1e9;
+    let failed = null;
+    const dec = new VideoDecoder({
+      output: (f) => {
+        try {
+          const ts = f.timestamp / 1000;
+          if (ts >= startTs - 1 && ts - lastKept >= gap) {
+            lastKept = ts;
+            const vw = f.displayWidth; const vh = f.displayHeight;
+            let scale = Math.min(1, width / vw);
+            if (maxEdge) scale = Math.min(scale, maxEdge / Math.max(vw, vh));
+            const w = Math.round(vw * scale); const h = Math.round(vh * scale);
+            if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+            ctx.drawImage(f, 0, 0, w, h);
+            jobs.push(new Promise((resolve) => canvas.toBlob((blob) => resolve(blob ? { ts, blob } : null), 'image/jpeg', quality)));
+          }
+        } finally { f.close(); }
+      },
+      error: (e) => { failed = e; },
+    });
+    try {
+      dec.configure(cfg);
+      for (let i = from; i < list.length && !failed; i++) {
+        dec.decode(list[i].chunk);
+        while (dec.decodeQueueSize > 8 && !failed) await new Promise((r) => setTimeout(r, 2));
+      }
+      if (!failed) await dec.flush();
+    } catch (err) { failed = err; }
+    try { dec.close(); } catch (err) { /* 閉じ済み */ }
+    const done = (await Promise.all(jobs)).filter(Boolean).sort((a, b) => a.ts - b.ts);
+    if (failed && !done.length) throw failed;
+    return done;
+  }
+
   // いま − N秒 のコマを返す(なければ null)。返したコマは、次にこの関数を呼ぶまで有効(同じ処理の中で描くこと)
   frameFor(targetMs) {
     if (!this.chunks.length || !this.decCfg) return null;
@@ -184,8 +235,8 @@ export class DelayCodec {
     this.failed = false;
   }
 
-  start(delaySec) {
-    this.keepSec = delaySec + 3;
+  start(delaySec, varSec = 0) {
+    this.keepSec = Math.max(delaySec, varSec) + 3; // ディレイ中でもVARで戻れるように、VARの秒数ぶんも持つ
     diagSet('ディレイ方式', `動画 ${this.codec}`);
     this.timer = setInterval(() => this._captureAll(), 1000 / FPS);
   }
@@ -219,6 +270,13 @@ export class DelayCodec {
 
   label(id) { return this.recorder.getLabel(id); }
   oldestTs(id) { const ch = this.channels.get(id); return ch ? ch.oldestTs() : null; }
+  resync() { for (const ch of this.channels.values()) ch.resync(); }
+  // VAR用に、全カメラの直近 spanMs ぶんを写真にする。{ id → [{ ts, blob }] }
+  async exportAll(spanMs, opts) {
+    const out = new Map();
+    for (const id of this.ids()) out.set(id, await this.channels.get(id).exportFrames(spanMs, opts));
+    return out;
+  }
   frameFor(id, targetMs) { const ch = this.channels.get(id); return ch ? ch.frameFor(targetMs) : null; }
 
   dispose() {
