@@ -217,3 +217,5 @@ body.mode-monitor #monitorArea:not(.replaying):not(.delaying) .zoom-host { z-ind
 /* 横向きのズームのボタンは、元の上の行(.status-row)に入る。上の行のほかのボタンは隠し、ズームだけ出す */
 body.mode-monitor #monitorArea .status-row { display: contents !important; }
 body.mode-monitor #monitorArea .status-row > :not(.zoom-toggle) { display: none !important; }
+
+.mw .mw-flip[hidden] { display: none; }
