@@ -56,6 +56,10 @@ if (ON) {
   const attach = () => { document.body.appendChild(box); document.body.appendChild(btn); };
   if (document.body) attach(); else document.addEventListener('DOMContentLoaded', attach);
 
+  // 参加用のQRを出している間は、診断の文字を隠す(QRに重なって読めないため。2026-11-06)
+  const hideOnQr = () => { const qr = document.getElementById('qrOverlay'); const on = !!(qr && !qr.hidden); box.style.display = on ? 'none' : ''; btn.style.display = on ? 'none' : ''; };
+  const watchQr = () => { const qr = document.getElementById('qrOverlay'); if (qr) new MutationObserver(hideOnQr).observe(qr, { attributes: true, attributeFilter: ['hidden'] }); hideOnQr(); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchQr); else watchQr();
   setInterval(() => {
     S['描画の間隔の最大ms(直近1秒)'] = Math.round(gapMax); gapMax = 0;
     const snap = snapshot();
