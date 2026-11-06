@@ -231,3 +231,18 @@ body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .
 /* ←は、画面を移る操作。ほかのボタン(箱)と見た目を分け、枠なしの白い矢印だけにする。映像の上でも見えるよう影を付ける(中山さん 2026-11-07) */
 body.mode-monitor #monitorArea:not(.replaying) .cam-dock .back-start svg { width: 30px; height: 30px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
 .mw .mw-flip svg { width: 30px; height: 30px; } .mw .mw-flip.mw-big svg { width: 36px; height: 36px; }
+
+/* ボタンの見た目: 白い線の丸(中山さん 2026-11-07。案C)。箱(角丸の四角・半透明の紺)をやめ、スマホのカメラの操作に近い形にそろえる。
+   配置は fit() が書くので、色・形だけここで上書きする(fit() の書く背景・角丸より強く)。明るい映像の上でも見えるよう、薄い影を付ける */
+body.mode-monitor #monitorArea:not(.replaying) :is(.mw-ic, .add-cam, .zoom-toggle) {
+  border-radius: 50% !important; border: 2px solid rgba(255,255,255,.88) !important;
+  background: rgba(12,22,54,.35) !important; box-shadow: 0 1px 4px rgba(0,0,0,.45) !important;
+}
+body.mode-monitor #monitorArea:not(.replaying) .mw .mw-top .mw-chip { background: transparent !important; }
+body.mode-monitor #monitorArea:not(.replaying) .mw .mw-top .mw-chip.closed button.sel {
+  border-radius: 24px; border: 2px solid rgba(255,255,255,.88); background: rgba(12,22,54,.35); box-shadow: 0 1px 4px rgba(0,0,0,.45);
+}
+/* 止める枠も丸に。録画は赤い線、ディレイは白い線 */
+body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx { border-radius: 50%; background: rgba(12,22,54,.45); box-shadow: none; }
+body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.rec { border: 3px solid #d6231b; }
+body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.dly { border: 3px solid #fff; }
