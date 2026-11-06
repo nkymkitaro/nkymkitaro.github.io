@@ -267,7 +267,8 @@ function init() {
 
   // 自撮り(カメラの切り替え): 元のボタン(#btnFlipCam。ディレイ中は #btnDelayFlip)を押して使う。映像の右下、ズームの上(中山さん 2026-11-06 案2)
   const flip = q('#mwFlip'); const flipSrc = () => $('#btnFlipCam'); const flipDelaySrc = () => $('#btnDelayFlip');
-  { const o = flipSrc(); if (o) flip.innerHTML = o.innerHTML; }
+  // 自撮りの絵: カメラの形に、回る矢印2つ。元の絵は横に潰れて見えたので、カメラを高めにした(中山さん 2026-11-07)
+  flip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5h2.6l1.7-2.6h7.4l1.7 2.6H20a1.8 1.8 0 0 1 1.8 1.8v9.4A1.8 1.8 0 0 1 20 20.5H4a1.8 1.8 0 0 1-1.8-1.8V9.3A1.8 1.8 0 0 1 4 7.5z"/><path d="M8.4 13.4a3.7 3.7 0 0 1 6.6-1.9"/><path d="M15.4 9.6v2.3h-2.3"/><path d="M15.6 15a3.7 3.7 0 0 1-6.6 1.9"/><path d="M8.6 18.8v-2.3h2.3"/></svg>';
   flip.addEventListener('click', () => { const b = st.delay ? flipDelaySrc() : flipSrc(); if (b) b.click(); });
   // 一時停止・使い方は、⚙の中へ(ふだんは使わない)。元のボタンを押して使う
   { const sh = $('#settingsSheet'); const bar = $('#btnLefty');
@@ -324,12 +325,12 @@ function init() {
   }
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
-  const bandEl = $('#stateBand');
+  const bandEl = $('#stateBand'); const bandsEl = $('.stage-video .state-bands');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
-  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
+  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
   document.body.appendChild(safeProbe);
-  const safe = () => { const c = getComputedStyle(safeProbe); return { t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
+  const safe = () => { const c = getComputedStyle(safeProbe); return { l: parseFloat(c.paddingLeft) || 0, t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
   const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
   function placeZoom(vx, vw, vh, both, flipHere) {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
@@ -346,7 +347,8 @@ function init() {
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
     const flipOn = !flip.hidden && !document.body.classList.contains('mw-no-camtools');
-    let camCorner = both;
+    let camCorner = both; let landFlipSide = false;
+    if (!land && bandsEl) bandsEl.style.left = '';
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
     if (!land) {
       vw = W; vh = W / ar;
@@ -375,7 +377,7 @@ function init() {
       clear(secs); clear(topRow);
       // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
       // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
-      if (backBtn) px(backBtn, 12, safe().t + 8, 48, 48, { background: 'rgba(12,22,54,.6)', borderRadius: '14px' });
+      if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none' });
       if (!both && flipOn) px(flip, st.delay ? W - 20 - side : 20, sideY, side, side, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', !both);
       camCorner = both || (flipOn && (st.rec || st.delay));
@@ -398,15 +400,19 @@ function init() {
       px(slotDl, scx - 38, my + m + 14, 76, bx);
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
       clear(secs);
+      // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
+      const backShown = backBtn && getComputedStyle(backBtn).display !== 'none';
+      if (backBtn) px(backBtn, 4 + safe().l, 4, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (bandsEl) bandsEl.style.left = backShown ? `${52 + safe().l}px` : '';
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
-      // ←は上の段(⚙の右)。列の下の角は自撮り(録画+ディレイの両方のときだけ、自撮りは映像の右下)
-      if (backBtn && topRow) { const t = topRow.getBoundingClientRect(); px(backBtn, t.right + 8, 8, 48, 48, { background: 'rgba(12,22,54,.6)', borderRadius: '14px', zIndex: '6' }); }
-      if (!both && flipOn) px(flip, W - col + 8, H - 56, 48, 48, { borderRadius: '14px', background: 'rgba(44,74,160,.55)' });
-      flip.classList.remove('mw-big');
+      // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
+      landFlipSide = flipOn && !st.rec && !st.delay;
+      if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
+      flip.classList.toggle('mw-big', landFlipSide);
       camCorner = both;
       if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);
-      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both, both);
+      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both, flipOn && !landFlipSide);
     }
     if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);

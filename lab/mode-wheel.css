@@ -228,3 +228,5 @@ body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .
 /* 「左手で使う」は、モードホイールの配置にまだ効かないので、直すまで隠す(中山さん 2026-11-07 了承) */
 #btnLefty { display: none !important; }
 .mw .mw-flip.mw-big svg { width: 30px; height: 30px; } /* 真ん中のボタンの横(64px)に置くときは、絵も大きく */
+/* ←は、画面を移る操作。ほかのボタン(箱)と見た目を分け、枠なしの白い矢印だけにする。映像の上でも見えるよう影を付ける(中山さん 2026-11-07) */
+body.mode-monitor #monitorArea:not(.replaying) .cam-dock .back-start svg { width: 30px; height: 30px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
