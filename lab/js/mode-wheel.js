@@ -268,7 +268,7 @@ function init() {
   // 自撮り(カメラの切り替え): 元のボタン(#btnFlipCam。ディレイ中は #btnDelayFlip)を押して使う。映像の右下、ズームの上(中山さん 2026-11-06 案2)
   const flip = q('#mwFlip'); const flipSrc = () => $('#btnFlipCam'); const flipDelaySrc = () => $('#btnDelayFlip');
   // 自撮りの絵: カメラの形に、回る矢印2つ。元の絵は横に潰れて見えたので、カメラを高めにした(中山さん 2026-11-07)
-  flip.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M8.2 3.5h7.6l1.8 2.7H20a2.5 2.5 0 0 1 2.5 2.5v9.8A2.5 2.5 0 0 1 20 21H4a2.5 2.5 0 0 1-2.5-2.5V8.7A2.5 2.5 0 0 1 4 6.2h2.4z"/><g fill="none" stroke="#0c1636" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.3 13.2a4.8 4.8 0 0 1 8.6-2.4"/><path d="M16.4 8.2v2.9h-2.9"/><path d="M16.7 15a4.8 4.8 0 0 1-8.6 2.4"/><path d="M7.6 20v-2.9h2.9"/></g></svg>'; // 白く塗ったカメラに、紺の回る矢印(線だけの絵は小さいと潰れて見えたため。2026-11-07)
+  flip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.4H6.8Q7.5 6.4 7.9 5.7L8.6 4.6Q9 4.2 9.6 4.2H14.4Q15 4.2 15.4 4.6L16.1 5.7Q16.5 6.4 17.2 6.4H19.5A2.4 2.4 0 0 1 21.9 8.8V18.5A2.4 2.4 0 0 1 19.5 20.9H4.5A2.4 2.4 0 0 1 2.1 18.5V8.8A2.4 2.4 0 0 1 4.5 6.4Z"/><path d="M13.6 17.4A4.2 4.2 0 1 1 16.2 14.4"/><path d="M14.7 14.2L15.8 16.3L17.7 15.2"/></svg>'; // 自撮りの絵: 中山さんが描き直した形(線のカメラに、ひと回りの矢印。2026-11-07)
   flip.addEventListener('click', () => { const b = st.delay ? flipDelaySrc() : flipSrc(); if (b) b.click(); });
   // 一時停止・使い方は、⚙の中へ(ふだんは使わない)。元のボタンを押して使う
   { const sh = $('#settingsSheet'); const bar = $('#btnLefty');
