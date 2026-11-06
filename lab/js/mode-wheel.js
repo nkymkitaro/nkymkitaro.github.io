@@ -353,9 +353,13 @@ function init() {
       // 下の帯は 260px まで。それより余る分は上に回し(最大72px。LIVEの帯・一覧・⚙が映像にかからない)、まだ余れば上下に半分ずつ
       // 上は、一覧・⚙の段(画面の上の切り欠き+8+48+8)が映像にかからない高さを空ける。足りなければ、下の帯を210pxまで詰めて空ける
       const need = safe().t + 8 + 48 + 8;
+      // それでも上が足りないとき(アドレスバーが出ている画面など)は、映像を少し小さくして空ける(一覧・⚙が映像に半分かかると、はみ出して見えるため。中山さん 2026-11-07)。
+      // 小さくするのは2割まで。それ以上足りなければ、ボタンを映像の上に重ねる(vy = 0)
+      { const short = need + 210 - (H - vh); if (short > 0 && short <= vh * 0.2) { vh -= short; vw = vh * ar; vx = (W - vw) / 2; } }
       const avail = H - vh;
       const zone = Math.max(210, Math.min(260, avail - need));
       let vy = Math.max(0, avail - zone);
+      if (vy < need) vy = 0; // 空けきれないときは、半分かけずに、映像の上に重ねる
       if (vy > need) vy = need + Math.round((vy - need) / 2);
       const vb = vy + vh; // 映像の下端
       const wheelY = H - 48 - 18 - safe().b; // 下のジェスチャーバーにかからないように

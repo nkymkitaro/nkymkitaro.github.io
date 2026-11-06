@@ -221,3 +221,7 @@ body.mode-monitor #monitorArea .status-row > :not(.zoom-toggle) { display: none 
 .mw .mw-flip[hidden] { display: none; }
 /* ⚙の「ズーム・自撮りのボタン」をオフにしたときは、どちらも出さない */
 body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .mw-flip) { display: none !important; }
+/* LIVEの帯は、映像の左上の角に(画面の上の切り欠きの分は、映像の上の余白で空けてあるので、帯の位置には足さない。中山さん 2026-11-07「LIVEの帯が下すぎ」) */
+@media not all and (orientation: landscape) and (max-height: 540px) {
+  body.mode-monitor #monitorArea:not(.replaying) .state-bands { top: 8px; }
+}
