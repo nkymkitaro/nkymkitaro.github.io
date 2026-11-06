@@ -5,6 +5,7 @@
 // - 中継を通っているときは、映像を送る側(子機)が送る量を下げ、親機・子機の両方に1回だけ知らせる
 // - 計測(GA4)には何も足さない。経路は「試験用」の数値のコピーにだけ載せる
 import { showToast } from './toast.js';
+import { diagSet } from './diag.js';
 
 // 合言葉を発行する Worker の URL(relay/README.md の手順で作ったあと、ここに入れる。空のあいだは、?relay=1 を付けても何も起きない)
 export const RELAY_WORKER_URL = 'https://mitori-relay-credentials.nkymkitaro.workers.dev/';
@@ -20,6 +21,20 @@ export function isRelayTrial() {
 }
 
 let extraIce = null; // 取れた合言葉(iceServers)
+const peers = new Set(); // 作ったピア。合言葉があとから届いたら、これらにも入れる(PeerJSは、回線を作るたびに options.config を読む)
+let readyResolve = null;
+const ready = new Promise((r) => { readyResolve = r; });
+// 合言葉を取り終えるまで待つ(取れても取れなくても。最大5秒)。中継の試作でないときは、すぐ終わる
+export function relayReady() { return (isRelayTrial() && RELAY_WORKER_URL) ? ready : Promise.resolve(); }
+// new Peer(...) のあとに呼ぶ。合言葉がまだ届いていなくても、届いた時点で、このピアの設定に入れる
+export function registerPeer(peer) {
+  if (!peer || !isRelayTrial()) return;
+  peers.add(peer);
+  if (extraIce) applyTo(peer);
+}
+function applyTo(peer) {
+  try { peer.options.config = { ...(peer.options.config || {}), iceServers: [...BASE_ICE, ...extraIce] }; } catch (err) { /* 入れられなくても、今の設定で続ける */ }
+}
 
 // ページを開いたときに1回呼ぶ。待たない(取れた時点から使う)
 export function prefetchRelayConfig() {
@@ -27,10 +42,17 @@ export function prefetchRelayConfig() {
   const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), 5000) : null;
   fetch(RELAY_WORKER_URL, { signal: ctrl ? ctrl.signal : undefined })
-    .then((r) => (r.ok ? r.json() : null))
-    .then((data) => { if (data && Array.isArray(data.iceServers) && data.iceServers.length) extraIce = data.iceServers; })
-    .catch(() => { /* 取れなければ、今の設定で続ける */ })
-    .finally(() => clearTimeout(timer));
+    .then((r) => { diagSet('中継の合言葉', `応答 ${r.status}`); return r.ok ? r.json() : null; })
+    .then((data) => {
+      if (data && Array.isArray(data.iceServers) && data.iceServers.length) {
+        extraIce = data.iceServers;
+        peers.forEach(applyTo);
+        const urls = extraIce.flatMap((s) => [].concat(s.urls || []));
+        diagSet('中継の合言葉', `取れた(${urls.length}件: ${urls.map((u) => u.split('?')[0]).join(' ')})`);
+      }
+    })
+    .catch((err) => { diagSet('中継の合言葉', `取れない(${err && err.name})`); /* 取れなければ、今の設定で続ける */ })
+    .finally(() => { clearTimeout(timer); readyResolve(); });
 }
 
 // new Peer(...) の最後の引数。中継を使わないとき(または合言葉が取れていないとき)は、今のまま(空)

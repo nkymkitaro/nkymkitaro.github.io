@@ -23,7 +23,7 @@ const VIA_PARAM = 'via';
 const VIA_SHARE = 'share';
 export function buildJoinUrl(code, via) {
   // 中継の試作(?relay=1)で開いている親機のQRは、子機も ?relay=1 で開くようにする(子機で手で付けられないため。2026-11-06)
-  const relay = /[?&]relay=1(&|$)/.test(window.location.search) ? '&relay=1' : '';
+  const relay = /[?&]relay=1(&|$)/.test(window.location.search) ? `&relay=1${/[?&]diag=1(&|$)/.test(window.location.search) ? '&diag=1' : ''}` : ''; // 診断(?diag=1)も子機へ引き継ぐ
   return `${JOIN_BASE_URL}?${JOIN_PARAM}=${encodeURIComponent(code)}&${EXTERNAL_PARAM}${via === VIA_SHARE ? `&${VIA_PARAM}=${VIA_SHARE}` : ''}${relay}`;
 }
 

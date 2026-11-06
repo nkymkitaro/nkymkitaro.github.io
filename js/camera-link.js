@@ -2,7 +2,7 @@
 // 親機自身のカメラ + 子機(最大3台) = 合計4台までの映像ソースを管理する。
 // 「今どんなカメラが繋がっているか」が変わるたびに onCamsChanged で外部(composition root)
 // に知らせるだけで、ボタンなどのDOM組み立てはこのクラスの外に任せる(疎結合)。
-import { peerOptions, watchRoute } from './relay.js';
+import { peerOptions, watchRoute, registerPeer, relayReady } from './relay.js';
 import { showToast } from './toast.js';
 
 const MAX_REMOTE_CAMS = 3; // 親機1台 + 子機最大3台 = 合計4台まで
@@ -74,6 +74,7 @@ export class CameraLink {
     }
 
     this.peer = new Peer('kendo-var-room-' + this.myId, peerOptions());
+    registerPeer(this.peer); // 中継の試作: 合言葉があとから届いても使う
     this.peer.on('call', (call) => this._handleIncomingCall(call));
   }
 
@@ -212,7 +213,9 @@ export class CameraLink {
   // 子機として起動: 映像を送るだけの軽量ピア
   startAsCamera() {
     this.peer = new Peer(undefined, peerOptions());
-    this._peerReady = new Promise((resolve) => this.peer.on('open', resolve));
+    registerPeer(this.peer); // 中継の試作: 合言葉があとから届いても使う
+    // 中継の試作のときは、合言葉を取り終えてから呼びかける(QRで開いた直後は、まだ届いていないことがある。2026-11-06)
+    this._peerReady = Promise.all([new Promise((resolve) => this.peer.on('open', resolve)), relayReady()]);
     this.peer.on('connection', (conn) => {
       conn.on('data', (data) => this._onMonitorMessage(data));
     });
