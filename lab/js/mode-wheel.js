@@ -53,6 +53,7 @@ function init() {
   const app = window.kendoVarApp;
   const area = $('#monitorArea');
   if (!app || !area) return;
+  document.documentElement.setAttribute('data-fs-any-tap', ''); // 撮影画面のどこを押しても全画面に(js/app.js が見る)
   const landMq = window.matchMedia('(orientation: landscape) and (max-height: 540px)');
   const isLand = () => landMq.matches;
   const step = () => (isLand() ? 56 : 112); // 札1つ分の送り幅
@@ -325,9 +326,9 @@ function init() {
   const bandEl = $('#stateBand');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
-  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
+  safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
   document.body.appendChild(safeProbe);
-  const safe = () => { const c = getComputedStyle(safeProbe); return { b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
+  const safe = () => { const c = getComputedStyle(safeProbe); return { t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
   const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
   function placeZoom(vx, vw, vh, both) {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
@@ -350,9 +351,12 @@ function init() {
       vx = (W - vw) / 2;
       // 余った高さ(ブラウザのバーが消えて画面が伸びたときなど)は、下の帯だけに回さない。
       // 下の帯は 260px まで。それより余る分は上に回し(最大72px。LIVEの帯・一覧・⚙が映像にかからない)、まだ余れば上下に半分ずつ
-      const ZONE = 260; let vy = 0;
-      const spare = H - vh - ZONE;
-      if (spare > 0) vy = Math.min(72, spare) + Math.max(0, Math.round((spare - 72) / 2));
+      // 上は、一覧・⚙の段(画面の上の切り欠き+8+48+8)が映像にかからない高さを空ける。足りなければ、下の帯を210pxまで詰めて空ける
+      const need = safe().t + 8 + 48 + 8;
+      const avail = H - vh;
+      const zone = Math.max(210, Math.min(260, avail - need));
+      let vy = Math.max(0, avail - zone);
+      if (vy > need) vy = need + Math.round((vy - need) / 2);
       const vb = vy + vh; // 映像の下端
       const wheelY = H - 48 - 18 - safe().b; // 下のジェスチャーバーにかからないように
       m = Math.max(88, Math.min(120, Math.round((H - vb) * 0.36)));
@@ -380,9 +384,9 @@ function init() {
       px(wheel, W - 8 - wheelW, H / 2 - 84, wheelW, 168);
       px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 24);
       px(slotDl, scx - 38, my + m + 14, 76, bx);
-      if (bandEl) { const r = bandEl.getBoundingClientRect(); px(secs, r.right + 8, 8, null, null, { zIndex: '6' }); }
-      // 一覧・⚙は、右の列の上(映像と列の境目にまたがらないように)
-      if (topRow) px(topRow, W - 8 - safe().r - 104, 8, 104, 48);
+      // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
+      clear(secs);
+      if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
       if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
       if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);

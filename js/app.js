@@ -858,8 +858,11 @@ document.addEventListener('fullscreenchange', () => {
   if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; } else { keepFullscreen = false; }
 });
 document.addEventListener('click', (e) => {
+  // 試験ページ(モードホイール)は、撮影画面のどこを押しても全画面に入る(中山さん 2026-11-06「アドレスバーが邪魔」)。<html data-fs-any-tap> のページだけ
+  const anyTap = document.documentElement.hasAttribute('data-fs-any-tap') && document.body.classList.contains('mode-monitor')
+    && !document.fullscreenElement && e.target.closest && e.target.closest('#monitorArea');
   const rec = e.target.closest && e.target.closest('#labRec');
-  if (!rec || document.getElementById('monitorArea').classList.contains('lab-recording')) return; // 録画を始めるときだけ
+  if (!anyTap && (!rec || document.getElementById('monitorArea').classList.contains('lab-recording'))) return; // 録画を始めるときだけ
   pendingKeep = true;
   enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
   setTimeout(() => { pendingKeep = false; }, 1500); // 全画面に入れなかったときの後始末
