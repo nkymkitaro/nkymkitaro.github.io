@@ -532,12 +532,17 @@ body.mode-monitor h1 { display: none; }
 }
 .qr-overlay[hidden] { display: none; }
 .qr-overlay-body { display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
-.qr-overlay-img { width: min(100%, calc(100dvh - 370px), 520px); aspect-ratio: 1; }
+.qr-overlay-img { width: min(100%, calc(100dvh - 430px), 520px); aspect-ratio: 1; } /* 下のつなぎ方の囲みの分、少し小さく */
 .qr-overlay-side { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .qr-overlay-title { margin: 0 0 4px; font-size: 1.5rem; font-weight: 900; }
 .qr-overlay-note { margin: 0; font-size: 1rem; font-weight: 800; text-wrap: balance; }
-.qr-overlay-wifi { margin: 4px 0 0; max-width: 300px; font-size: 0.9rem; font-weight: 500; line-height: 1.6; text-wrap: balance; }
 .qr-overlay-code { margin: 0; font-size: 1rem; font-weight: 800; }
+/* つなぎ方の囲み。黒い枠で目に入るように、絵と太字で、2つの方法を上下に並べる */
+.qr-overlay-net { margin: 6px 0 2px; padding: 10px 14px; max-width: 340px; border: 2px solid #000; border-radius: 14px; display: flex; flex-direction: column; gap: 6px; }
+.qr-net-row { display: flex; align-items: center; gap: 10px; font-size: 1rem; font-weight: 500; line-height: 1.4; text-align: left; }
+.qr-net-row b { font-weight: 900; }
+.qr-net-row svg { flex: 0 0 auto; width: 28px; height: 28px; }
+.qr-net-or { padding-left: 38px; font-size: 0.85rem; font-weight: 800; color: #555; }
 .qr-overlay-code strong { font-size: 2rem; letter-spacing: 0.12em; }
 .qr-overlay-share,
 .qr-overlay-close {
@@ -558,7 +563,7 @@ body.mode-monitor h1 { display: none; }
 @media (orientation: landscape) {
   .qr-overlay-body { flex-direction: row; justify-content: center; gap: 28px; }
   .qr-overlay-img { width: min(calc(100dvh - 32px), 52vw); flex: 0 0 auto; }
-  .qr-overlay-wifi { max-width: 360px; }
+  .qr-overlay-net { max-width: 380px; }
   .qr-overlay-side { align-items: flex-start; }
   /* 横向きは高さが足りないので、2つのボタンを横に並べる */
   .qr-overlay-actions { flex-direction: row; gap: 8px; }

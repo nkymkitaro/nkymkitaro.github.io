@@ -75,6 +75,7 @@
   <link rel="stylesheet" href="lab/lab.css">
   <link rel="stylesheet" href="css/theme-kendo.css">
   <link rel="stylesheet" href="css/lefty.css">
+  <link rel="stylesheet" href="lab/mode-wheel.css">
 
 </head>
 <body class="mode-setup">
@@ -222,7 +223,7 @@
     <div class="join-view" id="joinView">
       <button id="btnJoinBack" class="join-back" type="button" aria-label="最初の画面に戻る"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button>
       <h2 class="join-title">カメラで参加</h2>
-      <p class="join-guide">QRの画面の番号を入れてください</p>
+      <p class="join-guide"><span class="nowrap">1台目の「カメラを追加」に出る、</span><span class="nowrap">4桁の番号</span></p>
       <div class="code-input" id="codeInput">
         <div class="code-boxes" aria-hidden="true">
           <div class="code-box"></div><div class="code-box"></div><div class="code-box"></div><div class="code-box"></div>
@@ -235,7 +236,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.2" r="0.9" fill="currentColor"/><path d="M3 3l18 18"/></svg>
         <span>Wi‑Fiにつないでください</span>
       </button>
-      <p class="join-note"><span class="nowrap">同じWi‑Fiにつなぐ。</span></p>
+      <p class="join-note"><span class="nowrap">1台目と同じWi‑Fi、</span><span class="nowrap">または1台目のテザリングに</span></p>
     </div>
 
     <!-- ② 送信中: カメラの映像を画面いっぱいに出す -->
@@ -346,7 +347,12 @@
         <h2 class="qr-overlay-title" id="qrTitle">カメラを追加</h2>
         <p class="qr-overlay-note"><span class="nowrap">もう1台で</span><span class="nowrap">読み取る</span></p>
         <p class="qr-overlay-code">番号 <strong id="qrBigCode"></strong></p>
-        <p class="qr-overlay-wifi"><span class="nowrap">同じWi‑Fiに</span><span class="nowrap">つなぐ。</span><span class="nowrap">つながらないときは、</span><span class="nowrap">このスマホの</span><span class="nowrap">テザリング。</span></p>
+        <!-- つなぎ方(2026-11-07 中山さん「もっと読んでもらえるように」): 文の一行から、絵つきの2段の囲みに -->
+        <div class="qr-overlay-net" aria-label="つなぎ方">
+          <div class="qr-net-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M2.5 9a14 14 0 0 1 19 0"/><path d="M6 12.5a9 9 0 0 1 12 0"/><circle cx="12" cy="17.5" r="1.6" fill="currentColor" stroke="none"/></svg><span><b>2台とも、同じWi‑Fi</b></span></div>
+          <div class="qr-net-or">Wi‑Fiがない・つながらないときは</div>
+          <div class="qr-net-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M10.5 18.5h3"/><path d="M3.5 8.5a6 6 0 0 0 0 7M20.5 8.5a6 6 0 0 1 0 7"/></svg><span><b>このスマホのテザリング</b>に、<span class="nowrap">もう1台をつなぐ</span></span></div>
+        </div>
         <div class="qr-overlay-actions">
           <button type="button" id="btnQrShare" class="qr-overlay-share">リンクを送る</button>
           <button type="button" id="btnQrClose" class="qr-overlay-close">閉じる</button>
@@ -465,5 +471,6 @@
 
   <script type="module" src="js/app.js"></script>
   <script type="module" src="lab/js/main.js"></script>
+  <script type="module" src="lab/js/mode-wheel.js"></script>
 </body>
 </html>
