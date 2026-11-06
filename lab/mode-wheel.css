@@ -225,3 +225,5 @@ body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .
 @media not all and (orientation: landscape) and (max-height: 540px) {
   body.mode-monitor #monitorArea:not(.replaying) .state-bands { top: 8px; }
 }
+/* 「左手で使う」は、モードホイールの配置にまだ効かないので、直すまで隠す(中山さん 2026-11-07 了承) */
+#btnLefty { display: none !important; }

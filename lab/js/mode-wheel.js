@@ -53,7 +53,8 @@ function init() {
   const app = window.kendoVarApp;
   const area = $('#monitorArea');
   if (!app || !area) return;
-  document.documentElement.setAttribute('data-fs-any-tap', ''); // 撮影画面のどこを押しても全画面に(js/app.js が見る)
+  document.documentElement.setAttribute('data-fs-any-tap', '');
+  document.body.classList.remove('lefty'); // 「左手で使う」はモードホイールに未対応。直すまで効かせない(⚙の切り替えも隠す。保存した設定は消さない) // 撮影画面のどこを押しても全画面に(js/app.js が見る)
   const landMq = window.matchMedia('(orientation: landscape) and (max-height: 540px)');
   const isLand = () => landMq.matches;
   const step = () => (isLand() ? 56 : 112); // 札1つ分の送り幅
