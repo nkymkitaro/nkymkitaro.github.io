@@ -17,7 +17,7 @@ export default {
     if (!allowed || request.method !== 'GET') return new Response('forbidden', { status: 403, headers: cors });
     if (!env.TURN_KEY_ID || !env.TURN_KEY_API_TOKEN) return new Response('not configured', { status: 500, headers: cors });
 
-    const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate`, {
+    const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ttl: TTL_SECONDS }),

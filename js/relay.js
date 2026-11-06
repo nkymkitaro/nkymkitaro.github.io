@@ -7,7 +7,7 @@
 import { showToast } from './toast.js';
 
 // 合言葉を発行する Worker の URL(relay/README.md の手順で作ったあと、ここに入れる。空のあいだは、?relay=1 を付けても何も起きない)
-export const RELAY_WORKER_URL = '';
+export const RELAY_WORKER_URL = 'https://mitori-relay-credentials.nkymkitaro.workers.dev/';
 
 const RELAY_MAX_BITRATE = 500000; // 中継のときの映像の上限(約0.5Mbps。1時間あたり約0.2GBの見込み)
 const POLL_MS = 3000;
