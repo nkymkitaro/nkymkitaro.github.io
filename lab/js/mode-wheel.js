@@ -331,13 +331,13 @@ function init() {
   document.body.appendChild(safeProbe);
   const safe = () => { const c = getComputedStyle(safeProbe); return { t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
   const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
-  function placeZoom(vx, vw, vh, both) {
+  function placeZoom(vx, vw, vh, both, flipHere) {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
     const zb = zoomBtn(); const zs = zoomBar();
     if (zb) { zb.dataset.mwFixed = '1'; px(zb, vx + vw - 12 - 48, vh - 12 - 48, 48, 48); }
     // 自撮りは、ズームの上(ズームのボタンが出ていなければ、その場所)
     const zShown = zb && getComputedStyle(zb).display !== 'none';
-    px(flip, vx + vw - 12 - 48, vh - 12 - 48 - (zShown ? 58 : 0), 48, 48);
+    if (flipHere) px(flip, vx + vw - 12 - 48, vh - 12 - 48 - (zShown ? 58 : 0), 48, 48, { borderRadius: '14px', background: '' });
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
@@ -345,6 +345,8 @@ function init() {
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
+    const flipOn = !flip.hidden && !document.body.classList.contains('mw-no-camtools');
+    let camCorner = both;
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
     if (!land) {
       vw = W; vh = W / ar;
@@ -371,10 +373,15 @@ function init() {
       const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
       px(slotDl, 14, boxY, 76, 78); px(slotRc, W - 90, boxY, 76, 78);
       clear(secs); clear(topRow);
-      if (backBtn) px(backBtn, 20, sideY, side, side);
-      if (camBtn) { if (both) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
+      // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
+      // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
+      if (backBtn) px(backBtn, 12, safe().t + 8, 48, 48, { background: 'rgba(12,22,54,.6)', borderRadius: '14px' });
+      if (!both && flipOn) px(flip, st.delay ? W - 20 - side : 20, sideY, side, side, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
+      flip.classList.toggle('mw-big', !both);
+      camCorner = both || (flipOn && (st.rec || st.delay));
+      if (camBtn) { if (camCorner) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)', minWidth: '56px', borderRadius: '16px' }); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
       root.style.setProperty('--mw-bx', '56px');
-      placeZoom(vx, vw, vb, both);
+      placeZoom(vx, vw, vb, both, both);
     } else {
       askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar; vx = 0;
@@ -392,12 +399,16 @@ function init() {
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
       clear(secs);
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
-      if (backBtn) px(backBtn, W - col + 8, H - 56, 48, 48);
+      // ←は上の段(⚙の右)。列の下の角は自撮り(録画+ディレイの両方のときだけ、自撮りは映像の右下)
+      if (backBtn && topRow) { const t = topRow.getBoundingClientRect(); px(backBtn, t.right + 8, 8, 48, 48, { background: 'rgba(12,22,54,.6)', borderRadius: '14px', zIndex: '6' }); }
+      if (!both && flipOn) px(flip, W - col + 8, H - 56, 48, 48, { borderRadius: '14px', background: 'rgba(44,74,160,.55)' });
+      flip.classList.remove('mw-big');
+      camCorner = both;
       if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
       root.classList.toggle('mw-over', over);
-      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both);
+      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both, both);
     }
-    if (camBtn && !both) camBtn.style.background = '';
+    if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);
     px(main, mx, my, m, m);
   }

@@ -227,3 +227,4 @@ body.mw-no-camtools #monitorArea:not(.replaying) :is(.zoom-toggle, .zoom-host, .
 }
 /* 「左手で使う」は、モードホイールの配置にまだ効かないので、直すまで隠す(中山さん 2026-11-07 了承) */
 #btnLefty { display: none !important; }
+.mw .mw-flip.mw-big svg { width: 30px; height: 30px; } /* 真ん中のボタンの横(64px)に置くときは、絵も大きく */
