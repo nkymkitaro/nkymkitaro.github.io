@@ -246,3 +246,5 @@ body.mode-monitor #monitorArea:not(.replaying) .mw .mw-top .mw-chip.closed butto
 body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx { border-radius: 50%; background: rgba(12,22,54,.45); box-shadow: none; }
 body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.rec { border: 3px solid #d6231b; }
 body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.dly { border: 3px solid #fff; }
+/* アプリ名(ロゴ)。地味に、ただし読める(文字だけのロゴ、高さ13px、不透明度55%)。押せない・動かない。映像の外に置く(位置は fit()) */
+.mw .mw-logo { position: absolute; height: 13px; width: auto; opacity: .55; pointer-events: none !important; user-select: none; -webkit-user-drag: none; }

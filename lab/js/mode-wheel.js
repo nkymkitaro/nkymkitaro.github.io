@@ -68,7 +68,8 @@ function init() {
     <div class="mw-slot rc" hidden><button type="button" class="bx rec" aria-label="録画を止める">${stopIcon('#d6231b')}</button><span class="lb"></span></div>
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
     <div class="mw-wheel" role="listbox" aria-label="モード"></div>
-    <div class="mw-note" role="status"></div>`;
+    <div class="mw-note" role="status"></div>
+    <img class="mw-logo" src="icons/logo-mitori-wordmark.png" alt="MITORI" draggable="false">`;
   area.appendChild(root);
   const q = (s) => $(s, root);
   const wheel = q('.mw-wheel'); const main = q('.mw-main'); const shape = q('.shape'); const secs = q('.mw-secs');
@@ -325,6 +326,7 @@ function init() {
   }
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
+  const logo = q('.mw-logo'); const LOGO_H = 13; // 文字だけのロゴ(icons/logo-mitori-wordmark.png。マーク付きは、この高さだと文字が潰れるため)
   const bandEl = $('#stateBand'); const bandsEl = $('.stage-video .state-bands');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
@@ -342,7 +344,7 @@ function init() {
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip];
+    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip, logo];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
@@ -378,6 +380,8 @@ function init() {
       // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
       // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
       if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none' });
+      // アプリ名(ロゴ)は、映像の上の紺の帯の中、←の右に小さく(中山さん 2026-11-07。依頼 2026-11-07-to-tech-app-name-on-screen.md)。←が出ていないときは左端から
+      { const backOn = backBtn && getComputedStyle(backBtn).display !== 'none'; px(logo, backOn ? 58 : 14, safe().t + 8 + (48 - LOGO_H) / 2, null, null); }
       if (!both && flipOn) px(flip, st.delay ? W - 20 - side : 20, sideY, side, side, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', !both);
       camCorner = both || (flipOn && (st.rec || st.delay));
@@ -407,6 +411,8 @@ function init() {
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = flipOn && !st.rec && !st.delay;
+      // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
+      px(logo, scx - logo.offsetWidth / 2, 18 + safe().t, null, null);
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
       camCorner = both;
