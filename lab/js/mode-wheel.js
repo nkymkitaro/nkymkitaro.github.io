@@ -69,7 +69,7 @@ function init() {
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
     <div class="mw-wheel" role="listbox" aria-label="モード"></div>
     <div class="mw-note" role="status"></div>
-    <img class="mw-logo" src="icons/logo-mitori-wordmark.png" alt="MITORI" draggable="false">`;
+    <img class="mw-logo" src="icons/logo-mitori-onscreen.png" alt="MITORI" draggable="false">`;
   area.appendChild(root);
   const q = (s) => $(s, root);
   const wheel = q('.mw-wheel'); const main = q('.mw-main'); const shape = q('.shape'); const secs = q('.mw-secs');
@@ -326,7 +326,7 @@ function init() {
   }
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
-  const logo = q('.mw-logo'); const LOGO_H = 13; // 文字だけのロゴ(icons/logo-mitori-wordmark.png。マーク付きは、この高さだと文字が潰れるため)
+  const logo = q('.mw-logo'); const LOGO_H = 18; // マーク(18px)+文字(13px)を1枚にしたロゴ(icons/logo-mitori-onscreen.png。元のロゴのままだと文字が潰れるため、文字を大きめに組み直した。2026-11-07)
   const bandEl = $('#stateBand'); const bandsEl = $('.stage-video .state-bands');
   const topRow = q('.mw-top');
   const safeProbe = document.createElement('div');
@@ -412,7 +412,7 @@ function init() {
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = flipOn && !st.rec && !st.delay;
       // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
-      px(logo, scx - logo.offsetWidth / 2, 18 + safe().t, null, null);
+      px(logo, scx - logo.offsetWidth / 2, 16 + safe().t, null, null);
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
       camCorner = both;
