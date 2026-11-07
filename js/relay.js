@@ -1,5 +1,5 @@
-// relay.js: 中継(携帯回線どうしをつなぐ。TURN)の小さな試作(2026-10-28。依頼: 2026-10-28-to-coder-relay-prototype.md)。
-// - URL に ?relay=1 を付けて開いたときだけ有効。付けないときは、今までと同じ動き(このファイルは何もしない)
+// relay.js: 中継(携帯回線どうしをつなぐ。TURN)。2026-10-28 の試作を、2026-11-07 に一般向けにした(中山さんの決定。依頼: 2026-11-07-to-tech-privacy-before-relay-announcement.md)。
+// - ふだんから有効。URL に ?relay=0 を付けて開いたときだけ使わない(切り分けの試験用)
 // - 中継は最後の手段。接続の仕組み(ICE)は、直接の経路を先に試す。直接つながれないときだけ中継を通る
 // - 合言葉は relay/worker.js(Cloudflare Workers)から取る。取れなかったときは、今の設定で続ける(画面にエラーは出さない)
 // - 中継を通っているときは、映像を送る側(子機)が送る量を下げ、親機・子機の両方に1回だけ知らせる
@@ -7,7 +7,7 @@
 import { showToast } from './toast.js';
 import { diagSet } from './diag.js';
 
-// 合言葉を発行する Worker の URL(relay/README.md の手順で作ったあと、ここに入れる。空のあいだは、?relay=1 を付けても何も起きない)
+// 合言葉を発行する Worker の URL(relay/README.md の手順で作った。空にすると、中継は使わない)
 export const RELAY_WORKER_URL = 'https://mitori-relay-credentials.nkymkitaro.workers.dev/';
 
 const RELAY_MAX_BITRATE = 500000; // 中継のときの映像の上限(約0.5Mbps。1時間あたり約0.2GBの見込み)
@@ -16,15 +16,16 @@ const NOTICE_MS = 5000;
 const NOTICE_FADE_MS = 500;
 const BASE_ICE = [{ urls: 'stun:stun.l.google.com:19302' }];
 
+// 中継を使うか。ふだんは使う(直接つながれないときだけ、実際に中継を通る)。?relay=0 のときだけ使わない
 export function isRelayTrial() {
-  return /[?&]relay=1(&|$)/.test(window.location.search);
+  return !/[?&]relay=0(&|$)/.test(window.location.search);
 }
 
 let extraIce = null; // 取れた合言葉(iceServers)
 const peers = new Set(); // 作ったピア。合言葉があとから届いたら、これらにも入れる(PeerJSは、回線を作るたびに options.config を読む)
 let readyResolve = null;
 const ready = new Promise((r) => { readyResolve = r; });
-// 合言葉を取り終えるまで待つ(取れても取れなくても。最大5秒)。中継の試作でないときは、すぐ終わる
+// 合言葉を取り終えるまで待つ(取れても取れなくても。最大5秒)。中継を使わないとき(?relay=0)は、すぐ終わる
 export function relayReady() { return (isRelayTrial() && RELAY_WORKER_URL) ? ready : Promise.resolve(); }
 // new Peer(...) のあとに呼ぶ。合言葉がまだ届いていなくても、届いた時点で、このピアの設定に入れる
 export function registerPeer(peer) {

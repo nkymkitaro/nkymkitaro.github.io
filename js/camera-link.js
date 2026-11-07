@@ -74,7 +74,7 @@ export class CameraLink {
     }
 
     this.peer = new Peer('kendo-var-room-' + this.myId, peerOptions());
-    registerPeer(this.peer); // 中継の試作: 合言葉があとから届いても使う
+    registerPeer(this.peer); // 中継: 合言葉があとから届いても使う
     this.peer.on('call', (call) => this._handleIncomingCall(call));
   }
 
@@ -176,7 +176,7 @@ export class CameraLink {
       });
       // ブラウザによってはcall.on('close')が発火しないことがあるための保険
       const pc = call.peerConnection;
-      watchRoute(pc, { isSender: false }); // 中継の試作(?relay=1 のときだけ動く)
+      watchRoute(pc, { isSender: false }); // 中継(?relay=0 のときは動かない)
       if (pc) {
         pc.addEventListener('iceconnectionstatechange', () => {
           if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
@@ -213,7 +213,7 @@ export class CameraLink {
   // 子機として起動: 映像を送るだけの軽量ピア
   startAsCamera() {
     this.peer = new Peer(undefined, peerOptions());
-    registerPeer(this.peer); // 中継の試作: 合言葉があとから届いても使う
+    registerPeer(this.peer); // 中継: 合言葉があとから届いても使う
     // 中継の試作のときは、合言葉を取り終えてから呼びかける(QRで開いた直後は、まだ届いていないことがある。2026-11-06)
     this._peerReady = Promise.all([new Promise((resolve) => this.peer.on('open', resolve)), relayReady()]);
     this.peer.on('connection', (conn) => {
@@ -351,7 +351,7 @@ export class CameraLink {
     };
     call.on('close', markLost);
     const pc = call.peerConnection;
-    watchRoute(pc, { isSender: true }); // 中継の試作(?relay=1 のときだけ動く)
+    watchRoute(pc, { isSender: true }); // 中継(?relay=0 のときは動かない)
     if (pc) {
       pc.addEventListener('iceconnectionstatechange', () => {
         const state = pc.iceConnectionState;
