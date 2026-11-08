@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<!-- 試験ページ: 打突の「正解づくり」(依頼: 2026-11-08-to-videocoder-kendo-metrics-trial.md のステップ3)。
+     標準のカメラで撮った動画(30/60/120fps)を開き、1コマずつ送って「起こり」「打突」「打ち終わり」のコマ番号を記録する。
+     動画は端末の外に出さない(読み込むだけ。送らない・保存しない)。記録だけ、この端末のブラウザに残す。リンクなし・noindex・計測なし -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MITORI(試験:打突の正解づくり)</title>
+<style>
+  :root { --n9: #0c1636; --n8: #17275a; --w: #fff; --r: #d6231b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--n9); color: var(--w); font-family: system-ui, "Hiragino Sans", sans-serif; font-size: 15px; padding: 10px 10px calc(16px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 17px; margin: 0 0 6px; }
+  .note { font-size: 12px; opacity: .75; line-height: 1.6; margin: 4px 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+  button, select, label.file { min-height: 48px; min-width: 52px; padding: 0 12px; border: 2px solid rgba(255,255,255,.85); border-radius: 24px; background: transparent; color: var(--w); font: inherit; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; }
+  select { background: var(--n8); }
+  button.on { background: var(--w); color: var(--n9); }
+  button.mark { border-color: var(--r); }
+  button.mark.done { background: var(--r); }
+  label.file input { display: none; }
+  video { width: 100%; max-height: 52vh; background: #000; border-radius: 8px; object-fit: contain; display: block; }
+  .info { font-variant-numeric: tabular-nums; font-size: 14px; }
+  .big { font-size: 22px; font-weight: 900; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; font-variant-numeric: tabular-nums; }
+  th, td { border-bottom: 1px solid rgba(255,255,255,.2); padding: 6px 4px; text-align: left; }
+  td button { min-height: 36px; min-width: 36px; padding: 0 8px; font-size: 13px; }
+  input[type=text] { min-height: 40px; border-radius: 10px; border: 1px solid rgba(255,255,255,.5); background: var(--n8); color: var(--w); font: inherit; padding: 0 8px; width: 9em; }
+</style>
+</head>
+<body>
+<h1>打突の正解づくり(試験ページ)</h1>
+<p class="note">動画は、この端末の中で開くだけです(送りません)。1コマずつ送って、打突ごとに「起こり」「打突」「打ち終わり」を押します。記録は、この端末のブラウザに残ります。最後に「表をコピー」で貼って返してください。</p>
+
+<div class="row">
+  <label class="file">動画を開く<input type="file" id="file" accept="video/*"></label>
+  <select id="fps" aria-label="fps">
+    <option value="0">fps: 自動で調べる</option><option value="30">30fps</option><option value="60">60fps</option><option value="120">120fps</option><option value="240">240fps</option>
+  </select>
+  <input type="text" id="who" placeholder="打った人" aria-label="打った人">
+</div>
+<video id="v" playsinline muted preload="auto"></video>
+<div class="row info"><span class="big" id="frame">― コマ</span><span id="time">―</span><span id="fpsInfo"></span></div>
+
+<div class="row">
+  <button data-step="-10">−10</button><button data-step="-1">−1</button><button id="play">再生</button><button data-step="1">+1</button><button data-step="10">+10</button>
+  <select id="rate" aria-label="再生の速さ"><option value="1">×1</option><option value="0.5">×0.5</option><option value="0.25" selected>×0.25</option><option value="0.1">×0.1</option></select>
+</div>
+<div class="row">
+  <button class="mark" data-mark="onset">起こり</button><button class="mark" data-mark="hit">打突</button><button class="mark" data-mark="end">打ち終わり</button>
+  <select id="kind" aria-label="技"><option>面</option><option>小手</option><option>胴</option><option>その他</option></select>
+  <select id="tempo" aria-label="速さ"><option value="">速さ: ―</option><option>速く</option><option>ゆっくり</option></select>
+  <button id="next">この打突を確定</button>
+</div>
+<p class="note">キーボード: ←/→ で1コマ、Shift+←/→ で10コマ、スペースで再生・停止、1/2/3 で起こり/打突/打ち終わり、Enter で確定。</p>
+
+<table><thead><tr><th>#</th><th>人</th><th>技</th><th>速さ</th><th>起こり</th><th>打突</th><th>打ち終わり</th><th>起こり→打突</th><th>起こり→打ち終わり</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<div class="row"><button id="copy">表をコピー</button><button id="clear">この動画の記録を消す</button></div>
+<p class="note" id="status"></p>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const v = $('#v');
+  const st = { name: '', fps: 0, detected: 0, cur: { onset: null, hit: null, end: null }, rows: [] };
+  const key = () => `kendoVar.strikeLabel.${st.name}`;
+  const save = () => { try { localStorage.setItem(key(), JSON.stringify(st.rows)); } catch (err) { /* 残せない端末は、この画面の間だけ */ } };
+  const load = () => { try { st.rows = JSON.parse(localStorage.getItem(key()) || '[]'); } catch (err) { st.rows = []; } };
+  const fps = () => Number($('#fps').value) || st.detected || 30;
+  // コマ番号: 0始まり。コマの真ん中の時刻に合わせる(端の時刻だと、前のコマが出ることがある)
+  const frameOf = (t) => Math.floor(t * fps() + 1e-6);
+  const seekFrame = (n) => { n = Math.max(0, n); v.currentTime = (n + 0.5) / fps(); };
+  const ms = (a, b) => (a == null || b == null ? '' : Math.round((b - a) * 1000 / fps()));
+
+  function show() {
+    const n = frameOf(v.currentTime);
+    $('#frame').textContent = `${n} コマ`;
+    $('#time').textContent = `${v.currentTime.toFixed(3)}秒`;
+    $('#fpsInfo').textContent = `${fps()}fps${$('#fps').value === '0' ? (st.detected ? '(自動)' : '(仮)') : ''}`;
+    document.querySelectorAll('[data-mark]').forEach((b) => {
+      const f = st.cur[b.dataset.mark];
+      b.classList.toggle('done', f != null);
+      b.textContent = `${{ onset: '起こり', hit: '打突', end: '打ち終わり' }[b.dataset.mark]}${f != null ? ` ${f}` : ''}`;
+    });
+  }
+  function render() {
+    $('#rows').innerHTML = st.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.who || ''}</td><td>${r.kind}</td><td>${r.tempo || ''}</td>`
+      + `<td><button data-go="${r.onset}">${r.onset ?? '-'}</button></td><td><button data-go="${r.hit}">${r.hit ?? '-'}</button></td><td><button data-go="${r.end}">${r.end ?? '-'}</button></td>`
+      + `<td>${ms(r.onset, r.hit)}ms</td><td>${ms(r.onset, r.end)}ms</td><td><button data-del="${i}">消す</button></td></tr>`).join('');
+    $('#rows').querySelectorAll('[data-go]').forEach((b) => b.onclick = () => { const n = Number(b.dataset.go); if (!Number.isNaN(n)) { v.pause(); seekFrame(n); } });
+    $('#rows').querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { st.rows.splice(Number(b.dataset.del), 1); save(); render(); });
+  }
+
+  // fps を自動で調べる: 少し再生して、コマが変わる時刻の差(中央値)から出す。分からなければ30として、手で選んでもらう
+  function detectFps() {
+    if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) { $('#status').textContent = 'この端末では fps を自動で調べられません。上で選んでください'; return; }
+    const ts = []; const t0 = v.currentTime; const rate = v.playbackRate;
+    v.playbackRate = 0.25; v.muted = true;
+    const cb = (now, meta) => {
+      ts.push(meta.mediaTime);
+      if (ts.length < 40) v.requestVideoFrameCallback(cb);
+      else {
+        v.pause(); v.playbackRate = rate;
+        const d = ts.slice(1).map((t, i) => t - ts[i]).filter((x) => x > 0).sort((a, b) => a - b);
+        const med = d[Math.floor(d.length / 2)];
+        if (med) { const f = 1 / med; st.detected = [24, 25, 30, 48, 50, 60, 120, 240].reduce((a, b) => (Math.abs(b - f) < Math.abs(a - f) ? b : a)); $('#status').textContent = `fps を調べました: 約${f.toFixed(1)} → ${st.detected}fps として扱います(違えば上で選ぶ)`; }
+        v.currentTime = t0; show();
+      }
+    };
+    v.requestVideoFrameCallback(cb); v.play().catch(() => {});
+  }
+
+  $('#file').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    st.name = `${f.name}:${f.size}`; st.detected = 0; st.cur = { onset: null, hit: null, end: null };
+    v.src = URL.createObjectURL(f);
+    v.onloadeddata = () => { load(); render(); show(); if ($('#fps').value === '0') detectFps(); };
+    $('#status').textContent = `開きました: ${f.name}(${(f.size / 1e6).toFixed(1)}MB)`;
+  };
+  $('#fps').onchange = () => show();
+  document.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { v.pause(); seekFrame(frameOf(v.currentTime) + Number(b.dataset.step)); });
+  $('#play').onclick = () => { if (v.paused) { v.playbackRate = Number($('#rate').value); v.play(); } else v.pause(); };
+  $('#rate').onchange = () => { v.playbackRate = Number($('#rate').value); };
+  v.addEventListener('play', () => { $('#play').textContent = '停止'; });
+  v.addEventListener('pause', () => { $('#play').textContent = '再生'; seekFrame(frameOf(v.currentTime)); });
+  v.addEventListener('timeupdate', show); v.addEventListener('seeked', show);
+  document.querySelectorAll('[data-mark]').forEach((b) => b.onclick = () => { v.pause(); const k = b.dataset.mark; const n = frameOf(v.currentTime); st.cur[k] = st.cur[k] === n ? null : n; show(); });
+  function commit() {
+    const c = st.cur; if (c.onset == null && c.hit == null && c.end == null) return;
+    st.rows.push({ who: $('#who').value.trim(), kind: $('#kind').value, tempo: $('#tempo').value, onset: c.onset, hit: c.hit, end: c.end, fps: fps() });
+    st.cur = { onset: null, hit: null, end: null }; save(); render(); show();
+  }
+  $('#next').onclick = commit;
+  $('#copy').onclick = async () => {
+    const head = ['動画', '人', '技', '速さ', 'fps', '起こり(コマ)', '打突(コマ)', '打ち終わり(コマ)', '起こり→打突(ms)', '起こり→打ち終わり(ms)'].join('\t');
+    const body = st.rows.map((r) => [st.name.split(':')[0], r.who, r.kind, r.tempo, r.fps, r.onset ?? '', r.hit ?? '', r.end ?? '',
+      r.onset != null && r.hit != null ? Math.round((r.hit - r.onset) * 1000 / r.fps) : '', r.onset != null && r.end != null ? Math.round((r.end - r.onset) * 1000 / r.fps) : ''].join('\t'));
+    const text = [head, ...body].join('\n');
+    try { await navigator.clipboard.writeText(text); $('#status').textContent = `コピーしました(${st.rows.length}本)`; }
+    catch (err) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); $('#status').textContent = 'コピーしました'; } catch (e) { $('#status').textContent = 'コピーできませんでした'; } ta.remove(); }
+  };
+  $('#clear').onclick = () => { if (!st.name) return; st.rows = []; save(); render(); $('#status').textContent = 'この動画の記録を消しました'; };
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    const step = e.shiftKey ? 10 : 1;
+    if (e.key === 'ArrowRight') { v.pause(); seekFrame(frameOf(v.currentTime) + step); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { v.pause(); seekFrame(frameOf(v.currentTime) - step); e.preventDefault(); }
+    else if (e.key === ' ') { $('#play').click(); e.preventDefault(); }
+    else if (e.key === '1' || e.key === '2' || e.key === '3') document.querySelector(`[data-mark="${['onset', 'hit', 'end'][Number(e.key) - 1]}"]`).click();
+    else if (e.key === 'Enter') commit();
+  });
+  show();
+})();
+</script>
+</body>
+</html>
