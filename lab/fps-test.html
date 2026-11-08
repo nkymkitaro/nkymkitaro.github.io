@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<!-- 試験ページ: ブラウザで、背面カメラが何fpsまで取れるかを確かめる(依頼: 2026-11-08-to-videocoder-kendo-metrics-trial.md のステップ0)。
+     通常のページからリンクしない・検索に出さない・計測の出来事は送らない(分析の部品を読まない)。映像は端末の中だけで、保存しない -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MITORI(試験:fps)</title>
+<style>
+  :root { --n9: #0c1636; --n8: #17275a; --w: #fff; --r: #d6231b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--n9); color: var(--w); font-family: system-ui, "Hiragino Sans", sans-serif; font-size: 15px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+  .row span.l { width: 4.5em; font-weight: 800; }
+  button { min-height: 48px; min-width: 64px; padding: 0 14px; border: 2px solid rgba(255,255,255,.85); border-radius: 24px; background: transparent; color: var(--w); font: inherit; font-weight: 800; }
+  button.sel { background: var(--w); color: var(--n9); }
+  button.go { border-color: var(--r); background: var(--r); }
+  video { width: 100%; max-height: 38vh; background: #000; border-radius: 8px; object-fit: contain; }
+  .big { font-size: 28px; font-weight: 900; }
+  pre { white-space: pre-wrap; word-break: break-all; background: var(--n8); padding: 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid rgba(255,255,255,.2); padding: 6px 4px; text-align: left; }
+  .note { font-size: 12px; opacity: .75; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>fpsのテスト(試験ページ)</h1>
+<p class="note">背面カメラで、要求したfpsが実際に取れるかを見ます。映像は保存しません。「全部試す」で6通り(約40秒)をまとめて測り、最後に「結果をコピー」。</p>
+
+<div class="row"><span class="l">fps</span><button data-fps="30">30</button><button data-fps="60">60</button><button data-fps="120">120</button></div>
+<div class="row"><span class="l">解像度</span><button data-res="1280x720">1280×720</button><button data-res="1920x1080">1920×1080</button></div>
+<div class="row"><button class="go" id="btnOne">この条件で測る</button><button id="btnAll">全部試す</button><button id="btnCopy">結果をコピー</button></div>
+
+<video id="v" autoplay playsinline muted></video>
+<div class="row"><span class="big" id="live">― fps</span><span class="note" id="status">まだ開いていません</span></div>
+<pre id="now"></pre>
+
+<table id="tbl"><thead><tr><th>要求</th><th>getSettings</th><th>実測(カメラ)</th><th>実測(画面)</th></tr></thead><tbody></tbody></table>
+<pre id="dev"></pre>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const v = $('#v');
+  const st = { fps: 60, res: '1280x720', stream: null, results: [], device: '' };
+  const sel = () => {
+    document.querySelectorAll('[data-fps]').forEach((b) => b.classList.toggle('sel', Number(b.dataset.fps) === st.fps));
+    document.querySelectorAll('[data-res]').forEach((b) => b.classList.toggle('sel', b.dataset.res === st.res));
+  };
+  document.querySelectorAll('[data-fps]').forEach((b) => b.onclick = () => { st.fps = Number(b.dataset.fps); sel(); });
+  document.querySelectorAll('[data-res]').forEach((b) => b.onclick = () => { st.res = b.dataset.res; sel(); });
+  sel();
+
+  // 端末の情報(Chrome は機種名が取れることがある。Safari は userAgent だけ)
+  (async () => {
+    const lines = [`userAgent: ${navigator.userAgent}`, `画面の更新: devicePixelRatio=${devicePixelRatio} 画面 ${screen.width}x${screen.height}`];
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+        const h = await navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion', 'fullVersionList']);
+        lines.unshift(`機種: ${h.model || '(不明)'} / ${h.platform} ${h.platformVersion}`, `ブラウザ: ${(h.fullVersionList || []).map((x) => `${x.brand} ${x.version}`).join(', ')}`);
+      }
+    } catch (err) { /* 取れない端末は userAgent だけ */ }
+    st.device = lines.join('\n');
+    $('#dev').textContent = st.device;
+  })();
+
+  function stop() {
+    if (st.stream) st.stream.getTracks().forEach((t) => t.stop());
+    st.stream = null;
+  }
+
+  // カメラから届くコマを数える。Chrome は MediaStreamTrackProcessor で、カメラが出した全部のコマを数えられる。
+  // 使えない端末(iPhone の Safari など)は、画面に出たコマ(requestVideoFrameCallback)だけ。こちらは画面の更新(60Hzなど)が上限になる
+  function countCamera(track, ms) {
+    if (typeof MediaStreamTrackProcessor === 'undefined') return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let n = 0; let first = null; let last = null; let done = false;
+      let reader;
+      try {
+        const p = new MediaStreamTrackProcessor({ track: track.clone() });
+        reader = p.readable.getReader();
+      } catch (err) { resolve(null); return; }
+      const t0 = performance.now();
+      (async function loop() {
+        while (!done) {
+          const r = await reader.read().catch(() => ({ done: true }));
+          if (r.done) break;
+          const ts = r.value.timestamp; r.value.close();
+          if (first == null) first = ts; last = ts; n++;
+          if (performance.now() - t0 >= ms) done = true;
+        }
+        try { reader.cancel(); } catch (err) { /* 終わり */ }
+        resolve(n > 1 && last > first ? (n - 1) / ((last - first) / 1e6) : null);
+      })();
+    });
+  }
+  function countScreen(ms) {
+    return new Promise((resolve) => {
+      if (!('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
+        // さらに古い端末: video の時刻が進んだ回数を数える(目安)
+        let n = 0; let lastT = -1; const t0 = performance.now();
+        (function f() { if (v.currentTime !== lastT) { lastT = v.currentTime; n++; } if (performance.now() - t0 < ms) requestAnimationFrame(f); else resolve(n / (ms / 1000)); })();
+        return;
+      }
+      let n = 0; let first = null; let last = null; let firstPF = null; let lastPF = null; const t0 = performance.now();
+      const cb = (now, meta) => {
+        n++; if (first == null) { first = meta.mediaTime; firstPF = meta.presentedFrames; } last = meta.mediaTime; lastPF = meta.presentedFrames;
+        if (performance.now() - t0 < ms) v.requestVideoFrameCallback(cb);
+        else resolve(last > first ? (lastPF - firstPF) / (last - first) : n / (ms / 1000));
+      };
+      v.requestVideoFrameCallback(cb);
+    });
+  }
+
+  async function open(fps, res) {
+    stop();
+    const [w, h] = res.split('x').map(Number);
+    $('#status').textContent = `開いています… ${fps}fps ${res}`;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: fps } },
+    });
+    st.stream = stream; v.srcObject = stream;
+    await v.play().catch(() => {});
+    const tr = stream.getVideoTracks()[0];
+    let caps = {}; try { caps = tr.getCapabilities ? tr.getCapabilities() : {}; } catch (err) { caps = {}; }
+    const s = tr.getSettings();
+    $('#now').textContent = `カメラ: ${tr.label || '(名前なし)'}\ngetSettings: ${s.width}x${s.height} ${s.frameRate}fps\ngetCapabilities: 幅〜${caps.width && caps.width.max} 高さ〜${caps.height && caps.height.max} fps ${caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '(取れない)'}`;
+    return { tr, s, caps };
+  }
+
+  async function measure(fps, res) {
+    try {
+      const { tr, s, caps } = await open(fps, res);
+      $('#status').textContent = `測っています(4秒)… ${fps}fps ${res}`;
+      await new Promise((r) => setTimeout(r, 1000)); // 開いた直後は安定しないので1秒待つ
+      const [cam, scr] = await Promise.all([countCamera(tr, 4000), countScreen(4000)]);
+      const row = { req: `${fps}fps ${res}`, set: `${s.width}x${s.height} ${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps`, cam: cam == null ? '(数えられない端末)' : `${cam.toFixed(1)}fps`, scr: `${scr.toFixed(1)}fps`, capFps: caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '?' };
+      st.results.push(row);
+      const trEl = document.createElement('tr');
+      trEl.innerHTML = `<td>${row.req}</td><td>${row.set}</td><td>${row.cam}</td><td>${row.scr}</td>`;
+      $('#tbl tbody').appendChild(trEl);
+      $('#status').textContent = '測り終わりました';
+      return row;
+    } catch (err) {
+      const row = { req: `${fps}fps ${res}`, set: `エラー: ${err && err.name} ${err && err.message}`, cam: '-', scr: '-', capFps: '?' };
+      st.results.push(row);
+      const trEl = document.createElement('tr'); trEl.innerHTML = `<td>${row.req}</td><td colspan="3">${row.set}</td>`; $('#tbl tbody').appendChild(trEl);
+      $('#status').textContent = 'カメラを開けませんでした';
+      return row;
+    }
+  }
+
+  // 実測の表示(いま開いているカメラ。画面に出たコマの数を1秒ごとに)
+  setInterval(async () => {
+    if (!st.stream || st.busy) return;
+    st.busy = true; const f = await countScreen(1000); $('#live').textContent = `${f.toFixed(1)} fps`; st.busy = false;
+  }, 1100);
+
+  $('#btnOne').onclick = async () => { $('#btnOne').disabled = true; await measure(st.fps, st.res); $('#btnOne').disabled = false; };
+  $('#btnAll').onclick = async () => {
+    $('#btnAll').disabled = true;
+    for (const res of ['1280x720', '1920x1080']) for (const fps of [30, 60, 120]) { st.fps = fps; st.res = res; sel(); await measure(fps, res); }
+    $('#btnAll').disabled = false;
+  };
+  $('#btnCopy').onclick = async () => {
+    const text = ['fpsのテスト結果', st.device, '',
+      '要求 | getSettings | 実測(カメラ) | 実測(画面) | 対応するfps',
+      ...st.results.map((r) => `${r.req} | ${r.set} | ${r.cam} | ${r.scr} | ${r.capFps}`)].join('\n');
+    try { await navigator.clipboard.writeText(text); $('#status').textContent = 'コピーしました'; }
+    catch (err) {
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); $('#status').textContent = 'コピーしました'; } catch (e) { $('#status').textContent = 'コピーできませんでした。下の表を写してください'; }
+      ta.remove();
+    }
+  };
+})();
+</script>
+</body>
+</html>
