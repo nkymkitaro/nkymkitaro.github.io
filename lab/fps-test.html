@@ -31,7 +31,12 @@
 
 <div class="row"><span class="l">fps</span><button data-fps="30">30</button><button data-fps="60">60</button><button data-fps="120">120</button></div>
 <div class="row"><span class="l">解像度</span><button data-res="1280x720">1280×720</button><button data-res="1920x1080">1920×1080</button></div>
-<div class="row"><button class="go" id="btnOne">この条件で測る</button><button id="btnAll">全部試す</button><button id="btnCopy">結果をコピー</button></div>
+<div class="row"><span class="l">指定</span><button data-mode="ideal">ideal</button><button data-mode="exact">exact</button><button data-mode="min">min</button><button data-mode="apply">あとで applyConstraints</button></div>
+<div class="row"><span class="l">露出</span><button data-expo="auto">自動</button><button data-expo="short">短く(手動)</button></div>
+<div class="row"><span class="l">数え方</span><button data-count="both">両方</button><button data-count="cam">カメラだけ</button><button data-count="none">数えない(getSettingsだけ)</button></div>
+<div class="row"><button class="go" id="btnOne">この条件で測る</button><button id="btnFive">同じ条件で5回</button><button id="btnReload">読み込み直して1回</button></div>
+<div class="row"><button id="btn60">60fpsの切り分け(約1分)</button><button id="btnAll">全部試す</button><button id="btnCopy">結果をコピー</button></div>
+<p class="note">「60fpsの切り分け」: 60fps・1280×720 で、指定(ideal / exact / min / あとで applyConstraints)と露出(自動 / 短く)を順に変えて測ります。条件ごとにカメラを閉じて1.5秒待ちます。明るい場所で試してください。</p>
 
 <video id="v" autoplay playsinline muted></video>
 <div class="row"><span class="big" id="live">― fps</span><span class="note" id="status">まだ開いていません</span></div>
@@ -44,11 +49,24 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const v = $('#v');
-  const st = { fps: 60, res: '1280x720', stream: null, results: [], device: '' };
+  const st = { fps: 60, res: '1280x720', mode: 'ideal', expo: 'auto', count: 'both', stream: null, results: [], device: '' };
+  // 読み込み直して測るときの条件(?fps=60&res=1280x720&mode=exact&expo=short&count=cam&auto=1)
+  const qp = new URLSearchParams(location.search);
+  if (qp.get('fps')) st.fps = Number(qp.get('fps'));
+  if (qp.get('res')) st.res = qp.get('res');
+  ['mode', 'expo', 'count'].forEach((k) => { if (qp.get(k)) st[k] = qp.get(k); });
+  try { st.results = JSON.parse(sessionStorage.getItem('fpsTestResults') || '[]'); } catch (err) { st.results = []; }
+  const keep = () => { try { sessionStorage.setItem('fpsTestResults', JSON.stringify(st.results)); } catch (err) { /* 残せなくても続ける */ } };
   const sel = () => {
     document.querySelectorAll('[data-fps]').forEach((b) => b.classList.toggle('sel', Number(b.dataset.fps) === st.fps));
     document.querySelectorAll('[data-res]').forEach((b) => b.classList.toggle('sel', b.dataset.res === st.res));
+    document.querySelectorAll('[data-mode]').forEach((b) => b.classList.toggle('sel', b.dataset.mode === st.mode));
+    document.querySelectorAll('[data-expo]').forEach((b) => b.classList.toggle('sel', b.dataset.expo === st.expo));
+    document.querySelectorAll('[data-count]').forEach((b) => b.classList.toggle('sel', b.dataset.count === st.count));
   };
+  document.querySelectorAll('[data-mode]').forEach((b) => b.onclick = () => { st.mode = b.dataset.mode; sel(); });
+  document.querySelectorAll('[data-expo]').forEach((b) => b.onclick = () => { st.expo = b.dataset.expo; sel(); });
+  document.querySelectorAll('[data-count]').forEach((b) => b.onclick = () => { st.count = b.dataset.count; sel(); });
   document.querySelectorAll('[data-fps]').forEach((b) => b.onclick = () => { st.fps = Number(b.dataset.fps); sel(); });
   document.querySelectorAll('[data-res]').forEach((b) => b.onclick = () => { st.res = b.dataset.res; sel(); });
   sel();
@@ -114,39 +132,56 @@
     });
   }
 
-  async function open(fps, res) {
-    stop();
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function open(fps, res, o = st) {
+    if (st.stream) { stop(); v.srcObject = null; await wait(1500); } // 前のカメラを解放しきってから開く(連続の切り替えの影響をなくす)
     const [w, h] = res.split('x').map(Number);
-    $('#status').textContent = `開いています… ${fps}fps ${res}`;
+    $('#status').textContent = `開いています… ${fps}fps ${res} ${o.mode} 露出${o.expo}`;
+    const fr = o.mode === 'exact' ? { exact: fps } : o.mode === 'min' ? { min: fps, ideal: fps } : o.mode === 'apply' ? { ideal: 30 } : { ideal: fps };
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: fps } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: fr },
     });
     st.stream = stream; v.srcObject = stream;
     await v.play().catch(() => {});
     const tr = stream.getVideoTracks()[0];
+    let note = '';
+    if (o.mode === 'apply') { try { await tr.applyConstraints({ width: { ideal: w }, height: { ideal: h }, frameRate: { exact: fps } }); } catch (err) { note += ` apply失敗:${err.name}`; } }
+    if (o.expo === 'short') {
+      // 露出を短くする(暗いと露出が延びて、fpsが落ちるため)。exposureTime の単位は 100マイクロ秒(Chrome)。1/(fps×1.5)秒にする
+      try {
+        const c = tr.getCapabilities ? tr.getCapabilities() : {};
+        if (c.exposureMode && c.exposureMode.includes('manual') && c.exposureTime) {
+          const want = Math.max(c.exposureTime.min, Math.min(c.exposureTime.max, Math.round(10000 / (fps * 1.5))));
+          await tr.applyConstraints({ advanced: [{ exposureMode: 'manual', exposureTime: want }] });
+          note += ` 露出${want / 10}ms`;
+        } else note += ' 露出の手動は非対応';
+      } catch (err) { note += ` 露出失敗:${err.name}`; }
+    }
+    st.note = note;
     let caps = {}; try { caps = tr.getCapabilities ? tr.getCapabilities() : {}; } catch (err) { caps = {}; }
     const s = tr.getSettings();
     $('#now').textContent = `カメラ: ${tr.label || '(名前なし)'}\ngetSettings: ${s.width}x${s.height} ${s.frameRate}fps\ngetCapabilities: 幅〜${caps.width && caps.width.max} 高さ〜${caps.height && caps.height.max} fps ${caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '(取れない)'}`;
     return { tr, s, caps };
   }
 
-  async function measure(fps, res) {
+  async function measure(fps, res, o = st) {
     try {
-      const { tr, s, caps } = await open(fps, res);
+      const { tr, caps } = await open(fps, res, o);
       $('#status').textContent = `測っています(4秒)… ${fps}fps ${res}`;
-      await new Promise((r) => setTimeout(r, 1000)); // 開いた直後は安定しないので1秒待つ
-      const [cam, scr] = await Promise.all([countCamera(tr, 4000), countScreen(4000)]);
-      const row = { req: `${fps}fps ${res}`, set: `${s.width}x${s.height} ${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps`, cam: cam == null ? '(数えられない端末)' : `${cam.toFixed(1)}fps`, scr: `${scr.toFixed(1)}fps`, capFps: caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '?' };
-      st.results.push(row);
+      await wait(1000); // 開いた直後は安定しないので1秒待つ
+      const s = tr.getSettings(); // applyConstraints・露出のあとの値
+      const [cam, scr] = await Promise.all([o.count === 'none' ? null : countCamera(tr, 4000), o.count === 'both' ? countScreen(4000) : wait(4000).then(() => null)]);
+      const row = { req: `${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}${st.note || ''}`, set: `${s.width}x${s.height} ${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps${s.exposureTime ? ` 露出${s.exposureTime / 10}ms` : ''}`, cam: o.count === 'none' ? '(数えない)' : cam == null ? '(数えられない端末)' : `${cam.toFixed(1)}fps`, scr: scr == null ? '(数えない)' : `${scr.toFixed(1)}fps`, capFps: caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '?' };
+      st.results.push(row); keep();
       const trEl = document.createElement('tr');
       trEl.innerHTML = `<td>${row.req}</td><td>${row.set}</td><td>${row.cam}</td><td>${row.scr}</td>`;
       $('#tbl tbody').appendChild(trEl);
       $('#status').textContent = '測り終わりました';
       return row;
     } catch (err) {
-      const row = { req: `${fps}fps ${res}`, set: `エラー: ${err && err.name} ${err && err.message}`, cam: '-', scr: '-', capFps: '?' };
-      st.results.push(row);
+      const row = { req: `${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}`, set: `開けない: ${err && err.name} ${err && (err.constraint || err.message || '')}`, cam: '-', scr: '-', capFps: '?' };
+      st.results.push(row); keep();
       const trEl = document.createElement('tr'); trEl.innerHTML = `<td>${row.req}</td><td colspan="3">${row.set}</td>`; $('#tbl tbody').appendChild(trEl);
       $('#status').textContent = 'カメラを開けませんでした';
       return row;
@@ -160,11 +195,24 @@
   }, 1100);
 
   $('#btnOne').onclick = async () => { $('#btnOne').disabled = true; await measure(st.fps, st.res); $('#btnOne').disabled = false; };
+  $('#btnFive').onclick = async () => { $('#btnFive').disabled = true; for (let i = 0; i < 5; i++) await measure(st.fps, st.res); $('#btnFive').disabled = false; };
+  $('#btnReload').onclick = () => { stop(); location.search = `?fps=${st.fps}&res=${st.res}&mode=${st.mode}&expo=${st.expo}&count=${st.count}&auto=1`; };
+  $('#btn60').onclick = async () => {
+    $('#btn60').disabled = true;
+    for (const expo of ['auto', 'short']) for (const mode of ['ideal', 'exact', 'min', 'apply']) await measure(60, '1280x720', { mode, expo, count: 'both' });
+    $('#btn60').disabled = false;
+  };
+  // 前の結果(読み込み直し前)も表に戻す
+  st.results.forEach((row) => { const trEl = document.createElement('tr'); trEl.innerHTML = `<td>${row.req}</td><td>${row.set}</td><td>${row.cam}</td><td>${row.scr}</td>`; $('#tbl tbody').appendChild(trEl); });
+  // 読み込み直して1回: 画面を押してから測る(カメラの許可がすでにあれば、そのまま始まる)
+  if (qp.get('auto') === '1') { sel(); setTimeout(() => measure(st.fps, st.res), 300); }
   $('#btnAll').onclick = async () => {
     $('#btnAll').disabled = true;
-    for (const res of ['1280x720', '1920x1080']) for (const fps of [30, 60, 120]) { st.fps = fps; st.res = res; sel(); await measure(fps, res); }
+    for (const res of ['1280x720', '1920x1080']) for (const fps of [30, 60, 120]) { st.fps = fps; st.res = res; sel(); await measure(fps, res, { ...st }); }
     $('#btnAll').disabled = false;
   };
+  const btnClear = document.createElement('button'); btnClear.textContent = '表を消す'; $('#btnCopy').after(btnClear);
+  btnClear.onclick = () => { st.results = []; keep(); $('#tbl tbody').innerHTML = ''; };
   $('#btnCopy').onclick = async () => {
     const text = ['fpsのテスト結果', st.device, '',
       '要求 | getSettings | 実測(カメラ) | 実測(画面) | 対応するfps',
