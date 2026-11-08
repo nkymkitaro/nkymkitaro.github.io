@@ -35,6 +35,8 @@
 <div class="row"><span class="l">露出</span><button data-expo="auto">自動</button><button data-expo="short">短く(手動)</button></div>
 <div class="row"><span class="l">数え方</span><button data-count="both">両方</button><button data-count="cam">カメラだけ</button><button data-count="none">数えない(getSettingsだけ)</button></div>
 <div class="row"><button class="go" id="btnOne">この条件で測る</button><button id="btnFive">同じ条件で5回</button><button id="btnReload">読み込み直して1回</button></div>
+<div class="row"><button id="btn120">120fpsの切り分け(約2分)</button></div>
+<p class="note">「120fpsの切り分け」: 端末のすべてのカメラ(背面の広角・超広角など)ごとに、640×480・1280×720・1920×1080 で、120fps を exact と ideal で求めます。カメラごとに、対応すると答えたfpsの範囲も出します。</p>
 <div class="row"><button id="btn60">60fpsの切り分け(約1分)</button><button id="btnAll">全部試す</button><button id="btnCopy">結果をコピー</button></div>
 <p class="note">「60fpsの切り分け」: 60fps・1280×720 で、指定(ideal / exact / min / あとで applyConstraints)と露出(自動 / 短く)を順に変えて測ります。条件ごとにカメラを閉じて1.5秒待ちます。明るい場所で試してください。</p>
 
@@ -140,7 +142,7 @@
     const fr = o.mode === 'exact' ? { exact: fps } : o.mode === 'min' ? { min: fps, ideal: fps } : o.mode === 'apply' ? { ideal: 30 } : { ideal: fps };
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: false,
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: fr },
+      video: { ...(o.deviceId ? { deviceId: { exact: o.deviceId } } : { facingMode: { ideal: 'environment' } }), width: { ideal: w }, height: { ideal: h }, frameRate: fr, ...(o.resizeNone ? { resizeMode: 'none' } : {}) },
     });
     st.stream = stream; v.srcObject = stream;
     await v.play().catch(() => {});
@@ -172,7 +174,7 @@
       await wait(1000); // 開いた直後は安定しないので1秒待つ
       const s = tr.getSettings(); // applyConstraints・露出のあとの値
       const [cam, scr] = await Promise.all([o.count === 'none' ? null : countCamera(tr, 4000), o.count === 'both' ? countScreen(4000) : wait(4000).then(() => null)]);
-      const row = { req: `${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}${st.note || ''}`, set: `${s.width}x${s.height} ${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps${s.exposureTime ? ` 露出${s.exposureTime / 10}ms` : ''}`, cam: o.count === 'none' ? '(数えない)' : cam == null ? '(数えられない端末)' : `${cam.toFixed(1)}fps`, scr: scr == null ? '(数えない)' : `${scr.toFixed(1)}fps`, capFps: caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '?' };
+      const row = { req: `${o.label ? `[${o.label}] ` : ''}${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}${o.resizeNone ? ' 縮小なし' : ''}${st.note || ''}`, set: `${s.width}x${s.height} ${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps${s.exposureTime ? ` 露出${s.exposureTime / 10}ms` : ''}`, cam: o.count === 'none' ? '(数えない)' : cam == null ? '(数えられない端末)' : `${cam.toFixed(1)}fps`, scr: scr == null ? '(数えない)' : `${scr.toFixed(1)}fps`, capFps: caps.frameRate ? `${caps.frameRate.min}〜${caps.frameRate.max}` : '?' };
       st.results.push(row); keep();
       const trEl = document.createElement('tr');
       trEl.innerHTML = `<td>${row.req}</td><td>${row.set}</td><td>${row.cam}</td><td>${row.scr}</td>`;
@@ -180,7 +182,7 @@
       $('#status').textContent = '測り終わりました';
       return row;
     } catch (err) {
-      const row = { req: `${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}`, set: `開けない: ${err && err.name} ${err && (err.constraint || err.message || '')}`, cam: '-', scr: '-', capFps: '?' };
+      const row = { req: `${o.label ? `[${o.label}] ` : ''}${fps}fps ${res} ${o.mode} 露出${o.expo === 'short' ? '短' : '自動'}`, set: `開けない: ${err && err.name} ${err && (err.constraint || err.message || '')}`, cam: '-', scr: '-', capFps: '?' };
       st.results.push(row); keep();
       const trEl = document.createElement('tr'); trEl.innerHTML = `<td>${row.req}</td><td colspan="3">${row.set}</td>`; $('#tbl tbody').appendChild(trEl);
       $('#status').textContent = 'カメラを開けませんでした';
@@ -197,6 +199,23 @@
   $('#btnOne').onclick = async () => { $('#btnOne').disabled = true; await measure(st.fps, st.res); $('#btnOne').disabled = false; };
   $('#btnFive').onclick = async () => { $('#btnFive').disabled = true; for (let i = 0; i < 5; i++) await measure(st.fps, st.res); $('#btnFive').disabled = false; };
   $('#btnReload').onclick = () => { stop(); location.search = `?fps=${st.fps}&res=${st.res}&mode=${st.mode}&expo=${st.expo}&count=${st.count}&auto=1`; };
+  // 120fps: カメラ(deviceId)ごと・解像度ごとに試す。Android の Chrome は、ふつうの撮り方では60までの見込みだが、決めつけずに全部当てる
+  $('#btn120').onclick = async () => {
+    $('#btn120').disabled = true;
+    let cams = [];
+    try { cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch (err) { cams = []; }
+    if (!cams.length || !cams[0].label) { // 名前が出ていない(許可の前)ときは、一度開いてから数え直す
+      try { await open(30, '640x480', { mode: 'ideal', expo: 'auto' }); cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput'); } catch (err) { /* そのまま */ }
+    }
+    for (const cam of cams) {
+      const label = cam.label || cam.deviceId.slice(0, 6);
+      for (const res of ['640x480', '1280x720', '1920x1080']) {
+        await measure(120, res, { mode: 'exact', expo: 'auto', count: 'cam', deviceId: cam.deviceId, label });
+        await measure(120, res, { mode: 'ideal', expo: 'auto', count: 'cam', deviceId: cam.deviceId, label, resizeNone: true });
+      }
+    }
+    $('#btn120').disabled = false;
+  };
   $('#btn60').onclick = async () => {
     $('#btn60').disabled = true;
     for (const expo of ['auto', 'short']) for (const mode of ['ideal', 'exact', 'min', 'apply']) await measure(60, '1280x720', { mode, expo, count: 'both' });
