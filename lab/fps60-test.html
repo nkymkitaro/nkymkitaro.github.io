@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<!-- 試験ページ: スマホのブラウザで、60fpsを安定して出す条件を探す(依頼: 2026-11-13-to-videocoder-fps60-stability-test.md)。
+     通常のページからリンクしない・検索に出さない・計測の出来事は送らない(分析の部品を読まない)。映像は端末の中だけで、保存しない。
+     「映像の明るさ」は、映像を32×18に縮めて端末の中で平均を出し、すぐ捨てる(画像は残さない) -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MITORI(試験:60fps)</title>
+<style>
+  :root { --n9: #0c1636; --n8: #17275a; --w: #fff; --r: #d6231b; --o: #ffb020; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--n9); color: var(--w); font-family: system-ui, "Hiragino Sans", sans-serif; font-size: 15px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  h2 { font-size: 15px; margin: 14px 0 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+  .row span.l { width: 5.5em; font-weight: 800; }
+  button { min-height: 48px; min-width: 56px; padding: 0 12px; border: 2px solid rgba(255,255,255,.85); border-radius: 24px; background: transparent; color: var(--w); font: inherit; font-weight: 800; }
+  button.sel { background: var(--w); color: var(--n9); }
+  button.go { border-color: var(--r); background: var(--r); }
+  button:disabled { opacity: .4; }
+  video { width: 100%; max-height: 26vh; background: #000; border-radius: 8px; object-fit: contain; }
+  canvas { width: 100%; height: 140px; background: var(--n8); border-radius: 8px; display: block; }
+  .big { font-size: 28px; font-weight: 900; }
+  .mid { font-size: 18px; font-weight: 800; }
+  pre { white-space: pre-wrap; word-break: break-all; background: var(--n8); padding: 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid rgba(255,255,255,.2); padding: 6px 4px; text-align: left; vertical-align: top; }
+  .note { font-size: 12px; opacity: .8; line-height: 1.6; }
+  .how { background: var(--n8); border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>60fpsの安定テスト(試験ページ)</h1>
+<div class="how">明るい場所・普通の部屋・暗い場所の3か所で、「同じ条件で5回」を押してください。そのあと「条件を総当たり」を押して、結果をコピーして貼ってください。</div>
+<p class="note">映像は保存せず、端末の外に出しません。「明るさ」は、映像を小さく縮めた平均(0〜255)を端末の中で出して、すぐ捨てたものです。</p>
+
+<h2>条件</h2>
+<div class="row"><span class="l">解像度</span><button data-g="res" data-v="640x480">640×480</button><button data-g="res" data-v="1280x720">1280×720</button><button data-g="res" data-v="1920x1080">1920×1080</button></div>
+<div class="row"><span class="l">60を要求</span><button data-g="fpsMode" data-v="ideal">ideal</button><button data-g="fpsMode" data-v="exact">exact</button></div>
+<div class="row"><span class="l">露出補正</span><button data-g="comp" data-v="none">なし</button><button data-g="comp" data-v="min" data-t="最小">最小</button><button data-g="comp" data-v="mid" data-t="中間">中間</button><button data-g="comp" data-v="max" data-t="最大">最大</button></div>
+<div class="row"><span class="l">ISO</span><button data-g="iso" data-v="none">なし</button><button data-g="iso" data-v="min" data-t="最小">最小</button><button data-g="iso" data-v="mid" data-t="中間">中間</button><button data-g="iso" data-v="max" data-t="最大">最大</button></div>
+<div class="row"><span class="l">露出モード</span><button data-g="mode" data-v="none">なし</button><button data-g="mode" data-v="continuous">continuous</button><button data-g="mode" data-v="manual">manual</button></div>
+<div class="row"><span class="l">露出時間</span><button data-g="etime" data-v="none">なし</button><button data-g="etime" data-v="8.3">8.3ms</button><button data-g="etime" data-v="11.1">11.1ms</button></div>
+<p class="note">露出時間を選ぶと、露出モードは manual になります。端末が対応しない項目は「対応しない」と記録して、そのまま続けます。</p>
+<pre id="caps">端末が申告する範囲: まだ読んでいません(「範囲を読む」か、どれかの測定で読みます)</pre>
+
+<div class="row"><button class="go" id="btnOne">この条件で1回(約10秒)</button><button id="btnFive">同じ条件で5回(約1分)</button><button id="btnSeries">60秒続けて測る</button></div>
+<div class="row"><button id="btnGrid">条件を総当たり</button><label class="note"><input type="checkbox" id="allRes"> 解像度も3通り全部(約3倍)</label></div>
+<div class="row"><button id="btnLive">開いて見る</button><button id="btnCaps">範囲を読む</button><button id="btnStop">止める</button></div>
+<div class="row"><button id="btnCopy">結果をコピー</button><button id="btnClear">表を消す</button></div>
+
+<video id="v" autoplay playsinline muted></video>
+<div class="row"><span class="big" id="live">― fps</span><span class="mid" id="liveB">明るさ ―</span></div>
+<div class="note" id="liveAvg">平均 ―(開いて1秒後から)</div>
+<div class="note" id="status">まだ開いていません</div>
+<pre id="now"></pre>
+
+<canvas id="chart" width="600" height="160"></canvas>
+<p class="note">グラフ(60秒): 白=fps、橙=明るさ(0〜255を0〜70に縮めた線)。点線は30と60。</p>
+
+<table id="tbl"><thead><tr><th>条件</th><th>取れた設定</th><th>実測fps</th><th>明るさ</th></tr></thead><tbody></tbody></table>
+<pre id="dev"></pre>
+
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const v = $('#v');
+  const st = { res: '1280x720', fpsMode: 'ideal', comp: 'none', iso: 'none', mode: 'none', etime: 'none', cur: null, caps: null, capsLabel: '', results: [], device: '', abort: false, busy: false, rec: null, srcName: '' };
+  try { st.results = JSON.parse(sessionStorage.getItem('fps60Results') || '[]'); } catch (err) { st.results = []; }
+  const keep = () => { try { sessionStorage.setItem('fps60Results', JSON.stringify(st.results)); } catch (err) { /* 残せなくても続ける */ } };
+  const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+  const setStatus = (t) => { $('#status').textContent = t; };
+  const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+  const f1 = (x) => (x == null || !isFinite(x) ? '?' : Number(x).toFixed(1));
+  // 「止める」を押したら、待ちの途中でも抜ける
+  async function waitA(ms) { const t0 = performance.now(); while (!st.abort && performance.now() - t0 < ms) await wait(Math.min(200, ms - (performance.now() - t0))); }
+
+  // ---- 条件の選択 ----
+  const sel = () => document.querySelectorAll('[data-g]').forEach((b) => b.classList.toggle('sel', st[b.dataset.g] === b.dataset.v));
+  document.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => {
+    st[b.dataset.g] = b.dataset.v;
+    if (b.dataset.g === 'etime' && b.dataset.v !== 'none') st.mode = 'manual';
+    sel();
+  });
+  sel();
+  const condNow = () => ({ res: st.res, fpsMode: st.fpsMode, comp: st.comp, iso: st.iso, mode: st.mode, etime: st.etime });
+
+  // ---- 端末の情報 ----
+  (async () => {
+    const lines = [`userAgent: ${navigator.userAgent}`, `画面: devicePixelRatio=${devicePixelRatio} ${screen.width}x${screen.height}`];
+    try {
+      if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+        const h = await navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion', 'fullVersionList']);
+        lines.unshift(`端末: ${h.model || '(不明)'} / ${h.platform} ${h.platformVersion}`, `ブラウザ: ${(h.fullVersionList || []).map((x) => `${x.brand} ${x.version}`).join(', ')}`);
+      }
+    } catch (err) { /* 取れない端末は userAgent だけ */ }
+    st.device = lines.join('\n');
+    $('#dev').textContent = st.device;
+  })();
+
+  // ---- 明るさ(映像を32×18に縮めた平均。端末の中だけで計算して捨てる) ----
+  const cv = document.createElement('canvas'); cv.width = 32; cv.height = 18;
+  const cx = cv.getContext('2d', { willReadFrequently: true });
+  function brightness() {
+    if (!v.videoWidth) return null;
+    try {
+      cx.drawImage(v, 0, 0, 32, 18);
+      const d = cx.getImageData(0, 0, 32, 18).data; let s = 0;
+      for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      return s / (d.length / 4);
+    } catch (err) { return null; }
+  }
+
+  // ---- fpsの数え方 ----
+  // Chrome: MediaStreamTrackProcessor で、カメラが出した全部のコマ(撮影時刻つき)を数える。
+  // 使えない端末(iPhone の Safari など): 画面に出たコマ(requestVideoFrameCallback)。画面の更新(60Hzなど)が上限になる
+  function startSampler(tr) {
+    const S = { t: [], n: [], src: '画面', stopped: false, cl: null, stop() { this.stopped = true; if (this.cl) { try { this.cl.stop(); } catch (e) { /* 終わり */ } } } };
+    if (typeof MediaStreamTrackProcessor !== 'undefined') {
+      try {
+        S.cl = tr.clone();
+        const rd = new MediaStreamTrackProcessor({ track: S.cl }).readable.getReader();
+        S.src = 'カメラ';
+        (async () => {
+          let k = 0;
+          while (!S.stopped) {
+            const r = await rd.read().catch(() => ({ done: true }));
+            if (r.done) break;
+            const ts = r.value.timestamp; r.value.close();
+            k++; S.t.push(ts != null ? ts / 1000 : performance.now()); S.n.push(k);
+          }
+          try { rd.cancel(); } catch (e) { /* 終わり */ }
+        })();
+        return S;
+      } catch (err) { if (S.cl) { try { S.cl.stop(); } catch (e) { /* 終わり */ } } S.cl = null; }
+    }
+    if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
+      const cb = (now, meta) => {
+        if (S.stopped) return;
+        S.t.push(meta.mediaTime != null ? meta.mediaTime * 1000 : now); S.n.push(meta.presentedFrames);
+        v.requestVideoFrameCallback(cb);
+      };
+      v.requestVideoFrameCallback(cb);
+    } else S.src = '数えられない端末';
+    return S;
+  }
+  const rate = (S, i0, i1) => (S && i1 > i0 && i0 >= 0 && S.t[i1] > S.t[i0] ? (S.n[i1] - S.n[i0]) / ((S.t[i1] - S.t[i0]) / 1000) : null);
+
+  // ---- 端末が申告する範囲 ----
+  const rng = (c) => (c ? (c.min != null ? `${c.min}〜${c.max}${c.step ? `(刻み${c.step})` : ''}` : JSON.stringify(c)) : '対応しない');
+  function showCaps(caps, label) {
+    st.caps = caps; st.capsLabel = label;
+    $('#caps').textContent = [`端末が申告する範囲(${label || '名前なし'})`,
+      `frameRate: ${rng(caps.frameRate)}`, `exposureCompensation: ${rng(caps.exposureCompensation)}`, `iso: ${rng(caps.iso)}`,
+      `exposureTime(単位100マイクロ秒): ${rng(caps.exposureTime)}`, `exposureMode: ${caps.exposureMode ? caps.exposureMode.join(' / ') : '対応しない'}`].join('\n');
+    // ボタンに実際の値を出す
+    document.querySelectorAll('[data-g="comp"],[data-g="iso"]').forEach((b) => {
+      if (b.dataset.v === 'none') return;
+      const val = pick(caps[b.dataset.g === 'comp' ? 'exposureCompensation' : 'iso'], b.dataset.v);
+      b.textContent = val == null ? `${b.dataset.t}(対応しない)` : `${b.dataset.t}(${val})`;
+    });
+  }
+  function pick(cap, which) {
+    if (!cap || cap.min == null) return null;
+    if (which === 'min') return cap.min;
+    if (which === 'max') return cap.max;
+    if (which === 'mid') { let m = (cap.min + cap.max) / 2; if (cap.step) m = cap.min + Math.round((m - cap.min) / cap.step) * cap.step; return Number(m.toFixed(4)); }
+    return null;
+  }
+
+  // ---- カメラを開く・閉じる ----
+  async function closeStream(waitAfter) {
+    const c = st.cur;
+    if (!c) return;
+    st.cur = null;
+    if (c.sampler) c.sampler.stop();
+    c.stream.getTracks().forEach((t) => t.stop());
+    v.srcObject = null;
+    if (waitAfter) await wait(1500); // 解放しきってから次を開く
+  }
+  async function openCond(cond) {
+    await closeStream(true);
+    const [w, h] = cond.res.split('x').map(Number);
+    setStatus(`開いています… ${cond.res} 60fps(${cond.fpsMode})`);
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: cond.fpsMode === 'exact' ? { exact: 60 } : { ideal: 60 } },
+    });
+    v.srcObject = stream; await v.play().catch(() => {});
+    const tr = stream.getVideoTracks()[0];
+    let caps = {}; try { caps = tr.getCapabilities ? tr.getCapabilities() : {}; } catch (err) { caps = {}; }
+    showCaps(caps, tr.label);
+    const c = { stream, tr, caps, hist: [], sampler: null, idx1: null, lastIdx: 0, adv: {}, notes: [] };
+    c.sampler = startSampler(tr);
+    st.cur = c;
+    return c;
+  }
+  // 露出などを指定する(まとめて1回。端末が申告した範囲に収める)
+  function buildExtras(cond, caps) {
+    const adv = {}; const notes = [];
+    const mode = cond.etime !== 'none' ? 'manual' : cond.mode;
+    if (mode !== 'none') { if (caps.exposureMode && caps.exposureMode.includes(mode)) adv.exposureMode = mode; else notes.push(`exposureMode ${mode}: 対応しない`); }
+    if (cond.etime !== 'none') {
+      if (caps.exposureTime && caps.exposureTime.min != null) adv.exposureTime = Math.max(caps.exposureTime.min, Math.min(caps.exposureTime.max, Math.round(Number(cond.etime) * 10)));
+      else notes.push('exposureTime: 対応しない');
+    }
+    if (cond.comp !== 'none') { const x = pick(caps.exposureCompensation, cond.comp); if (x != null) adv.exposureCompensation = x; else notes.push('exposureCompensation: 対応しない'); }
+    if (cond.iso !== 'none') { const x = pick(caps.iso, cond.iso); if (x != null) adv.iso = x; else notes.push('iso: 対応しない'); }
+    return { adv, notes };
+  }
+  function checkExtras(adv, s) {
+    return Object.keys(adv).map((k) => {
+      const got = s[k];
+      if (got == null) return `${k}:設定に出ない`;
+      const ok = typeof adv[k] === 'number' ? Math.abs(got - adv[k]) <= Math.max(0.001, Math.abs(adv[k]) * 0.02) : got === adv[k];
+      return ok ? `${k}:効いた` : `${k}:効かず(${got})`;
+    });
+  }
+  const condLabel = (cond) => {
+    const mode = cond.etime !== 'none' ? 'manual' : cond.mode;
+    return `${cond.res} ${cond.fpsMode} 補正${cond.comp === 'none' ? 'なし' : cond.comp} ISO${cond.iso === 'none' ? 'なし' : cond.iso} モード${mode === 'none' ? 'なし' : mode}${cond.etime !== 'none' ? ` 露出時間${cond.etime}ms` : ''}`;
+  };
+  const setText = (s) => `${s.width}x${s.height} 設定${s.frameRate != null ? Number(s.frameRate).toFixed(1) : '?'}fps 露出${s.exposureTime != null ? `${s.exposureTime / 10}ms` : '?'} ISO${s.iso != null ? s.iso : '?'} 補正${s.exposureCompensation != null ? s.exposureCompensation : '?'} ${s.exposureMode || '?'}`;
+
+  // 1秒ごとの表示と記録
+  setInterval(() => {
+    const c = st.cur;
+    if (!c || !c.sampler) return;
+    const S = c.sampler; const i1 = S.t.length - 1;
+    const f = i1 > c.lastIdx ? rate(S, c.lastIdx, i1) : 0;
+    if (c.idx1 == null) c.idx1 = i1;
+    c.lastIdx = Math.max(0, i1);
+    const b = brightness();
+    c.hist.push({ f: f == null ? 0 : f, b });
+    const avg = rate(S, c.idx1, i1);
+    $('#live').textContent = `${f1(f)} fps`;
+    $('#liveB').textContent = `明るさ ${b == null ? '―' : Math.round(b)}`;
+    $('#liveAvg').textContent = `平均 ${f1(avg)} fps(開いて1秒後から。数え方: ${S.src})`;
+    try { const s = c.tr.getSettings(); $('#now').textContent = `カメラ: ${c.tr.label || '(名前なし)'}\n${setText(s)}`; } catch (e) { /* 終わり */ }
+    if (st.rec && st.rec.c === c) drawChart(c.hist.slice(st.rec.h0));
+  }, 1000);
+
+  // ---- グラフ ----
+  function drawChart(series) {
+    const el = $('#chart'); const g = el.getContext('2d');
+    const W = el.width; const H = el.height; const top = 10; const bot = H - 14; const ymax = 70;
+    const Y = (val) => bot - (Math.max(0, Math.min(ymax, val)) / ymax) * (bot - top);
+    g.clearRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,.35)'; g.setLineDash([4, 4]); g.fillStyle = 'rgba(255,255,255,.6)'; g.font = '11px sans-serif';
+    [30, 60].forEach((y) => { g.beginPath(); g.moveTo(24, Y(y)); g.lineTo(W - 6, Y(y)); g.stroke(); g.fillText(String(y), 2, Y(y) + 4); });
+    g.setLineDash([]);
+    const X = (i) => 28 + (i / 59) * (W - 36);
+    const line = (key, color, scale) => {
+      g.strokeStyle = color; g.lineWidth = 2; g.beginPath(); let started = false;
+      series.forEach((p, i) => { const val = p[key]; if (val == null) return; const x = X(i); const y = Y(val * scale); if (!started) { g.moveTo(x, y); started = true; } else g.lineTo(x, y); });
+      g.stroke();
+    };
+    line('b', '#ffb020', ymax / 255);
+    line('f', '#ffffff', 1);
+    g.fillStyle = 'rgba(255,255,255,.6)'; g.fillText('0秒', 24, H - 2); g.fillText('60秒', W - 34, H - 2);
+  }
+
+  // ---- 結果の表 ----
+  function addRowEl(row) {
+    const tr = document.createElement('tr');
+    const cells = [`${row.tag ? `[${row.tag}] ` : ''}${row.cond}`, row.set, row.fps, row.bright];
+    cells.forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
+    $('#tbl tbody').appendChild(tr);
+  }
+  function pushRow(row) { st.results.push(row); keep(); addRowEl(row); }
+  st.results.forEach(addRowEl);
+
+  // ---- 測る ----
+  async function measureWindow(c, secs) {
+    const S = c.sampler; const m0 = S.t.length - 1; const h0 = c.hist.length;
+    await waitA(secs * 1000);
+    const m1 = S.t.length - 1;
+    const hs = c.hist.slice(h0);
+    const fs = hs.map((x) => x.f); const bs = hs.map((x) => x.b).filter((x) => x != null);
+    return { avg: rate(S, m0, m1), min: fs.length ? Math.min(...fs) : null, max: fs.length ? Math.max(...fs) : null, bright: mean(bs), hs, src: S.src };
+  }
+  async function openAndApply(cond, tag) {
+    let c;
+    try { c = await openCond(cond); } catch (err) {
+      pushRow({ tag, cond: condLabel(cond), set: `開けない: ${err && err.name} ${err && (err.constraint || err.message || '')}`, fps: '-', bright: '-', num: null });
+      setStatus('カメラを開けませんでした');
+      return null;
+    }
+    const { adv, notes } = buildExtras(cond, c.caps);
+    c.adv = adv; c.notes = notes;
+    if (Object.keys(adv).length) { try { await c.tr.applyConstraints({ advanced: [adv] }); } catch (err) { notes.push(`apply失敗:${err.name}`); } }
+    return c;
+  }
+  async function runOne(cond, o = {}) {
+    const c = await openAndApply(cond, o.tag);
+    if (!c) return null;
+    setStatus(`${o.tag ? `${o.tag}: ` : ''}落ち着くのを待っています(${o.settle ?? 3}秒)…`);
+    await waitA((o.settle ?? 3) * 1000);
+    if (st.abort) return null;
+    const secs = o.secs ?? 5;
+    setStatus(`${o.tag ? `${o.tag}: ` : ''}測っています(${secs}秒)…`);
+    const s0 = c.tr.getSettings();
+    const r = await measureWindow(c, secs);
+    if (st.abort) return null;
+    const s = c.tr.getSettings();
+    const extra = [...c.notes, ...checkExtras(c.adv, s)];
+    const row = {
+      tag: o.tag || '', cond: condLabel(cond),
+      set: `${setText(s0 && s)}${extra.length ? ` / ${extra.join(' ')}` : ''}`,
+      fps: `${f1(r.avg)}(最小${f1(r.min)}〜最大${f1(r.max)}、${r.src})`,
+      bright: r.bright == null ? '?' : String(Math.round(r.bright)),
+      num: r.avg, brightNum: r.bright,
+    };
+    pushRow(row);
+    return { row, r, c };
+  }
+  const HIGH = 55;
+
+  async function runFive(cond) {
+    const nums = [];
+    for (let i = 1; i <= 5 && !st.abort; i++) {
+      const x = await runOne(cond, { tag: `5回 #${i}`, settle: 3, secs: 5 });
+      if (x && x.row.num != null) nums.push(x.row.num);
+    }
+    if (st.abort) return;
+    const ok = nums.filter((n) => n >= HIGH).length;
+    pushRow({ tag: '5回のまとめ', cond: condLabel(cond), set: `${nums.length}回測れた`, fps: `${HIGH}fps以上: ${ok}/${nums.length}回、平均${f1(mean(nums))}`, bright: '', num: null });
+  }
+
+  async function runSeries(cond) {
+    const c = await openAndApply(cond, '60秒');
+    if (!c) return;
+    setStatus('60秒の推移を測っています(落ち着くのを3秒待ってから)…');
+    await waitA(3000);
+    if (st.abort) return;
+    st.rec = { c, h0: c.hist.length };
+    drawChart([]);
+    setStatus('60秒測っています…');
+    const r = await measureWindow(c, 60);
+    st.rec = null;
+    if (st.abort) return;
+    drawChart(r.hs);
+    const s = c.tr.getSettings();
+    const over = r.hs.filter((x) => x.f >= HIGH).length;
+    const extra = [...c.notes, ...checkExtras(c.adv, s)];
+    pushRow({
+      tag: '60秒', cond: condLabel(cond), set: `${setText(s)}${extra.length ? ` / ${extra.join(' ')}` : ''}`,
+      fps: `平均${f1(r.avg)}(最小${f1(r.min)}〜最大${f1(r.max)}、${r.src}) ${HIGH}fps以上の秒: ${over}/${r.hs.length}`,
+      bright: r.bright == null ? '?' : String(Math.round(r.bright)), num: r.avg,
+      series: r.hs.map((x) => Math.round(x.f)).join(','), brightSeries: r.hs.map((x) => (x.b == null ? '' : Math.round(x.b))).join(','),
+    });
+  }
+
+  function gridConds(base, caps, allRes) {
+    const comps = caps.exposureCompensation ? ['none', 'min', 'max'] : ['none'];
+    const isos = caps.iso ? ['none', 'mid', 'max'] : ['none'];
+    const modes = caps.exposureMode && caps.exposureMode.includes('continuous') ? ['none', 'continuous'] : ['none'];
+    const manual = caps.exposureMode && caps.exposureMode.includes('manual') && caps.exposureTime;
+    const ress = allRes ? ['640x480', '1280x720', '1920x1080'] : [base.res];
+    const other = base.fpsMode === 'ideal' ? 'exact' : 'ideal';
+    const out = [];
+    for (const res of ress) {
+      out.push({ res, fpsMode: other, comp: 'none', iso: 'none', mode: 'none', etime: 'none' }); // 比べるための、もう一方の指定
+      for (const comp of comps) for (const iso of isos) for (const mode of modes) out.push({ res, fpsMode: base.fpsMode, comp, iso, mode, etime: 'none' });
+      if (manual) for (const etime of ['8.3', '11.1']) out.push({ res, fpsMode: base.fpsMode, comp: 'none', iso: 'none', mode: 'manual', etime });
+    }
+    return out;
+  }
+  async function ensureCaps() {
+    if (st.caps) return;
+    await openCond(condNow());
+    await closeStream(false);
+  }
+
+  // ---- ボタン ----
+  const BTN = ['#btnOne', '#btnFive', '#btnSeries', '#btnGrid', '#btnLive', '#btnCaps', '#btnCopy', '#btnClear'];
+  const setBusy = (b) => BTN.forEach((id) => { $(id).disabled = b; });
+  async function guarded(fn, keepOpen) {
+    if (st.busy) return;
+    st.busy = true; st.abort = false; setBusy(true);
+    try { await fn(); } catch (err) { setStatus(`エラー: ${err && (err.name || '')} ${err && err.message || ''}`); console.error(err); } finally {
+      if (!keepOpen) await closeStream(false);
+      st.rec = null; st.busy = false; setBusy(false);
+      if (!st.abort && !keepOpen) setStatus('終わりました');
+      if (st.abort) setStatus('止めました');
+    }
+  }
+  $('#btnOne').onclick = () => guarded(async () => { await runOne(condNow(), { tag: '1回', settle: 3, secs: 5 }); });
+  $('#btnFive').onclick = () => guarded(async () => { await runFive(condNow()); });
+  $('#btnSeries').onclick = () => guarded(async () => { await runSeries(condNow()); });
+  $('#btnCaps').onclick = () => guarded(async () => { st.caps = null; await ensureCaps(); });
+  $('#btnLive').onclick = () => guarded(async () => {
+    const c = await openAndApply(condNow(), '見る');
+    if (c) setStatus('開いています。「止める」で閉じます(明るさ・fpsは1秒ごとに更新)');
+  }, true);
+  $('#btnGrid').onclick = () => guarded(async () => {
+    await ensureCaps();
+    const base = condNow(); const list = gridConds(base, st.caps || {}, $('#allRes').checked);
+    const total = list.length;
+    for (let i = 0; i < total && !st.abort; i++) {
+      setStatus(`総当たり ${i + 1}/${total}(約${Math.max(1, Math.round(((total - i) * 10.5) / 60))}分で終わります)`);
+      await runOne(list[i], { tag: `${i + 1}/${total}`, settle: 3, secs: 5 });
+    }
+  });
+  $('#btnStop').onclick = async () => {
+    st.abort = true;
+    if (!st.busy) { await closeStream(false); setStatus('止めました'); }
+  };
+  $('#btnClear').onclick = () => { st.results = []; keep(); $('#tbl tbody').innerHTML = ''; drawChart([]); };
+  $('#btnCopy').onclick = async () => {
+    const lines = ['MITORI 60fps安定テストの結果', st.device, `数え方: ${(st.cur && st.cur.sampler && st.cur.sampler.src) || (typeof MediaStreamTrackProcessor !== 'undefined' ? 'カメラ(MediaStreamTrackProcessor)' : '画面(requestVideoFrameCallback。画面の更新が上限)')}`, $('#caps').textContent, '',
+      '条件 | 取れた設定 | 実測fps | 明るさ(0〜255)'];
+    st.results.forEach((r) => {
+      lines.push(`${r.tag ? `[${r.tag}] ` : ''}${r.cond} | ${r.set} | ${r.fps} | ${r.bright}`);
+      if (r.series) { lines.push(`   1秒ごとのfps: ${r.series}`); lines.push(`   1秒ごとの明るさ: ${r.brightSeries}`); }
+    });
+    const text = lines.join('\n');
+    try { await navigator.clipboard.writeText(text); setStatus('コピーしました'); } catch (err) {
+      const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); setStatus('コピーしました'); } catch (e) { setStatus('コピーできませんでした。下の表を写してください'); }
+      ta.remove();
+    }
+  };
+  drawChart([]);
+})();
+</script>
+</body>
+</html>
