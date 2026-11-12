@@ -39,6 +39,7 @@
   <select id="fps" aria-label="fps">
     <option value="0">fps: 自動で調べる</option><option value="30">30fps</option><option value="60">60fps</option><option value="120">120fps</option><option value="240">240fps</option>
   </select>
+  <select id="stride" aria-label="読むコマ間隔"><option value="1">全コマ</option><option value="2">2コマに1つ(半分のfps)</option><option value="4">4コマに1つ(4分の1のfps)</option></select>
   <input type="text" id="who" placeholder="打った人" aria-label="打った人">
 </div>
 <video id="v" playsinline muted preload="auto"></video>
@@ -49,14 +50,14 @@
   <select id="rate" aria-label="再生の速さ"><option value="1">×1</option><option value="0.5">×0.5</option><option value="0.25" selected>×0.25</option><option value="0.1">×0.1</option></select>
 </div>
 <div class="row">
-  <button class="mark" data-mark="onset">起こり</button><button class="mark" data-mark="hit">打突</button><button class="mark" data-mark="end">打ち終わり</button>
+  <button class="mark" data-mark="onset">起こり</button><button class="mark" data-mark="hit">打突</button><button class="mark" data-mark="land">着地</button><button class="mark" data-mark="pull">引きつけ終わり</button><button class="mark" data-mark="end">打ち終わり</button>
   <select id="kind" aria-label="技"><option>面</option><option>小手</option><option>胴</option><option>その他</option></select>
   <select id="tempo" aria-label="速さ"><option value="">速さ: ―</option><option>速く</option><option>ゆっくり</option></select>
   <button id="next">この打突を確定</button>
 </div>
-<p class="note">キーボード: ←/→ で1コマ、Shift+←/→ で10コマ、スペースで再生・停止、1/2/3 で起こり/打突/打ち終わり、Enter で確定。</p>
+<p class="note">キーボード: ←/→ で1コマ、Shift+←/→ で10コマ、スペースで再生・停止、1〜5 で 起こり/打突/着地(踏み込み足)/引きつけ終わり(後ろ足が前足のそばに着く)/打ち終わり、Enter で確定。</p>
 
-<table><thead><tr><th>#</th><th>人</th><th>技</th><th>速さ</th><th>起こり</th><th>打突</th><th>打ち終わり</th><th>起こり→打突</th><th>起こり→打ち終わり</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+<table><thead><tr><th>#</th><th>人</th><th>技</th><th>速さ</th><th>起こり</th><th>打突</th><th>着地</th><th>引きつけ終わり</th><th>打ち終わり</th><th>起こり→打突</th><th>打突→引きつけ終わり</th><th>起こり→打ち終わり</th><th></th></tr></thead><tbody id="rows"></tbody></table>
 <div class="row"><button id="copy">表をコピー</button><button id="clear">この動画の記録を消す</button></div>
 <p class="note" id="status"></p>
 
@@ -64,31 +65,32 @@
 (() => {
   const $ = (s) => document.querySelector(s);
   const v = $('#v');
-  const st = { name: '', fps: 0, detected: 0, cur: { onset: null, hit: null, end: null }, rows: [] };
+  const st = { name: '', fps: 0, detected: 0, cur: { onset: null, hit: null, land: null, pull: null, end: null }, rows: [] };
   const key = () => `kendoVar.strikeLabel.${st.name}`;
   const save = () => { try { localStorage.setItem(key(), JSON.stringify(st.rows)); } catch (err) { /* 残せない端末は、この画面の間だけ */ } };
   const load = () => { try { st.rows = JSON.parse(localStorage.getItem(key()) || '[]'); } catch (err) { st.rows = []; } };
   const fps = () => Number($('#fps').value) || st.detected || 30;
   // コマ番号: 0始まり。コマの真ん中の時刻に合わせる(端の時刻だと、前のコマが出ることがある)
-  const frameOf = (t) => Math.floor(t * fps() + 1e-6);
-  const seekFrame = (n) => { n = Math.max(0, n); v.currentTime = (n + 0.5) / fps(); };
+  const stride = () => Number($('#stride').value) || 1; // 間引き読み: 120fpsの動画を、2コマに1つ・4コマに1つだけ見て、60・30fps相当で読む(動画は作らない。同じ打ちをfps別に読み比べるため)
+  const frameOf = (t) => Math.floor(Math.floor(t * fps() + 1e-6) / stride()) * stride();
+  const seekFrame = (n) => { n = Math.max(0, Math.round(n / stride()) * stride()); v.currentTime = (n + 0.5) / fps(); };
   const ms = (a, b) => (a == null || b == null ? '' : Math.round((b - a) * 1000 / fps()));
 
   function show() {
     const n = frameOf(v.currentTime);
     $('#frame').textContent = `${n} コマ`;
     $('#time').textContent = `${v.currentTime.toFixed(3)}秒`;
-    $('#fpsInfo').textContent = `${fps()}fps${$('#fps').value === '0' ? (st.detected ? '(自動)' : '(仮)') : ''}`;
+    $('#fpsInfo').textContent = `${fps()}fps${stride() > 1 ? `(${stride()}コマに1つ=${(fps() / stride()).toFixed(0)}fps相当)` : ''}${$('#fps').value === '0' ? (st.detected ? '(自動)' : '(仮)') : ''}`;
     document.querySelectorAll('[data-mark]').forEach((b) => {
       const f = st.cur[b.dataset.mark];
       b.classList.toggle('done', f != null);
-      b.textContent = `${{ onset: '起こり', hit: '打突', end: '打ち終わり' }[b.dataset.mark]}${f != null ? ` ${f}` : ''}`;
+      b.textContent = `${{ onset: '起こり', hit: '打突', land: '着地', pull: '引きつけ終わり', end: '打ち終わり' }[b.dataset.mark]}${f != null ? ` ${f}` : ''}`;
     });
   }
   function render() {
     $('#rows').innerHTML = st.rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.who || ''}</td><td>${r.kind}</td><td>${r.tempo || ''}</td>`
-      + `<td><button data-go="${r.onset}">${r.onset ?? '-'}</button></td><td><button data-go="${r.hit}">${r.hit ?? '-'}</button></td><td><button data-go="${r.end}">${r.end ?? '-'}</button></td>`
-      + `<td>${ms(r.onset, r.hit)}ms</td><td>${ms(r.onset, r.end)}ms</td><td><button data-del="${i}">消す</button></td></tr>`).join('');
+      + `<td><button data-go="${r.onset}">${r.onset ?? '-'}</button></td><td><button data-go="${r.hit}">${r.hit ?? '-'}</button></td><td><button data-go="${r.land}">${r.land ?? '-'}</button></td><td><button data-go="${r.pull}">${r.pull ?? '-'}</button></td><td><button data-go="${r.end}">${r.end ?? '-'}</button></td>`
+      + `<td>${ms(r.onset, r.hit)}ms</td><td>${ms(r.hit, r.pull)}ms</td><td>${ms(r.onset, r.end)}ms</td><td><button data-del="${i}">消す</button></td></tr>`).join('');
     $('#rows').querySelectorAll('[data-go]').forEach((b) => b.onclick = () => { const n = Number(b.dataset.go); if (!Number.isNaN(n)) { v.pause(); seekFrame(n); } });
     $('#rows').querySelectorAll('[data-del]').forEach((b) => b.onclick = () => { st.rows.splice(Number(b.dataset.del), 1); save(); render(); });
   }
@@ -114,13 +116,14 @@
 
   $('#file').onchange = (e) => {
     const f = e.target.files[0]; if (!f) return;
-    st.name = `${f.name}:${f.size}`; st.detected = 0; st.cur = { onset: null, hit: null, end: null };
+    st.name = `${f.name}:${f.size}`; st.detected = 0; st.cur = { onset: null, hit: null, land: null, pull: null, end: null };
     v.src = URL.createObjectURL(f);
     v.onloadeddata = () => { load(); render(); show(); if ($('#fps').value === '0') detectFps(); };
     $('#status').textContent = `開きました: ${f.name}(${(f.size / 1e6).toFixed(1)}MB)`;
   };
   $('#fps').onchange = () => show();
-  document.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { v.pause(); seekFrame(frameOf(v.currentTime) + Number(b.dataset.step)); });
+  $('#stride').onchange = () => { v.pause(); seekFrame(frameOf(v.currentTime)); show(); };
+  document.querySelectorAll('[data-step]').forEach((b) => b.onclick = () => { v.pause(); seekFrame(frameOf(v.currentTime) + Number(b.dataset.step) * stride()); });
   $('#play').onclick = () => { if (v.paused) { v.playbackRate = Number($('#rate').value); v.play(); } else v.pause(); };
   $('#rate').onchange = () => { v.playbackRate = Number($('#rate').value); };
   v.addEventListener('play', () => { $('#play').textContent = '停止'; });
@@ -128,15 +131,16 @@
   v.addEventListener('timeupdate', show); v.addEventListener('seeked', show);
   document.querySelectorAll('[data-mark]').forEach((b) => b.onclick = () => { v.pause(); const k = b.dataset.mark; const n = frameOf(v.currentTime); st.cur[k] = st.cur[k] === n ? null : n; show(); });
   function commit() {
-    const c = st.cur; if (c.onset == null && c.hit == null && c.end == null) return;
-    st.rows.push({ who: $('#who').value.trim(), kind: $('#kind').value, tempo: $('#tempo').value, onset: c.onset, hit: c.hit, end: c.end, fps: fps() });
-    st.cur = { onset: null, hit: null, end: null }; save(); render(); show();
+    const c = st.cur; if (['onset', 'hit', 'land', 'pull', 'end'].every((k) => c[k] == null)) return;
+    st.rows.push({ who: $('#who').value.trim(), kind: $('#kind').value, tempo: $('#tempo').value, stride: stride(), onset: c.onset, hit: c.hit, land: c.land, pull: c.pull, end: c.end, fps: fps() });
+    st.cur = { onset: null, hit: null, land: null, pull: null, end: null }; save(); render(); show();
   }
   $('#next').onclick = commit;
   $('#copy').onclick = async () => {
-    const head = ['動画', '人', '技', '速さ', 'fps', '起こり(コマ)', '打突(コマ)', '打ち終わり(コマ)', '起こり→打突(ms)', '起こり→打ち終わり(ms)'].join('\t');
-    const body = st.rows.map((r) => [st.name.split(':')[0], r.who, r.kind, r.tempo, r.fps, r.onset ?? '', r.hit ?? '', r.end ?? '',
-      r.onset != null && r.hit != null ? Math.round((r.hit - r.onset) * 1000 / r.fps) : '', r.onset != null && r.end != null ? Math.round((r.end - r.onset) * 1000 / r.fps) : ''].join('\t'));
+    const head = ['動画', '人', '技', '速さ', 'fps', '間引き(コマに1つ)', '読んだfps相当', '起こり(コマ)', '打突(コマ)', '着地(コマ)', '引きつけ終わり(コマ)', '打ち終わり(コマ)', '起こり→打突(ms)', '打突→着地(ms)', '打突→引きつけ終わり(ms)', '起こり→打ち終わり(ms)'].join('\t');
+    const d = (r, a, b) => (r[a] != null && r[b] != null ? Math.round((r[b] - r[a]) * 1000 / r.fps) : '');
+    const body = st.rows.map((r) => [st.name.split(':')[0], r.who, r.kind, r.tempo, r.fps, r.stride || 1, (r.fps / (r.stride || 1)).toFixed(1), r.onset ?? '', r.hit ?? '', r.land ?? '', r.pull ?? '', r.end ?? '',
+      d(r, 'onset', 'hit'), d(r, 'hit', 'land'), d(r, 'hit', 'pull'), d(r, 'onset', 'end')].join('\t'));
     const text = [head, ...body].join('\n');
     try { await navigator.clipboard.writeText(text); $('#status').textContent = `コピーしました(${st.rows.length}本)`; }
     catch (err) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); $('#status').textContent = 'コピーしました'; } catch (e) { $('#status').textContent = 'コピーできませんでした'; } ta.remove(); }
@@ -145,10 +149,10 @@
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     const step = e.shiftKey ? 10 : 1;
-    if (e.key === 'ArrowRight') { v.pause(); seekFrame(frameOf(v.currentTime) + step); e.preventDefault(); }
-    else if (e.key === 'ArrowLeft') { v.pause(); seekFrame(frameOf(v.currentTime) - step); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { v.pause(); seekFrame(frameOf(v.currentTime) + step * stride()); e.preventDefault(); }
+    else if (e.key === 'ArrowLeft') { v.pause(); seekFrame(frameOf(v.currentTime) - step * stride()); e.preventDefault(); }
     else if (e.key === ' ') { $('#play').click(); e.preventDefault(); }
-    else if (e.key === '1' || e.key === '2' || e.key === '3') document.querySelector(`[data-mark="${['onset', 'hit', 'end'][Number(e.key) - 1]}"]`).click();
+    else if (['1', '2', '3', '4', '5'].includes(e.key)) document.querySelector(`[data-mark="${['onset', 'hit', 'land', 'pull', 'end'][Number(e.key) - 1]}"]`).click();
     else if (e.key === 'Enter') commit();
   });
   show();
