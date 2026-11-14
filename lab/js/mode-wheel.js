@@ -30,6 +30,11 @@ function diamond(fill) {
     + `<path d="${d}" fill="rgba(255,255,255,.16)" stroke="rgba(255,255,255,.6)" stroke-width="2.5"/><path d="${d}" fill="#fff" clip-path="url(#${id})"/></svg>`;
 }
 const person = (x, op) => `<g transform="translate(${x} 52) scale(1.25)" opacity="${op}"><circle cx="0" cy="-13" r="6" fill="${NAVY}"/><rect x="-7.5" y="-4" width="15" height="27" rx="7.5" fill="${NAVY}"/></g>`;
+// 録画中・ディレイ中は、その働きの「止める」が真ん中(主役)。VARは横の小さなボタンへ(中山さん 2026-11-14)
+const SHAPE_ON = {
+  rec: (t) => `<svg viewBox="0 0 88 88" width="88" height="88" aria-hidden="true"><circle cx="44" cy="44" r="40" fill="none" stroke="#fff" stroke-width="6"/><circle cx="44" cy="44" r="31" fill="#d6231b"/><rect x="33" y="24" width="22" height="22" rx="4" fill="#fff"/><text class="mw-t" x="44" y="69" text-anchor="middle" font-size="15" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">${t}</text></svg>`,
+  delay: (sec) => `<svg viewBox="0 0 100 100" width="86" height="86" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="26" fill="#fff"/><rect x="38" y="20" width="24" height="24" rx="4" fill="${NAVY}"/><text x="50" y="74" text-anchor="middle" font-size="22" font-weight="800" fill="${NAVY}" font-family="system-ui,sans-serif">${sec}秒</text></svg>`,
+};
 const SHAPE = {
   rec: () => '<svg viewBox="0 0 88 88" width="88" height="88" aria-hidden="true"><circle cx="44" cy="44" r="40" fill="none" stroke="#fff" stroke-width="6"/><circle cx="44" cy="44" r="31" fill="#d6231b"/></svg>',
   delay: () => `<svg viewBox="0 0 100 100" width="86" height="86" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="26" fill="#fff"/>${person(40, 0.3)}${person(60, 1)}</svg>`,
@@ -64,16 +69,17 @@ function init() {
   root.innerHTML = `<div class="mw-zone"></div>
     <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
     <button type="button" class="mw-ic mw-flip" id="mwFlip" aria-label="カメラを切り替え" hidden></button>
-    <div class="mw-slot dl" hidden><button type="button" class="bx dly" aria-label="ディレイを止める">${stopIcon('#fff')}</button><span class="lb"></span></div>
-    <div class="mw-slot rc" hidden><button type="button" class="bx rec" aria-label="録画を止める">${stopIcon('#d6231b')}</button><span class="lb"></span></div>
+    <div class="mw-slot dl" hidden><button type="button" class="bx vrb" aria-label="ディレイ"><div class="shape"></div></button><span class="lb"></span></div>
+    <div class="mw-slot rc" hidden><button type="button" class="bx vrb" aria-label="録画"><div class="shape"></div></button><span class="lb"></span></div>
+    <div class="mw-slot vr" hidden><button type="button" class="bx vrb" aria-label="VAR"><div class="shape"></div></button><span class="lb">VAR</span></div>
     <button type="button" class="mw-main" aria-label="VAR"><div class="shape"></div></button>
     <div class="mw-wheel" role="listbox" aria-label="モード"></div>
     <div class="mw-note" role="status"></div>
     <img class="mw-logo" src="icons/logo-mitori-onscreen.png" alt="MITORI" draggable="false">`;
   area.appendChild(root);
   const q = (s) => $(s, root);
-  const wheel = q('.mw-wheel'); const main = q('.mw-main'); const shape = q('.shape'); const secs = q('.mw-secs');
-  const slotDl = q('.mw-slot.dl'); const slotRc = q('.mw-slot.rc'); const note = q('.mw-note');
+  const wheel = q('.mw-wheel'); const main = q('.mw-main'); const shape = q('.mw-main .shape'); const secs = q('.mw-secs');
+  const slotDl = q('.mw-slot.dl'); const slotRc = q('.mw-slot.rc'); const slotVr = q('.mw-slot.vr'); const note = q('.mw-note');
 
   const st = { pos: 1, rec: false, delay: false, recT: 0, delaySec: 10, open: false };
   let cur = -1; let userTurn = false; let pending = null; let wasFull = false;
@@ -114,11 +120,14 @@ function init() {
   // ---- 描き直し ----
   function renderShape() {
     const k = MODES[cur].k;
-    shape.innerHTML = k === 'var' ? diamond(fillNow()) : SHAPE[k]();
-    main.setAttribute('aria-label', MODES[cur].lb);
-    main.classList.toggle('dim', k === 'var' && st.delay);
+    if (k === 'rec' && st.rec) shape.innerHTML = SHAPE_ON.rec(fmt(Date.now() - st.recT));
+    else if (k === 'delay' && st.delay) shape.innerHTML = SHAPE_ON.delay(delaySec());
+    else shape.innerHTML = k === 'var' ? diamond(fillNow()) : SHAPE[k]();
+    main.setAttribute('aria-label', k === 'rec' && st.rec ? '録画を止める' : k === 'delay' && st.delay ? 'ディレイを止める' : MODES[cur].lb);
+    main.classList.remove('dim'); // ディレイ中もVARを使える(2026-11-06の仕組み。止めを外した 2026-11-14)
   }
   function fillNow() {
+    if (st.delay) return 1; // ディレイ中は、ディレイ用にためている動画からVARで戻れる(2026-11-06の仕組み)
     try {
       const frames = app.recorder.getFrames(app.cameraLink.activeSource);
       if (frames.length < 2) return 0;
@@ -126,6 +135,7 @@ function init() {
     } catch (err) { return 0; }
   }
   function updateFill() {
+    if (!slotVr.hidden) { const r2 = slotVr.querySelector('.mw-fillclip'); const f2 = fillNow(); if (r2) { r2.setAttribute('y', 100 - f2 * 100); r2.setAttribute('height', f2 * 100); } }
     if (MODES[cur].k !== 'var') return;
     const f = fillNow(); const r = shape.querySelector('.mw-fillclip');
     if (r) { r.setAttribute('y', 100 - f * 100); r.setAttribute('height', f * 100); }
@@ -135,7 +145,7 @@ function init() {
   }
   function renderSecs() {
     const k = MODES[cur].k;
-    if (k === 'rec' || (k === 'var' && st.delay)) { secs.innerHTML = ''; return; } // ディレイ中はVARが使えないので、VARの秒数は出さない(左上の帯とも重ならない)
+    if (k === 'rec' || (k === 'var' && st.delay) || (k === 'delay' && st.delay)) { secs.innerHTML = ''; return; } // ディレイ中はVARが使えないので、VARの秒数は出さない(左上の帯とも重ならない)
     const opts = k === 'var' ? rewindBtns().map(secOf) : delayOpts();
     if (!opts.length) { secs.innerHTML = ''; return; }
     const curV = k === 'var' ? rewindSec() : delaySec();
@@ -149,10 +159,29 @@ function init() {
       st.open = false; renderSecs(); fixBand(); updateSlots();
     }; });
   }
+  // ボタンはホイールの輪に乗る: 真ん中=選んだモード、左(横向きは上)=輪の1つ前、右(横向きは下)=輪の1つ後。3つとも1タップで始める・止める(案B'。中山さん 2026-11-14)
+  const SLOT = { rec: () => slotRc, delay: () => slotDl, var: () => slotVr };
+  const sideKeys = () => ({ prev: MODES[mod3(cur - 1)].k, next: MODES[mod3(cur + 1)].k });
+  const slotSig = {};
   function updateSlots() {
-    slotRc.hidden = !st.rec; slotDl.hidden = !st.delay;
-    if (st.rec) slotRc.querySelector('.lb').innerHTML = `<span class="mw-blink">●</span> ${fmt(Date.now() - st.recT)}`;
-    if (st.delay) slotDl.querySelector('.lb').textContent = `${delaySec()}秒`;
+    const k = MODES[cur] ? MODES[cur].k : '';
+    for (const key of ['rec', 'delay', 'var']) {
+      const el = SLOT[key](); const show = key !== k;
+      if (el.hidden === show) { el.hidden = !show; slotSig[key] = ''; }
+      if (!show) continue;
+      const on = key === 'rec' ? st.rec : key === 'delay' ? st.delay : false;
+      const sig = `${on}`;
+      const sh = el.querySelector('.shape'); const bx = el.querySelector('.bx'); const lb = el.querySelector('.lb');
+      if (slotSig[key] !== sig) {
+        slotSig[key] = sig;
+        sh.innerHTML = key === 'var' ? diamond(fillNow()) : on ? SHAPE_ON[key](key === 'rec' ? fmt(Date.now() - st.recT) : delaySec()) : SHAPE[key]();
+        bx.setAttribute('aria-label', key === 'var' ? 'VAR' : `${MODES.find((m) => m.k === key).lb}${on ? 'を止める' : 'を始める'}`);
+      }
+      if (key === 'rec') { lb.innerHTML = on ? `<span class="mw-blink">●</span> ${fmt(Date.now() - st.recT)}` : '録画'; const t = sh.querySelector('.mw-t'); if (t) t.textContent = fmt(Date.now() - st.recT); }
+      else if (key === 'delay') lb.textContent = on ? `${delaySec()}秒 止める` : 'ディレイ';
+      else lb.textContent = 'VAR';
+    }
+    if (k === 'rec' && st.rec) { const t = shape.querySelector('.mw-t'); if (t) t.textContent = fmt(Date.now() - st.recT); }
   }
   function renderAll() { renderShape(); renderSecs(); updateSlots(); drawWheel(); fixBand(); }
 
@@ -190,6 +219,7 @@ function init() {
     }
     renderShape(); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
     renderSecs(); updateSlots();
+    for (const el of [slotRc, slotDl, slotVr]) if (!el.hidden) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
   }
   let anim = null;
   function snapTo(target, D = 380) {
@@ -202,7 +232,7 @@ function init() {
       if (t < 1) anim = requestAnimationFrame(f); else { st.pos = target; drawWheel(); }
     })(t0);
   }
-  const nearestVar = () => { const base = Math.round(st.pos); for (const c of [base - 1, base, base + 1]) if (mod3(c) === 1) return c; return base; };
+  const nearestPos = (idx) => { const base = Math.round(st.pos); for (const c of [base - 1, base, base + 1]) if (mod3(c) === idx) return c; return base; };
 
   // 回す(縦向き=左右、横向き=上下)。タップは、その名前へ回す
   let drag = null;
@@ -241,7 +271,6 @@ function init() {
   main.addEventListener('click', () => {
     const k = MODES[cur].k;
     if (k === 'var') {
-      if (st.delay) { showNote('ディレイ中はVARを使えません(試験)'); return; }
       const b = $('#btnRewind'); if (b) b.click();
       return;
     }
@@ -257,7 +286,9 @@ function init() {
     }
   });
   slotRc.querySelector('.bx').addEventListener('click', () => { const b = labRec(); if (b) b.click(); });
-  slotDl.querySelector('.bx').addEventListener('click', () => { const x = $('#btnDelayExit'); if (x) x.click(); });
+  const startDelay = () => { const t = delayBtns().find((b) => secOf(b) === delaySec()); if (t) t.click(); };
+  slotVr.querySelector('.bx').addEventListener('click', () => { const b = $('#btnRewind'); if (b) b.click(); });
+  slotDl.querySelector('.bx').addEventListener('click', () => { if (st.delay) { const x = $('#btnDelayExit'); if (x) x.click(); } else startDelay(); });
   q('#mwGear').addEventListener('click', () => { const b = $('#btnSettings'); if (b) b.click(); });
   // 一覧ボタンは、録画の一覧だけを出す(最長・録画開始は出さない。録画はホイールから始める)。⚙の「録画の一覧と設定」から開いたときは今までどおり
   q('#mwList').addEventListener('click', () => { const b = $('#btnOpenRecList'); if (b) { document.body.classList.add('mw-listonly'); const sh = $('#labSheet'); const hd = sh && sh.querySelector('.help-sheet-handle'); if (hd && !sh.querySelector('.mw-sheet-title')) hd.insertAdjacentHTML('afterend', '<p class="mw-sheet-title">録画の一覧</p>'); b.click(); } });
@@ -293,16 +324,20 @@ function init() {
     let changed = false;
     if (rec !== st.rec) { st.rec = rec; if (rec) st.recT = Date.now(); changed = true; if (rec && pending && pending.key === 'rec') startFly('rec'); }
     if (del !== st.delay) { st.delay = del; changed = true; if (del && pending && pending.key === 'delay') startFly('delay'); }
-    area.classList.toggle('mw-idle', !(rec && del)); // 録画+ディレイの両方をしている間だけ、←・カメラを映像の左下へ。それ以外は真ん中のボタンの横(CSS)
-    area.classList.toggle('mw-r', rec && !del); area.classList.toggle('mw-d', del && !rec);
+    // 真ん中の両横はいつもモードのボタン(案B')なので、カメラを追加などは、いつも録画+ディレイのときと同じ置き方(映像の左下)
+    area.classList.toggle('mw-idle', false); area.classList.remove('mw-r', 'mw-d');
     if (pending && Date.now() - pending.t > 4000) pending = null;
-    if (changed) renderAll(); else { updateSlots(); updateFill(); fixAll(); }
+    if (changed) {
+      renderAll();
+      // 真ん中にしていた働きが終わっても、そのモードのまま(録画を止めたら録画ボタン。中山さん 2026-11-14)
+    } else { updateSlots(); updateFill(); fixAll(); }
   }
   function startFly(key) {
     pending = null;
-    const slot = key === 'rec' ? slotRc : slotDl; const lb = key === 'rec' ? '録画' : 'ディレイ';
+    // 始めた働きが、そのまま真ん中の「止める」になる(横へ飛ばさない。VARは小さな横のボタンへ。中山さん 2026-11-14)
+    snapTo(nearestPos(key === 'rec' ? 2 : 0), 200);
     renderAll();
-    flyTo(lb, slot, () => { slot.classList.remove('pop'); void slot.offsetWidth; slot.classList.add('pop'); snapTo(nearestVar(), 480); });
+    main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   }
   // ---- 配置: 画面の大きさとカメラの縦横比から、映像とボタンの場所・大きさを決める(モック「撮影画面の配置モック」2026-11-05) ----
   // 縦向き: 映像は上にいっぱい(縦横比のまま)。残りの高さで真ん中のボタンを 88〜120px。下の帯は最低210px(足りなければ映像を小さく)
@@ -344,7 +379,7 @@ function init() {
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip, logo];
+    const all = [stage, main, wheel, slotRc, slotDl, slotVr, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip, logo];
     if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
@@ -375,19 +410,19 @@ function init() {
       px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
       px(wheel, 0, wheelY, W, 48);
       const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
-      px(slotDl, 14, boxY, 76, 78); px(slotRc, W - 90, boxY, 76, 78);
+      { const sk = sideKeys(); px(SLOT[sk.prev](), 14, boxY, 76, 78); px(SLOT[sk.next](), W - 90, boxY, 76, 78); }
       clear(secs); clear(topRow);
       // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
       // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
       if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none' });
       // アプリ名(ロゴ)は、映像の上の紺の帯の中、←の右に小さく(中山さん 2026-11-07。依頼 2026-11-07-to-tech-app-name-on-screen.md)。←が出ていないときは左端から
       { const backOn = backBtn && getComputedStyle(backBtn).display !== 'none'; px(logo, backOn ? 58 : 14, safe().t + 8 + (48 - LOGO_H) / 2, null, null); }
-      if (!both && flipOn) px(flip, st.delay ? W - 20 - side : 20, sideY, side, side, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
-      flip.classList.toggle('mw-big', !both);
-      camCorner = both || (flipOn && (st.rec || st.delay));
-      if (camBtn) { if (camCorner) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)', minWidth: '56px', borderRadius: '16px' }); else px(camBtn, st.rec ? 20 : W - 20 - side, sideY, side, side); }
+      // 真ん中の両横は、いつもモードのボタン(案B')。自撮りは映像の右下、カメラを追加は映像の左下
+      flip.classList.toggle('mw-big', false);
+      camCorner = true;
+      if (camBtn) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)', minWidth: '56px', borderRadius: '16px' });
       root.style.setProperty('--mw-bx', '56px');
-      placeZoom(vx, vw, vb, both, both);
+      placeZoom(vx, vw, vb, true, true);
     } else {
       askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar; vx = 0;
@@ -400,8 +435,7 @@ function init() {
       const bx = H < 380 ? 52 : 56; root.style.setProperty('--mw-bx', `${bx}px`);
       const scx = mx + m / 2;
       px(wheel, W - 8 - wheelW, H / 2 - 84, wheelW, 168);
-      px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 24);
-      px(slotDl, scx - 38, my + m + 14, 76, bx);
+      { const sk = sideKeys(); px(SLOT[sk.prev](), scx - 38, my - 14 - 20 - bx, 76, bx + 20); px(SLOT[sk.next](), scx - 38, my + m + 10, 76, bx + 20); }
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
       clear(secs);
       // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
@@ -410,15 +444,15 @@ function init() {
       if (bandsEl) bandsEl.style.left = backShown ? `${52 + safe().l}px` : '';
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
-      landFlipSide = flipOn && !st.rec && !st.delay;
+      landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
       // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
       px(logo, scx - logo.offsetWidth / 2, 16 + safe().t, null, null);
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
-      camCorner = both;
-      if (camBtn) { if (both) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' }); else px(camBtn, scx - 32, st.delay ? my - 14 - 64 : my + m + 14, 64, 64); }
+      camCorner = true;
+      if (camBtn) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' });
       root.classList.toggle('mw-over', over);
-      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, both, flipOn && !landFlipSide);
+      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, true, flipOn);
     }
     if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);
@@ -428,8 +462,8 @@ function init() {
   setInterval(() => { sync(); fit(); }, 250);
   landMq.addEventListener('change', () => { drawWheel(); fit(); });
 
-  // アプリを開いたときは、必ずVARから
-  st.pos = 1; drawWheel(); renderAll(); fit();
+  // アプリを開いたときは、必ずディレイから(VARは使われ始めるまで時間がかかる前提。中山さん 2026-11-14)
+  st.pos = 0; drawWheel(); renderAll(); fit();
 }
 
 if (window.kendoVarApp) init();

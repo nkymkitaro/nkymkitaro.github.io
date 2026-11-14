@@ -206,7 +206,6 @@ body.mode-monitor #monitorArea:not(.replaying) #displayCanvas { object-position:
   .mw-wheel .m { width: 48px; height: 48px; margin: -24px 0 0 0; }
   .mw-wheel .m b { font-size: 13px; }
   .mw-wheel .m b svg { display: block; }
-  .mw-slot.dl .lb { display: none; }
   .mw-slot .lb { height: 16px; }
 }
 @media (max-width: 380px) { .mw .mw-top .mw-chip.closed button.sel { min-width: 52px; padding: 0 8px; } }
@@ -248,3 +247,11 @@ body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.rec { border: 3px so
 body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.dly { border: 3px solid #fff; }
 /* アプリ名(ロゴ)。地味に、ただし読める(マーク18px+文字13px、不透明度55%)。押せない・動かない。映像の外に置く(位置は fit()) */
 .mw .mw-logo { position: absolute; height: 18px; width: auto; opacity: .55; pointer-events: none !important; user-select: none; -webkit-user-drag: none; }
+
+/* 録画中・ディレイ中は、その働きの「止める」が真ん中。VARは横の小さな菱形(中山さん 2026-11-14) */
+.mw-slot .bx.vrb svg { width: 100%; height: 100%; }
+body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.vrb { background: transparent; border-radius: 0; box-shadow: none; border: 0; }
+.mw-slot.vr .lb { display: block; }
+/* 3つのボタンが輪に乗る(案B' 2026-11-14): 横のボタンも絵のまま。止める枠の丸い線は使わない */
+body.mode-monitor #monitorArea:not(.replaying) .mw-slot .bx.vrb { border: 0; }
+.mw-slot .lb { display: block; }
