@@ -149,7 +149,7 @@ function createBandOverlay({ bandId, compute, subEl }) {
 // ===========================================================================
 async function initParent(app) {
   const store = await new LabStore('kendoVarLab').open();
-  await store.purgeHidden(); // 「元に戻す」の前にアプリが閉じた録画は、ここで本当に消す
+  // 「消す」は、隠すだけ。「最近消した項目」に残り、自分で「完全に消す」を押すまで消えない(2026-11-14、中山さんの指示。勝手に消さない)
   await store.markPartials(null); // 終わりまでたどり着かなかった録画に「途中まで」の印を付ける
   const { cameraLink } = app;
   const capture = new LocalCapture({
@@ -201,7 +201,9 @@ async function initParent(app) {
       </div>
       <p class="lab-note lab-unsaved-note" id="labUnsavedNote" hidden>保存を押すと、スマホに残ります。</p>
       <p class="lab-note" id="labListNote" hidden>映像はこのスマホの中にあります。</p>
+      <p class="lab-note" id="labTrashNote" hidden>消した録画は、ここにあります。「元に戻す」か、「完全に消す」(消すとスマホからも消えます)を選べます。</p>
       <ul class="lab-takes" id="labTakes"></ul>
+      <button type="button" class="lab-link" id="labTrashLink" hidden></button>
       <div class="lab-foot">
         ${isLab ? '<button type="button" class="lab-link" id="labOpenTest">試験用</button>' : ''}
         <button type="button" class="btn-hero lab-close" id="labCloseSheet">閉じる</button>
@@ -505,18 +507,18 @@ async function initParent(app) {
   const listLink = document.getElementById('btnOpenRecList');
   if (listLink) listLink.addEventListener('click', () => { document.getElementById('btnCloseSettings').click(); setSheet('main'); });
   el('#labStart').addEventListener('click', startRec);
+  el('#labTrashLink').addEventListener('click', () => { showTrash = !showTrash; takesSig = ''; render(); });
 
   // ---- 録画の一覧: 消す(10秒は元に戻せる) ----
   let pending = null; // { ids:[], timer }
-  async function commitPending() {
+  async function commitPending() { // 「元に戻す」の受付を終えるだけ。録画は消さない(「最近消した項目」に残る)
     if (!pending) return;
     const p = pending; pending = null;
     clearTimeout(p.timer);
-    for (const id of p.ids) { try { await store.deleteTake(id); } catch (err) { /* 無視 */ } }
   }
   const undoEl = el('#labUndo');
   function hideUndo() { undoEl.classList.remove('show'); }
-  async function removeTakes(ids, text = '消しました') {
+  async function removeTakes(ids, text = '消しました。最近消した項目に残ります') {
     await commitPending(); // 前の「消す」は、ここで確定する
     for (const id of ids) await store.hideTake(id);
     pending = { ids, timer: setTimeout(async () => { hideUndo(); await commitPending(); takesSig = ''; render(); }, UNDO_MS) };
@@ -805,26 +807,34 @@ async function initParent(app) {
     const ids = (await store.listTakes()).filter((x) => !x.hiddenAt).map((x) => x.id);
     if (!ids.length) { showToast('消す録画はありません'); return; }
     setSheet(null);
-    await removeTakes(ids, 'すべて消しました');
+    await removeTakes(ids, 'すべて消しました。最近消した項目に残ります');
   });
   el('#optAudioCam').addEventListener('change', () => { viewer.audioCamSetting = el('#optAudioCam').value; });
 
   // ---- 画面の更新 ----
   let takesSig = '';
+  let showTrash = false; // 「最近消した項目」を見ているか
   let renderBusy = false;
   async function renderTakes() {
-    const list = (await store.listTakes()).filter((x) => !x.hiddenAt);
+    const all = await store.listTakes();
+    const trashCount = all.filter((x) => x.hiddenAt).length;
+    if (!trashCount) showTrash = false; // 空になったら、一覧へ戻る
+    const list = all.filter((x) => (showTrash ? !!x.hiddenAt : !x.hiddenAt));
     const cur = take();
-    const sig = JSON.stringify([list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.savedAt, !!t.partial, !!t.gaveUp, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting(), !!making]);
+    const sig = JSON.stringify([showTrash, trashCount, list.map((t) => [t.id, t.stoppedAt, t.collectedAt, !!t.savedAt, !!t.partial, !!t.gaveUp, Object.keys(t.cams || {}).length]), [...savingIds], cur && cur.id, isCollecting(), !!making]);
     if (sig === takesSig) return;
     takesSig = sig;
+    const trashLink = el('#labTrashLink');
+    trashLink.hidden = !trashCount;
+    trashLink.textContent = showTrash ? '録画の一覧にもどる' : `最近消した項目(${trashCount})`;
+    el('#labTrashNote').hidden = !showTrash;
     const sizes = new Map();
     for (const t of list) sizes.set(t.id, (await store.listByTake(t.id)).reduce((a, s) => a + (s.size || 0), 0));
     const ul = el('#labTakes');
     ul.innerHTML = '';
-    el('#labListNote').hidden = !list.length;
+    el('#labListNote').hidden = !list.length || showTrash;
     const isUnsaved = (t) => !!t.stoppedAt && !t.savedAt && !(cur && cur.id === t.id && isCollecting());
-    el('#labUnsavedNote').hidden = !list.some(isUnsaved);
+    el('#labUnsavedNote').hidden = showTrash || !list.some(isUnsaved);
     list.forEach((t) => {
       const li = document.createElement('li');
       li.dataset.take = t.id;
@@ -850,10 +860,22 @@ async function initParent(app) {
         row.append(
           mk(ICON.play, '見る', () => openViewer(t.id)),
           mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, isUnsaved(t)),
-          mk(ICON.trash, '消す', () => removeTakes([t.id])),
+          showTrash ? mk(ICON.trash, '戻す', async () => { await store.unhideTake(t.id); takesSig = ''; render(); }, false, true) : mk(ICON.trash, '消す', () => removeTakes([t.id])),
         );
+        let trashDel = null;
+        if (showTrash) {
+          trashDel = document.createElement('button');
+          trashDel.type = 'button'; trashDel.className = 'lab-resume'; trashDel.innerHTML = iconText(ICON.trash, '完全に消す');
+          trashDel.addEventListener('click', async () => {
+            if (!trashDel.dataset.sure) { trashDel.dataset.sure = '1'; trashDel.classList.add('lab-sure'); trashDel.innerHTML = iconText(ICON.trash, 'もう一度押すと、完全に消えます'); setTimeout(() => { if (trashDel.isConnected) { takesSig = ''; render(); } }, 4000); return; }
+            try { await store.deleteTake(t.id); } catch (err) { /* 無視 */ }
+            takesSig = ''; render();
+          });
+          attachPress(trashDel, { vibrate: 30 });
+        }
         if (canShareVideoFiles()) row.insertBefore(mk(ICON.share, '共有', () => shareTake(t), savingIds.has(t.id) || !!making), row.lastChild);
         li.appendChild(row);
+        if (trashDel) li.appendChild(trashDel);
         if (t.gaveUp) {
           const r = document.createElement('button');
           r.type = 'button'; r.className = 'lab-resume'; r.innerHTML = iconText(ICON.save, '続きを受信');

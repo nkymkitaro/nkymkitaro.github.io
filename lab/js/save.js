@@ -106,7 +106,9 @@ export async function deliverFiles(files, { title = 'MITORI', mode = 'auto' } = 
     a.style.display = 'none';
     document.body.appendChild(a); a.click();
     await new Promise((r) => setTimeout(r, 600));
-    a.remove(); URL.revokeObjectURL(url);
+    a.remove();
+    // ダウンロードが読み終わる前にデータを解放すると、大きいファイルが保存に失敗する(2026-11-14 の実機)。長めに待ってから解放する
+    setTimeout(() => URL.revokeObjectURL(url), 10 * 60 * 1000);
   }
   return 'downloaded';
 }
