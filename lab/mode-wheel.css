@@ -4,7 +4,7 @@
 :root { --mw-n9: #0c1636; --mw-shade: #2c4aa0; --mw-skew: -14deg; --mw-main: 100px; --mw-wheel-w: 112px; }
 
 /* 元の下の操作・上の行は隠し、ホイールに置き換える(働きは、元のボタンを押して使う) */
-body.mode-monitor #monitorArea .primary-actions,
+body.mode-monitor #monitorArea:not(.replaying) .primary-actions,
 body.mode-monitor #monitorArea .var-hint,
 body.mode-monitor #monitorArea .delay-exit { display: none !important; } /* ディレイを止めるのは、横の枠の■(元の×は、押して使うだけ) */
 

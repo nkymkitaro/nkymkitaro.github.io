@@ -922,6 +922,20 @@ function enterVar() {
   enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
   setReplayUI(true, { newVar: true });
 }
+// Androidの「戻る」(画面下の◀・スワイプ)で、ページを離れずにLIVEに戻る。VARの再生中だけ、履歴を1つ積んでおく(2026-11-14)
+(() => {
+  const area = document.getElementById('monitorArea');
+  if (!area || !window.history || !history.pushState) return;
+  let pushed = false;
+  new MutationObserver(() => {
+    const rep = area.classList.contains('replaying');
+    if (rep && !pushed) { try { history.pushState({ mitoriVar: 1 }, ''); pushed = true; } catch (err) { /* 積めない環境は、今までどおり */ } }
+    else if (!rep && pushed) { pushed = false; if (history.state && history.state.mitoriVar) history.back(); } // ボタンで戻ったときは、積んだ分を外す
+  }).observe(area, { attributes: true, attributeFilter: ['class'] });
+  window.addEventListener('popstate', () => {
+    if (pushed && area.classList.contains('replaying')) { pushed = false; document.getElementById('btnGoLive').click(); }
+  });
+})();
 document.getElementById('btnGoLive').addEventListener('click', () => {
   // 押し間違いに備えて、見ていた場面を少しの間だけ控えておく
   const point = player.getResumePoint();
