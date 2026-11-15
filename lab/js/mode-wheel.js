@@ -175,8 +175,9 @@ function init() {
     // 右: ディレイの止める(なければ隠して、自撮りをその席に)
     { const el = slotDl; const d = seatDel(); el.hidden = !d;
       if (d) { const sh = el.querySelector('.shape'); const lb = el.querySelector('.lb');
-        if (slotSig.r !== 'stop') { slotSig.r = 'stop'; sh.innerHTML = stopIcon('#fff'); el.querySelector('.bx').setAttribute('aria-label', 'ディレイを止める'); el.classList.add('stop'); }
-        lb.textContent = `${delaySec()}秒 止める`; } else slotSig.r = ''; }
+        // 文字なしの絵: 真ん中のディレイと同じ白い角丸に、紺の止める(中山さん 2026-11-15「文言いるかな。絵で直感的に」)
+        if (slotSig.r !== 'stop') { slotSig.r = 'stop'; sh.innerHTML = '<svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true"><rect x="4" y="4" width="92" height="92" rx="26" fill="#fff"/><rect x="34" y="34" width="32" height="32" rx="5" fill="#0c1636"/></svg>'; el.querySelector('.bx').setAttribute('aria-label', 'ディレイを止める'); el.classList.remove('stop'); }
+        lb.textContent = ''; } else slotSig.r = ''; }
     if (k === 'rec' && st.rec) { const t = shape.querySelector('.mw-t'); if (t) t.textContent = fmt(Date.now() - st.recT); }
   }
   function renderAll() { renderShape(); renderSecs(); updateSlots(); drawWheel(); fixBand(); }
