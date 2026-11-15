@@ -159,28 +159,24 @@ function init() {
       st.open = false; renderSecs(); fixBand(); updateSlots();
     }; });
   }
-  // ボタンはホイールの輪に乗る: 真ん中=選んだモード、左(横向きは上)=輪の1つ前、右(横向きは下)=輪の1つ後。3つとも1タップで始める・止める(案B'。中山さん 2026-11-14)
-  const SLOT = { rec: () => slotRc, delay: () => slotDl, var: () => slotVr };
-  const sideKeys = () => ({ prev: MODES[mod3(cur - 1)].k, next: MODES[mod3(cur + 1)].k });
+  // カメラにそろえる(案A。中山さん 2026-11-15): モードは下の名前で切り替え、始める・止めるは真ん中だけ。
+  // 真ん中の左=録画の一覧、右=自撮り(Pixelのカメラと同じ並び)。真ん中にいない働きが動いている間だけ、その席に小さな「止める」を出す(録画=左、ディレイ=右)
+  const seatRec = () => st.rec && MODES[cur] && MODES[cur].k !== 'rec';
+  const seatDel = () => st.delay && MODES[cur] && MODES[cur].k !== 'delay';
   const slotSig = {};
   function updateSlots() {
     const k = MODES[cur] ? MODES[cur].k : '';
-    for (const key of ['rec', 'delay', 'var']) {
-      const el = SLOT[key](); const show = key !== k;
-      if (el.hidden === show) { el.hidden = !show; slotSig[key] = ''; }
-      if (!show) continue;
-      const on = key === 'rec' ? st.rec : key === 'delay' ? st.delay : false;
-      const sig = `${on}`;
+    slotVr.hidden = true;
+    // 左: 録画の止める か 一覧
+    { const el = slotRc; el.hidden = false; const r = seatRec(); const sig = r ? 'stop' : 'list';
       const sh = el.querySelector('.shape'); const bx = el.querySelector('.bx'); const lb = el.querySelector('.lb');
-      if (slotSig[key] !== sig) {
-        slotSig[key] = sig;
-        sh.innerHTML = key === 'var' ? diamond(fillNow()) : on ? SHAPE_ON[key](key === 'rec' ? fmt(Date.now() - st.recT) : delaySec()) : SHAPE[key]();
-        bx.setAttribute('aria-label', key === 'var' ? 'VAR' : `${MODES.find((m) => m.k === key).lb}${on ? 'を止める' : 'を始める'}`);
-      }
-      if (key === 'rec') { lb.innerHTML = on ? `<span class="mw-blink">●</span> ${fmt(Date.now() - st.recT)}` : '録画'; const t = sh.querySelector('.mw-t'); if (t) t.textContent = fmt(Date.now() - st.recT); }
-      else if (key === 'delay') lb.textContent = on ? `${delaySec()}秒 止める` : 'ディレイ';
-      else lb.textContent = 'VAR';
-    }
+      if (slotSig.l !== sig) { slotSig.l = sig; sh.innerHTML = r ? stopIcon('#d6231b') : `<span class="mw-list">${ICON_LIST}</span>`; bx.setAttribute('aria-label', r ? '録画を止める' : '録画の一覧'); el.classList.toggle('stop', r); }
+      lb.innerHTML = r ? `<span class="mw-blink">●</span> ${fmt(Date.now() - st.recT)}` : '一覧'; }
+    // 右: ディレイの止める(なければ隠して、自撮りをその席に)
+    { const el = slotDl; const d = seatDel(); el.hidden = !d;
+      if (d) { const sh = el.querySelector('.shape'); const lb = el.querySelector('.lb');
+        if (slotSig.r !== 'stop') { slotSig.r = 'stop'; sh.innerHTML = stopIcon('#fff'); el.querySelector('.bx').setAttribute('aria-label', 'ディレイを止める'); el.classList.add('stop'); }
+        lb.textContent = `${delaySec()}秒 止める`; } else slotSig.r = ''; }
     if (k === 'rec' && st.rec) { const t = shape.querySelector('.mw-t'); if (t) t.textContent = fmt(Date.now() - st.recT); }
   }
   function renderAll() { renderShape(); renderSecs(); updateSlots(); drawWheel(); fixBand(); }
@@ -219,7 +215,6 @@ function init() {
     }
     renderShape(); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
     renderSecs(); updateSlots();
-    for (const el of [slotRc, slotDl, slotVr]) if (!el.hidden) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
   }
   let anim = null;
   function snapTo(target, D = 380) {
@@ -285,10 +280,10 @@ function init() {
       if (t) { pending = { key: 'delay', t: Date.now() }; t.click(); }
     }
   });
-  slotRc.querySelector('.bx').addEventListener('click', () => { const b = labRec(); if (b) b.click(); });
+  slotRc.querySelector('.bx').addEventListener('click', () => { if (seatRec()) { const b = labRec(); if (b) b.click(); } else q('#mwList').click(); });
   const startDelay = () => { const t = delayBtns().find((b) => secOf(b) === delaySec()); if (t) t.click(); };
   slotVr.querySelector('.bx').addEventListener('click', () => { const b = $('#btnRewind'); if (b) b.click(); });
-  slotDl.querySelector('.bx').addEventListener('click', () => { if (st.delay) { const x = $('#btnDelayExit'); if (x) x.click(); } else startDelay(); });
+  slotDl.querySelector('.bx').addEventListener('click', () => { if (st.delay) { const x = $('#btnDelayExit'); if (x) x.click(); } });
   q('#mwGear').addEventListener('click', () => { const b = $('#btnSettings'); if (b) b.click(); });
   // 一覧ボタンは、録画の一覧だけを出す(最長・録画開始は出さない。録画はホイールから始める)。⚙の「録画の一覧と設定」から開いたときは今までどおり
   q('#mwList').addEventListener('click', () => { const b = $('#btnOpenRecList'); if (b) { document.body.classList.add('mw-listonly'); const sh = $('#labSheet'); const hd = sh && sh.querySelector('.help-sheet-handle'); if (hd && !sh.querySelector('.mw-sheet-title')) hd.insertAdjacentHTML('afterend', '<p class="mw-sheet-title">録画の一覧</p>'); b.click(); } });
@@ -407,13 +402,14 @@ function init() {
       if (vy < need) vy = 0; // 空けきれないときは、半分かけずに、映像の上に重ねる
       if (vy > need) vy = need + Math.round((vy - need) / 2);
       const vb = vy + vh; // 映像の下端
+      document.body.style.setProperty('--mw-toast-top', `${Math.max(70, vb - 84)}px`); // お知らせは映像の下側(上の←・⚙に重ならない。2026-11-15)
       const wheelY = H - 48 - 18 - safe().b; // 下のジェスチャーバーにかからないように
       m = Math.max(88, Math.min(120, Math.round((H - vb) * 0.36)));
       mx = (W - m) / 2; my = vb + Math.max(12, Math.round((wheelY - vb - m) / 2));
       px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
       px(wheel, 0, wheelY, W, 48);
       const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
-      { const sk = sideKeys(); px(SLOT[sk.prev](), 14, boxY, 76, 78); px(SLOT[sk.next](), W - 90, boxY, 76, 78); }
+      px(slotRc, 14, boxY, 76, 78); px(slotDl, W - 90, boxY, 76, 78);
       clear(secs); clear(topRow);
       // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
       // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
@@ -425,7 +421,9 @@ function init() {
       camCorner = true;
       if (camBtn) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)', minWidth: '56px', borderRadius: '16px' });
       root.style.setProperty('--mw-bx', '56px');
-      placeZoom(vx, vw, vb, true, true);
+      // 自撮り: ディレイの止めるが出ていなければ、真ん中の右の席。出ているときは映像の右下(ズームの上)
+      if (flipOn && !seatDel()) px(flip, W - 90 + 14, boxY + 2, 48, 48, { borderRadius: '50%', background: '' });
+      placeZoom(vx, vw, vb, true, flipOn && seatDel());
     } else {
       askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar; vx = 0;
@@ -438,7 +436,8 @@ function init() {
       const bx = H < 380 ? 52 : 56; root.style.setProperty('--mw-bx', `${bx}px`);
       const scx = mx + m / 2;
       px(wheel, W - 8 - wheelW, H / 2 - 84, wheelW, 168);
-      { const sk = sideKeys(); px(SLOT[sk.prev](), scx - 38, my - 14 - 20 - bx, 76, bx + 20); px(SLOT[sk.next](), scx - 38, my + m + 10, 76, bx + 20); }
+      px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 20); px(slotDl, scx - 38, my + m + 10, 76, bx + 20);
+      if (flipOn && !seatDel()) px(flip, scx - 24, my + m + 12, 48, 48, { borderRadius: '50%', background: '' });
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
       clear(secs);
       // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
@@ -455,7 +454,7 @@ function init() {
       camCorner = true;
       if (camBtn) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' });
       root.classList.toggle('mw-over', over);
-      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, true, flipOn);
+      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, true, flipOn && seatDel());
     }
     if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);
