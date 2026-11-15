@@ -873,6 +873,9 @@ document.addEventListener('click', (e) => {
 }, true);
 
 function exitBrowserFullscreen() {
+  // 一度入った全画面は、VARを閉じても・ディレイを止めても出ない(出入りのたびにChromeの「上からスワイプで終了」の案内が出て邪魔だった。中山さん 2026-11-15)。
+  // 抜けたいときは、上からスワイプ(ブラウザの操作)
+  if (document.body.classList.contains('mode-monitor')) return;
   try {
     if (keepFullscreen || !document.fullscreenElement || !document.exitFullscreen) return;
     const result = document.exitFullscreen();

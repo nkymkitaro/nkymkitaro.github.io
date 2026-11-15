@@ -413,6 +413,20 @@ async function initParent(app) {
 
   // ---- 録画を始める・終える ----
   let starting = false;
+  // 録画を始めたときの短いお知らせ(中山さん 2026-11-15): ①画質「最大」で録っていること ②閉じると消えるタブ(シークレットなど)の疑い ③空きが少なめ。
+  // どれも録画は止めない。①は毎回、②③はページを開いている間に1回だけ
+  let warnedTab = false; let warnedSpace = false;
+  function recStartNotes(u) {
+    const notes = [];
+    try {
+      const v = cameraLink.localMonitorVideo; const tr = v && v.srcObject && v.srcObject.getVideoTracks()[0]; const g = tr && tr.getSettings ? tr.getSettings() : {};
+      if (Math.min(g.width || 0, g.height || 0) >= 1440) notes.push('画質「最大」で録画します');
+    } catch (err) { /* 分からなければ出さない */ }
+    // シークレットタブなどは、使える量がとても小さい(Chromeで約100MB〜数百MB)。閉じると録画も消える
+    if (u && !warnedTab && u.quotaMB < 1200) { warnedTab = true; notes.push('このタブは閉じると録画が消えることがあります(シークレットなど)。保存してから閉じてください'); }
+    else if (u && !warnedSpace) { const min = Math.floor((u.freeMB - DEFAULTS.minFreeMB) / MB_PER_MIN); if (min < 30) { warnedSpace = true; notes.push(`空きが少なめです。あと約${Math.max(1, min)}分録れます`); } }
+    if (notes.length) showToast(notes.join('。'), { duration: notes.length > 1 || warnedTab ? 6000 : 3200 });
+  }
   async function startRec() {
     if (starting || isRecording() || isCollecting()) return;
     starting = true;
@@ -427,6 +441,7 @@ async function initParent(app) {
       if (ok && parent.take) { parent.take.remainMin = remainMin; parent._saveTake(); }
       // 録画の最中にまとめを先に作る(既定で入れる。2026-10-23 中山さんの決定。止めて比べたいときは URL に ?pre=0)
       if (ok && parent.take && new URLSearchParams(location.search).get('pre') !== '0') prebuilder.start(parent.take.id, el('#optQuality').value);
+      if (ok) recStartNotes(u);
       if (ok) track('rec_start', { cameras: 1 + [...parent.children.values()].filter((c) => c.connected).length }); // 親機のカメラ+つながっている子機(録画が実際に始まったときだけ)
       if (!ok) showToast('録画を開始できませんでした');
       else if (capture.status.audio && capture.status.audio.ok === false && el('#optAudio').value === '1') showToast('音なしで録画します');
@@ -806,6 +821,9 @@ async function initParent(app) {
     if (isRecording() || isCollecting()) { showToast('録画が終わってから消してください'); return; }
     const ids = (await store.listTakes()).filter((x) => !x.hiddenAt).map((x) => x.id);
     if (!ids.length) { showToast('消す録画はありません'); return; }
+    { const b = el('#labClearAll'); const unsaved = (await store.listTakes()).some((x) => !x.hiddenAt && x.stoppedAt && !x.savedAt);
+      if (unsaved && !b.dataset.sure) { b.dataset.sure = '1'; b.classList.add('lab-sure'); showToast('未保存の録画があります。もう一度押すと消します'); setTimeout(() => { delete b.dataset.sure; b.classList.remove('lab-sure'); }, 4000); return; }
+      delete b.dataset.sure; b.classList.remove('lab-sure'); }
     setSheet(null);
     await removeTakes(ids, 'すべて消しました。最近消した項目に残ります');
   });
@@ -860,7 +878,12 @@ async function initParent(app) {
         row.append(
           mk(ICON.play, '見る', () => openViewer(t.id)),
           mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, isUnsaved(t)),
-          showTrash ? mk(ICON.trash, '戻す', async () => { await store.unhideTake(t.id); takesSig = ''; render(); }, false, true) : mk(ICON.trash, '消す', () => removeTakes([t.id])),
+          showTrash ? mk(ICON.trash, '戻す', async () => { await store.unhideTake(t.id); takesSig = ''; render(); }, false, true) : mk(ICON.trash, '消す', (ev) => {
+            // 未保存の録画は、2回押しで消す(1回目は知らせるだけ。中山さん 2026-11-15)
+            const b = ev.currentTarget;
+            if (isUnsaved(t) && !b.dataset.sure) { b.dataset.sure = '1'; b.classList.add('lab-sure'); showToast('未保存です。もう一度押すと消します'); setTimeout(() => { if (b.isConnected) { delete b.dataset.sure; b.classList.remove('lab-sure'); } }, 4000); return; }
+            removeTakes([t.id]);
+          }),
         );
         let trashDel = null;
         if (showTrash) {

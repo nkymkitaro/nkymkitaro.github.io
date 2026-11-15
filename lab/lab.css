@@ -158,3 +158,5 @@ body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(e
 
 /* 「最近消した項目」の「完全に消す」: 1回目で赤くなり、もう一度押すと消える */
 .lab-resume.lab-sure { background: #d6231b; color: #fff; border-color: #d6231b; }
+/* 未保存の録画を消すときの1回目(もう一度押すと消す。2026-11-15) */
+.lab-act.lab-sure, #labClearAll.lab-sure { background: #d6231b; color: #fff; border-color: #d6231b; }

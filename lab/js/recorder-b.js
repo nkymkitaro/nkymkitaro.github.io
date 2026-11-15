@@ -17,7 +17,11 @@ const AUDIO_CANDIDATES = ['mp4a.40.2', 'opus'];
 
 export async function pickConfigB(width = 640, height = 480, bitrate = 1000000, fps = 30) {
   if (typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined') return null;
-  for (const cand of VIDEO_CANDIDATES) {
+  // 1920×1080 を超える大きさ(画質「最大」の 2560×1440 など)は、H.264 の段階(level)3.1・4.0 の上限を超える。
+  // 大きいときは段階5.1(avc1.420033)を先に試す(保存した動画が開けない・保存に失敗するのを避ける。2026-11-15)
+  const big = width * height > 1920 * 1088;
+  const list = big ? [{ codec: 'avc1.420033', avc: { format: 'avc' } }, ...VIDEO_CANDIDATES] : VIDEO_CANDIDATES;
+  for (const cand of list) {
     const cfg = { ...cand, width, height, bitrate, framerate: fps, latencyMode: 'realtime' };
     try {
       const r = await VideoEncoder.isConfigSupported(cfg);
