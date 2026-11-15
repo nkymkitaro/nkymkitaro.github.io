@@ -1105,12 +1105,14 @@ async function startDelayDisplay(sec) {
   if (player.isReplay || player.delayMode) return;
   if (!codec) diagSet('ディレイ方式', '写真');
   const bandText = document.querySelector('#stateBand .state-band-text');
+  let delayStartSent = false; // 始めるごとに1回だけ(VARから戻ったときの出し直しでは送らない)
   player.startDelay(sec, {
     codec,
     varSec: varSettings.rewindSeconds,
     onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); },
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
+      if (ready && !delayStartSent) { delayStartSent = true; track('delay_start', { delay_sec: sec }); } // ディレイ表示が実際に始まったとき
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });

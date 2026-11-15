@@ -33,6 +33,7 @@ const ALLOWED_EVENTS = {
   share_app: [], // 「仲間に送る」を押して、共有画面を開いた
   share_clip: [], // 録画の「共有」を押して、共有画面を開いた
   help_open: [], // 「?」を押して、ヘルプが開いた
+  delay_start: ['delay_sec'], // ディレイ表示が実際に始まった(準備中のまま終わったときは送らない)。delay_sec: 選んだ秒数(10・20・30)。2026-11-14 依頼、中山さん承認 11-13
   line_open: [],
 };
 const MAX_STRING_LENGTH = 40; // 万一、長い文字が混ざっても送らない
