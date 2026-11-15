@@ -765,7 +765,8 @@ const replayUi = createReplayUi({
     if (camId) applyReplayView('single', camId);
   },
 });
-const BACK_TO_REPLAY_MS = 6000; // 「元に戻す」(さっきのVARに戻る)を出しておく時間。画面の下のボタンではなく、トーストで出す(2026-10-30)
+const BACK_TO_REPLAY_MS = 3000; // 2026-11-15 6秒→3秒(中山さん「長い。鬱陶しい」)
+const BACK_TO_REPLAY_MS_OLD = 6000; // 「元に戻す」(さっきのVARに戻る)を出しておく時間。画面の下のボタンではなく、トーストで出す(2026-10-30)
 let backToReplayPoint = null;
 let backToReplayTimer = null;
 

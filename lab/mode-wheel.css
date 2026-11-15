@@ -264,4 +264,8 @@ body.mode-monitor #mwList { display:none !important; }
 .mw-slot.rc.stop .bx.vrb { border-color:#d6231b !important; }
 .mw-slot.stop .shape svg { width:60%; height:60%; }
 /* お知らせ(消しました・元に戻す など)は、縦向きの撮影画面では映像の下側に出す(上の←・⚙に重ならない。中山さんの実機の写し 2026-11-14) */
-@media (orientation: portrait) { body.mode-monitor .toast { top: var(--mw-toast-top, max(14px, env(safe-area-inset-top))); } }
+@media (orientation: portrait) { body.mode-monitor .toast { top: var(--mw-toast-top, max(14px, env(safe-area-inset-top))); bottom: auto; } }
+/* お知らせは小さく1行に(「LIVEに戻りました・元に戻す」が縦に伸びて、真ん中のボタンを隠していた。中山さんの実機の写し 2026-11-15) */
+body.mode-monitor .toast { padding: 8px 14px; font-size: 0.8rem; max-width: min(92vw, 30em); }
+body.mode-monitor .toast.toast-low, body.mode-monitor .toast.has-action { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; white-space: nowrap; }
+body.mode-monitor .toast .toast-action { width: auto; min-height: 40px; margin: 0; padding: 0 14px; flex: none; font-size: 0.85rem; }

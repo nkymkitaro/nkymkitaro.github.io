@@ -346,10 +346,13 @@ function init() {
     // 親機のカメラの取り込みの形を、画面の向きに合わせる(2026-11-14 直し)。
     // 縦向きは 4:3(縦持ちで3:4。センサーそのままの形で、映像が横幅いっぱいに入る)、横向きは画面に合わせて 16:9 か 4:3。
     // 短い辺の画素数(画質の設定で決まる: 標準480・高720・最大1440)はそのままにして、形だけ替える
-    if (ar === wantAr || askAspect.busy) return;
+    if (askAspect.busy) return;
     try {
       const v = app.cameraLink.localMonitorVideo; const tr = v && v.srcObject && v.srcObject.getVideoTracks()[0];
       if (!tr) return; // カメラの準備ができていない。次の fit() でもう一度
+      // 自撮りに切り替えるとカメラが新しくなり、形が元(16:9など)に戻って映像が小さくなっていた(2026-11-15)。カメラが替わったら、もう一度頼む
+      if (ar === wantAr && tr.id === askAspect.trackId) return;
+      askAspect.trackId = tr.id;
       const g = tr.getSettings(); wantAr = ar;
       const short = Math.min(g.width || 0, g.height || 0) || 480;
       askAspect.busy = true;
