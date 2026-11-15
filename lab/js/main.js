@@ -507,6 +507,16 @@ async function initParent(app) {
     cancelReceive();
   });
 
+  // 止めたら自動で保存(中山さん 2026-11-15「止めたら自動で保存」)。全カメラの映像がそろった(collectedAt)ところで1回だけ、保存(ダウンロード)を始める。
+  // iPhone は共有の画面を出すのに指の操作が要るため、自動にしない(今までどおり「保存」を押す)。このページで録った録画だけ(開き直した前の録画は勝手に保存しない)
+  const autoSaved = new Set();
+  setInterval(() => {
+    const t = parent.take;
+    if (!t || !t.stoppedAt || !t.collectedAt || t.savedAt || t.cancelledAt || autoSaved.has(t.id)) return;
+    autoSaved.add(t.id);
+    if (resolveSaveMode(el('#optSave').value) !== 'download') return;
+    saveTake(t);
+  }, 700);
   async function stopRec() {
     if (!isRecording()) return;
     await parent.stopTake('user');
