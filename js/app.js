@@ -82,10 +82,12 @@ const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
   { key: 'all', label: '全カメラ' },
 ];
+// 画質の既定は「高」(1280×720。2026-11-15、中山さんの指示「デフォ画質低いの直して」)。「最大」は録画の保存失敗との関わりを確かめるまで既定にしない(959c72a)
+const DEFAULT_QUALITY_KEY = 'high';
 const varSettings = {
   rewindSeconds: 15,
   bufferSeconds: DEFAULT_BUFFER_SEC,
-  qualityKey: 'standard',
+  qualityKey: DEFAULT_QUALITY_KEY,
   saveScopeKey: 'selected',
 };
 
@@ -120,6 +122,8 @@ function startMonitor() {
     });
     hostZoom.refresh();
     hostZoom.setActive(cameraLink.activeSource === 'local');
+    const q = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey);
+    if (q) applyCaptureSize(q.capture); // 既定の画質に合わせて、親機のカメラの取り込みを上げる(最初は640×480で開く)
   });
   // 参加用のQR(番号は startAsMonitor の最初で決まる)。作れなくても、番号で参加できる。
   // 初めて「カメラを追加」を押したときだけ、先に「はじめる前に」(同じWi-Fi・テザリング)を出す
@@ -1086,6 +1090,7 @@ function renderDelaySelector() {
   });
 }
 renderDelaySelector();
+selectQuality(DEFAULT_QUALITY_KEY);
 let delayStarting = false;
 async function startDelayDisplay(sec) {
   if (player.isReplay || player.delayMode || delayStarting) return;
