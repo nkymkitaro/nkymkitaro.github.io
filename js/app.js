@@ -27,6 +27,7 @@ import { initAnalytics, track, getDisplayMode } from './analytics.js';
 import { createZoomControl } from './zoom-control.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
 import { readLocal, writeLocal } from './safe-storage.js';
+import { initSmooth60, isSmooth60, setSmooth60 } from './smooth60.js';
 
 // LINEなどのアプリ内ブラウザの判定(js/in-app-browser.js が <head> で先に済ませている)。
 // leaving: LINEから標準ブラウザへ開き直している最中。blocked: 「ブラウザで開いてください」を出して先へ進ませない
@@ -1095,6 +1096,24 @@ function renderDelaySelector() {
 }
 renderDelaySelector();
 selectQuality(DEFAULT_QUALITY_KEY);
+// ⚙「なめらか(60コマ)」(2026-11-17)。親機のカメラだけ
+function renderSmoothSelector() {
+  const box = document.getElementById('smoothSelector');
+  if (!box) return;
+  box.innerHTML = '';
+  [['off', 'ふつう'], ['on', 'なめらか(60コマ)']].forEach(([k, label]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if ((k === 'on') === isSmooth60()) b.classList.add('btn-active');
+    b.addEventListener('click', () => { setSmooth60(k === 'on'); renderSmoothSelector(); });
+    box.appendChild(b);
+  });
+}
+renderSmoothSelector();
+initSmooth60({
+  trackGetter: () => { const st = cameraLink.localMonitorVideo && cameraLink.localMonitorVideo.srcObject; return st ? st.getVideoTracks()[0] : null; },
+  video: cameraLink.localMonitorVideo,
+});
 let delayStarting = false;
 async function startDelayDisplay(sec) {
   if (player.isReplay || player.delayMode || delayStarting) return;
