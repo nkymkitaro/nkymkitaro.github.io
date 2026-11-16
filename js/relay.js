@@ -11,6 +11,9 @@ import { diagSet } from './diag.js';
 export const RELAY_WORKER_URL = 'https://mitori-relay-credentials.nkymkitaro.workers.dev/';
 
 const RELAY_MAX_BITRATE = 500000; // 中継のときの映像の上限(約0.5Mbps。1時間あたり約0.2GBの見込み)
+// 中継のときは、解像度とコマ数も送る側で下げる(画質の既定を上げても、0.5Mbpsに押し込む落とし方を端末任せにしない。2026-11-15 依頼)
+const RELAY_MAX_EDGE = 960; // 長い辺の上限(px)
+const RELAY_MAX_FPS = 24;
 const POLL_MS = 3000;
 const NOTICE_MS = 5000;
 const NOTICE_FADE_MS = 500;
@@ -86,8 +89,17 @@ async function applyBitrate(pc, route) {
       if (!sender.track || sender.track.kind !== 'video') continue;
       const params = sender.getParameters();
       if (!params.encodings || !params.encodings.length) params.encodings = [{}];
-      if (route === 'relay') params.encodings[0].maxBitrate = RELAY_MAX_BITRATE;
-      else delete params.encodings[0].maxBitrate;
+      const enc = params.encodings[0];
+      if (route === 'relay') {
+        enc.maxBitrate = RELAY_MAX_BITRATE;
+        enc.maxFramerate = RELAY_MAX_FPS;
+        const g = sender.track.getSettings ? sender.track.getSettings() : {};
+        const edge = Math.max(g.width || 0, g.height || 0);
+        enc.scaleResolutionDownBy = edge > RELAY_MAX_EDGE ? edge / RELAY_MAX_EDGE : 1;
+      } else {
+        // 直接のときは、今までどおり下げない
+        delete enc.maxBitrate; delete enc.maxFramerate; enc.scaleResolutionDownBy = 1;
+      }
       await sender.setParameters(params);
     }
   } catch (err) { console.error(err); }
