@@ -35,7 +35,7 @@ async function pickCodec(w, h) {
 class Channel {
   constructor(owner) {
     this.owner = owner;
-    this.chunks = [];     // [{ seq, ts(ms), key, chunk }]
+    this.chunks = [];     // [{ seq, ts(ms), key, chunk, cfg }]。cfg はそのチャンクを戻すための設定(向きを変えると途中で変わる)
     this.baseSeq = 0;
     this.nextSeq = 0;     // 次に戻す(デコードする)チャンクの番号
     this.enc = null;
@@ -62,8 +62,13 @@ class Channel {
     try { this.enc.encode(vf, key ? { keyFrame: true } : undefined); } finally { vf.close(); }
   }
 
+  // 映像の大きさが変わった(カメラの切り替え・向き)。2026-11-19: ためた分は捨てずに、新しい大きさで続けてためる
+  // (捨てるとディレイの秒数ぶん真っ黒になっていた。中山さん「向き変えた時に何も映らなくなるのも嫌」)。
+  // 戻すときは、境目で戻し役の設定を切り替える(新しい圧縮役の最初のコマは全体コマ)
   _initEncoder(video, srcKey) {
-    this._reset(); // 映像の大きさが変わった(カメラの切り替え・向き)。最初から
+    if (this.enc && this.enc.state !== 'closed') { try { this.enc.close(); } catch (err) { /* 閉じ済み */ } }
+    this.enc = null;
+    this.segCfg = null; this.segSig = ''; // 新しい圧縮役の最初の出力で決まる
     const scale = Math.min(1, this.owner.edge / Math.max(video.videoWidth, video.videoHeight));
     const w = even(video.videoWidth * scale);
     const h = even(video.videoHeight * scale);
@@ -84,8 +89,15 @@ class Channel {
   }
 
   _onChunk(chunk, meta) {
-    if (meta && meta.decoderConfig) this.decCfg = meta.decoderConfig;
-    this.chunks.push({ seq: this.baseSeq + this.chunks.length, ts: chunk.timestamp / 1000, key: chunk.type === 'key', chunk });
+    if (meta && meta.decoderConfig) {
+      // 全体コマごとに同じ設定が来ることがある。中身が同じなら前のものを使う(戻し役を余計に設定し直さない)
+      const d = meta.decoderConfig;
+      const sig = `${d.codec}|${d.codedWidth}x${d.codedHeight}|${d.description ? d.description.byteLength : 0}`;
+      if (!this.segCfg || this.segSig !== sig) { this.segCfg = d; this.segSig = sig; }
+      this.decCfg = this.segCfg;
+    }
+    if (!this.segCfg) return; // 設定がまだ来ていない(ふつうは起きない)
+    this.chunks.push({ seq: this.baseSeq + this.chunks.length, ts: chunk.timestamp / 1000, key: chunk.type === 'key', chunk, cfg: this.segCfg });
     // 古いぶんを捨てる。捨てる位置は「全体を保存したコマ」の手前まで(途中から戻せなくなるため)
     const cutoff = performance.now() - this.owner.keepSec * 1000;
     let k = -1;
@@ -104,8 +116,7 @@ class Channel {
   // ディレイ表示の戻し役には触らない。fps は間引き後のコマ数(VARの再生と同じ)
   async exportFrames(spanMs, { fps, width, quality, maxEdge }) {
     const list = this.chunks.slice();
-    const cfg = this.decCfg;
-    if (!list.length || !cfg) return [];
+    if (!list.length || !list[0].cfg) return [];
     const endTs = list[list.length - 1].ts;
     const startTs = endTs - spanMs;
     let from = 0;
@@ -135,8 +146,9 @@ class Channel {
       error: (e) => { failed = e; },
     });
     try {
-      dec.configure(cfg);
+      let cur = null;
       for (let i = from; i < list.length && !failed; i++) {
+        if (list[i].cfg !== cur) { cur = list[i].cfg; dec.configure(cur); } // 向きを変えた境目
         dec.decode(list[i].chunk);
         while (dec.decodeQueueSize > 8 && !failed) await new Promise((r) => setTimeout(r, 2));
       }
@@ -150,7 +162,7 @@ class Channel {
 
   // いま − N秒 のコマを返す(なければ null)。返したコマは、次にこの関数を呼ぶまで有効(同じ処理の中で描くこと)
   frameFor(targetMs) {
-    if (!this.chunks.length || !this.decCfg) return null;
+    if (!this.chunks.length || !this.chunks[0].cfg) return null;
     const now = performance.now();
     if (!this.dec || this.dec.state !== 'configured' || this.nextSeq < this.baseSeq) this._restart(targetMs);
     if (!this.dec) return null;
@@ -161,7 +173,10 @@ class Channel {
       if (i < 0 || i >= this.chunks.length) break;
       const c = this.chunks[i];
       if (c.ts > targetMs + FEED_AHEAD_MS) break;
-      try { this.dec.decode(c.chunk); } catch (err) { this.owner.fail(err); return null; }
+      try {
+        if (c.cfg !== this.decActiveCfg) { this.decActiveCfg = c.cfg; this.dec.configure(c.cfg); } // 向きを変えた境目(このチャンクは全体コマ)
+        this.dec.decode(c.chunk);
+      } catch (err) { this.owner.fail(err); return null; }
       this.nextSeq++;
     }
     diagTime('ディレイの戻しms', performance.now() - t0);
@@ -182,7 +197,7 @@ class Channel {
 
   _restart(targetMs) {
     this._closeDecoder();
-    if (!this.decCfg || !this.chunks.length) return;
+    if (!this.chunks.length) return;
     let idx = 0;
     for (let i = 0; i < this.chunks.length; i++) { if (this.chunks[i].key && this.chunks[i].ts <= targetMs) idx = i; }
     this.nextSeq = this.chunks[idx].seq;
@@ -191,7 +206,8 @@ class Channel {
         output: (f) => { this.out.push(f); if (this.target != null) this._prune(this.target); },
         error: (e) => this.owner.fail(e),
       });
-      this.dec.configure(this.decCfg);
+      this.decActiveCfg = this.chunks[idx].cfg;
+      this.dec.configure(this.decActiveCfg);
     } catch (err) { this.dec = null; this.owner.fail(err); }
   }
 
