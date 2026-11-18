@@ -560,9 +560,13 @@ export class ReplayPlayer {
 
   // ---- 遅れて映す(2026-10-30 依頼 delay-display)。いま − N秒 のコマを、順に出し続ける ----
   // 新しくためる仕組みは作らず、VARと同じ録画バッファを読む。VARには入らない(isReplay は false のまま)
-  startDelay(sec, { onState, codec = null, onFallback = null, varSec = 0 } = {}) {
+  // 2026-11-19(中山さん「Aで」): 動画方式でも、動画がたまるまでは、VAR用にためてある写真から映す(押した瞬間から映る。待つのは足りない秒数だけ)。
+  // 動画がN秒たまったら動画に切り替え、onCodecLive を呼ぶ(呼ばれた側で写真をためるのを止める)
+  startDelay(sec, { onState, codec = null, onFallback = null, onCodecLive = null, varSec = 0 } = {}) {
     this.stopDelay();
     this._codec = codec; // 動画方式(js/delay-codec.js)。null なら写真方式
+    this._codecLive = false;
+    this._delayOnCodecLive = onCodecLive;
     this._delayOnFallback = onFallback;
     if (codec) codec.start(sec, varSec);
     this.delayMode = true;
@@ -582,7 +586,7 @@ export class ReplayPlayer {
   }
 
   // ディレイ中にVARを押せるか(動画方式のときは、押したときに動画から写真を作る)
-  delayHasCodec() { return !!this._codec && !this._codec.failed; }
+  delayHasCodec() { return !!this._codec && !this._codec.failed && !!this._codecLive; } // 写真から映している間(動画がたまる前)は写真方式と同じ扱い
 
   // 動画方式のディレイ中にVARへ入る前に、ためてある動画の直近 seconds 秒を写真にして、録画バッファに入れる
   async prepareVarFromDelay(seconds) {
@@ -625,12 +629,16 @@ export class ReplayPlayer {
         if (this._codec.failed) { // 動画方式が失敗。写真方式に戻す(写真は、ためなおし)
           this._codec.dispose(); this._codec = null;
           if (this._delayOnFallback) this._delayOnFallback();
-        } else { this._delayTickCodec(); return; }
+        } else if (this._codecLive || this._codecReady()) {
+          if (!this._codecLive) { this._codecLive = true; if (this._delayOnCodecLive) this._delayOnCodecLive(); }
+          this._delayTickCodec(); return;
+        }
+        // 動画がまだたまっていない: 下の写真の道で映す(写真が足りなければ、足りない秒数を数える)
       }
       const targetTs = performance.now() - this.delaySec * 1000;
       const ids = this.gridCamIds();
       // N秒たつまでは出さない(いちばん古いコマが、まだ「いま − N秒」に届いていない)
-      const ready = ids.some((id) => this.recorder.getFrames(id)[0].ts <= targetTs + 150);
+      const ready = ids.some((id) => { const fr = this.recorder.getFrames(id); return fr.length > 0 && fr[0].ts <= targetTs + 150; });
       // 準備中は、あと何秒で始まるかも知らせる(いちばん早く届くカメラ基準)
       const remain = ready ? 0 : Math.max(1, Math.ceil(Math.min(...ids.map((id) => {
         const fr = this.recorder.getFrames(id);
@@ -703,6 +711,13 @@ export class ReplayPlayer {
       this._delayBusy = false;
       diagTime('ディレイの1回ms', performance.now() - tickT0);
     }
+  }
+
+  // 動画が「いま − N秒」まで届いたか
+  _codecReady() {
+    const codec = this._codec;
+    const targetTs = performance.now() - this.delaySec * 1000;
+    return codec.ids().some((id) => { const t = codec.oldestTs(id); return t != null && t <= targetTs + 150; });
   }
 
   // 動画方式の1回ぶん。戻したコマはその場で描く(awaitを挟まない。次の呼び出しで閉じられるため)

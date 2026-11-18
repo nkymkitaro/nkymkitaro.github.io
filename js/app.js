@@ -1133,6 +1133,7 @@ async function startDelayDisplay(sec) {
     codec,
     varSec: varSettings.rewindSeconds,
     onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); },
+    onCodecLive: () => recorder.setSuspended(true), // 動画がN秒たまって動画に切り替わったら、写真をためるのを止める(CPUと熱を減らす)
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
       if (!delayStartSent) showDelayCountdown(ready, remain); // 始めてから映るまでのカウントダウン(VARから戻ったときは出さない)
@@ -1140,8 +1141,10 @@ async function startDelayDisplay(sec) {
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
   });
-  if (codec) recorder.setSuspended(true); // 動画方式の間は、写真をためない(CPUと熱を減らす)
-  else recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); // 写真方式(ディレイ中もVARで戻れるよう、VARの秒数ぶんは持つ): いま−N秒より古い写真は要らないので捨てる(メモリと圧縮の負担を減らす)
+  // 写真は、ディレイの秒数ぶんまで伸ばしてためる(VAR用にためてある分から、押した瞬間に映し始める。足りない分だけ待つ)。
+  // 動画方式は、動画がたまったら写真をやめる(onCodecLive)。写真方式は、このまま写真で映す
+  recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3);
+  // (写真方式の注: ディレイ中もVARで戻れるよう、VARの秒数ぶんは持つ。いま−N秒より古い写真は要らないので捨てる)
   monitorArea.classList.add('delaying');
   setBandState('delayWait');
   enterBrowserFullscreen();
