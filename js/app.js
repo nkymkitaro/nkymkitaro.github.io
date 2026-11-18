@@ -1135,6 +1135,7 @@ async function startDelayDisplay(sec) {
     onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); },
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
+      if (!delayStartSent) showDelayCountdown(ready, remain); // 始めてから映るまでのカウントダウン(VARから戻ったときは出さない)
       if (ready && !delayStartSent) { delayStartSent = true; track('delay_start', { delay_sec: sec }); } // ディレイ表示が実際に始まったとき
       bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
     },
@@ -1145,8 +1146,29 @@ async function startDelayDisplay(sec) {
   setBandState('delayWait');
   enterBrowserFullscreen();
 }
+// ディレイを始めてから映るまでの間、画面の真ん中に大きく残り秒数を出す(何も映らないと不安。中山さん 2026-11-18「マリカみたいに」)。
+// 映り始めたら「スタート!」を一瞬出して消す
+const delayCountdown = (() => { const el = document.createElement('div'); el.className = 'delay-countdown'; el.setAttribute('aria-live', 'polite'); el.hidden = true; monitorArea.appendChild(el); return el; })();
+let countdownLast = null; let countdownTimer = null;
+function showDelayCountdown(ready, remain) {
+  clearTimeout(countdownTimer);
+  if (ready) {
+    if (delayCountdown.hidden) return;
+    countdownLast = null;
+    delayCountdown.innerHTML = '<span class="go">スタート!</span>';
+    countdownTimer = setTimeout(hideDelayCountdown, 900);
+    return;
+  }
+  const n = Math.max(1, Math.ceil(Number(remain) || 0));
+  delayCountdown.hidden = false;
+  if (n === countdownLast) return;
+  countdownLast = n;
+  delayCountdown.innerHTML = `<span class="n${n <= 3 ? ' last' : ''}">${n}</span>`;
+}
+function hideDelayCountdown() { clearTimeout(countdownTimer); delayCountdown.hidden = true; delayCountdown.innerHTML = ''; countdownLast = null; }
 function stopDelayDisplay() {
   if (!player.delayMode) return;
+  hideDelayCountdown();
   const t0 = performance.now();
   player.stopDelay();
   diagTime('ディレイ終了: 止める部分ms', performance.now() - t0);

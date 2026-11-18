@@ -120,3 +120,15 @@ body.mode-monitor #monitorArea.lab-recording #btnFlipCam { opacity: 0.4; pointer
 body.mode-monitor #monitorArea.delaying .delay-flip { right: calc(max(16px, env(safe-area-inset-right)) + 66px); }
 .delay-flip[hidden] { display: none !important; }
 body.mode-monitor #monitorArea.delaying #btnDelayFlip.is-busy { opacity: 0.5; pointer-events: none; }
+
+/* ディレイを始めてから映るまでのカウントダウン(2026-11-18)。真ん中に大きく。1秒ごとに弾む。残り3秒からは赤 */
+.delay-countdown { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 30; }
+.delay-countdown[hidden] { display: none; }
+body:not(.mode-monitor) .delay-countdown, #monitorArea:not(.delaying) .delay-countdown { display: none; }
+.delay-countdown span { font-weight: 900; font-style: italic; color: #fff; line-height: 1; text-shadow: 0 4px 0 #2c4aa0, 0 8px 24px rgba(0,0,0,.5); animation: dc-pop .9s ease-out both; }
+.delay-countdown .n { font-size: min(38vw, 38vh); }
+.delay-countdown .n.last { color: #fff; text-shadow: 0 4px 0 #d6231b, 0 8px 24px rgba(0,0,0,.5); }
+.delay-countdown .go { font-size: min(16vw, 16vh); transform: skewX(-10deg); animation: dc-go .9s ease-out both; }
+@keyframes dc-pop { 0% { transform: scale(1.6); opacity: 0; } 18% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(.85); opacity: .15; } }
+@keyframes dc-go { 0% { transform: skewX(-10deg) scale(.4); opacity: 0; } 25% { transform: skewX(-10deg) scale(1.1); opacity: 1; } 70% { transform: skewX(-10deg) scale(1); opacity: 1; } 100% { transform: skewX(-10deg) scale(1.2); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .delay-countdown span { animation: none; } }
