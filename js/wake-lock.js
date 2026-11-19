@@ -32,7 +32,7 @@ export async function enableWakeLock({ quiet = false } = {}) {
   enabled = true;
   const ok = await acquire();
   if (ok) {
-    if (!quiet) showToast('画面が消えないようにしました。');
+    void quiet; // 取れたときは知らせない(邪魔になるため。中山さん 2026-11-19)。取れなかったときだけ案内する
   } else if (!('wakeLock' in navigator)) {
     showToast('このスマホは、画面を消さない設定に対応していません。設定で画面のロック時間を長めにしてください。');
   }
