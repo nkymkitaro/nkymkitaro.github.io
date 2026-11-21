@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex,nofollow">
+  <title>素振りの読み取り(試作)</title>
+  <style>
+    html, body { margin: 0; background: #070d22; color: #fff; font-family: system-ui, sans-serif; }
+    body { padding: 12px 16px 40px; max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 20px; margin: 8px 0; }
+    h2 { font-size: 16px; margin: 18px 0 6px; }
+    p, label, .info { font-size: 14px; color: #c8d0e6; margin: 6px 0; }
+    .stage { position: relative; width: 100%; background: #000; }
+    .stage video, .stage canvas { display: block; width: 100%; height: auto; }
+    .stage canvas { position: absolute; left: 0; top: 0; height: 100%; pointer-events: none; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; align-items: center; }
+    button, .file { min-height: 48px; padding: 0 16px; font-size: 16px; font-weight: 700; border-radius: 12px; border: 0; background: #2a3354; color: #fff; display: inline-flex; align-items: center; cursor: pointer; }
+    button.main, .file { background: #fff; color: #000; }
+    button:disabled { opacity: .4; }
+    select, input[type=number] { min-height: 44px; font-size: 16px; border-radius: 10px; border: 0; padding: 0 10px; background: #2a3354; color: #fff; }
+    input[type=number] { width: 6em; }
+    input[type=file] { display: none; }
+    input[type=range] { width: 100%; }
+    #stat { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+    th, td { border-bottom: 1px solid #2a3354; padding: 6px 4px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    #chart { width: 100%; height: 220px; background: #0c1636; border-radius: 8px; }
+    .big { font-size: 28px; font-weight: 900; }
+    .note { font-size: 12px; color: #8f9abd; }
+  </style>
+</head>
+<body>
+  <h1>素振りの読み取り(試作)</h1>
+  <p>動画はこの端末の中だけで処理します。外には送りません。骨格は MoveNet、竹刀(面鳴り)は「手元から伸びる細い線」を探して読み取ります。</p>
+  <p class="note">時間の目安: 1コマ約0.3〜1秒(端末による)。スロー動画は、振り1回ぶんの範囲を「ここから」「ここまで」で選ぶか、「2コマに1つ」にすると早く終わります。</p>
+  <p class="note">撮り方: 真横から、全身と先端が画面に入る距離で。スロー(120・240コマ)だと速い所まで読めます。先端に白か黄色のテープを巻くと、先端が見つけやすくなります。</p>
+
+  <div class="row">
+    <label class="file">動画を選ぶ<input id="file" type="file" accept="video/*"></label>
+    <span id="stat">準備中…</span>
+  </div>
+  <div class="row">
+    <label>道具の長さ <input id="len" type="number" min="30" max="130" step="1" value="120"> cm</label>
+    <label>撮ったときのコマ数
+      <select id="cap"><option value="30">30</option><option value="60">60</option><option value="120">120</option><option value="240">240</option></select>
+    </label>
+    <label>読むコマ
+      <select id="skip"><option value="1">全部</option><option value="2">2コマに1つ</option><option value="4">4コマに1つ</option></select>
+    </label>
+    <span class="info" id="fileFps"></span>
+  </div>
+  <div class="stage" id="stage">
+    <video id="v" playsinline muted controls></video>
+    <canvas id="c"></canvas>
+  </div>
+  <div class="row">
+    <button id="setA" type="button" disabled>ここから</button>
+    <button id="setB" type="button" disabled>ここまで</button>
+    <span class="info" id="range">範囲: 全部</span>
+  </div>
+  <div class="row">
+    <button id="run" class="main" type="button" disabled>解析</button>
+    <button id="stop" type="button" disabled>止める</button>
+  </div>
+  <div id="out" hidden>
+    <h2>結果</h2>
+    <div class="row"><span class="big" id="best"></span></div>
+    <input id="scrub" type="range" min="0" max="0" value="0">
+    <p class="note">つまみを動かすと、読み取った骨格と道具(緑=見えている、橙=ぶれて見えないので前後から補った、赤=先端の軌跡)を重ねて見られます。</p>
+    <canvas id="chart" width="900" height="220"></canvas>
+    <p class="note">赤=先端の速さ、青=手元の速さ(m/s)。縦の線=振り下ろし。</p>
+    <table id="tbl"></table>
+    <p class="note">順番: 先端が最も速い瞬間を0とした、それぞれの動きが最も速い時刻(ミリ秒)。マイナス=先、プラス=あと。</p>
+    <div class="row"><button id="copy" type="button">結果をコピー</button></div>
+  </div>
+  <p class="note" id="log"></p>
+
+  <script src="../js/vendor/ort/ort.wasm.min.js"></script>
+  <script>
+  (function () {
+    var $ = function (i) { return document.getElementById(i); };
+    var v = $('v'), c = $('c'), ctx = c.getContext('2d'), stat = $('stat');
+    var sess = null, stopFlag = false, fileFps = 30, A = null, B = null, R = null;
+    var off = document.createElement('canvas'), octx = off.getContext('2d', { willReadFrequently: true });
+    var sm = document.createElement('canvas'), sctx = sm.getContext('2d', { willReadFrequently: true });
+    var EDGES = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+    var NA = 180; // 竹刀の向き: 2度きざみ
+    ort.env.wasm.wasmPaths = new URL('../js/vendor/ort/', location.href).href;
+    ort.env.wasm.numThreads = 1;
+    ort.InferenceSession.create('models/movenet_multipose_lightning_1.onnx', { executionProviders: ['wasm'] }).then(function (s) {
+      sess = s; stat.textContent = '動画を選んでください';
+    }).catch(function (e) { stat.textContent = 'モデルの読み込みに失敗'; $('log').textContent = String(e); });
+
+    // ---- 動画を開く。ファイルのコマ数を、少し再生して測る ----
+    $('file').addEventListener('change', function (e) {
+      var f = e.target.files[0]; if (!f) return;
+      v.src = URL.createObjectURL(f); A = B = null; $('range').textContent = '範囲: 全部'; $('out').hidden = true;
+      v.onloadedmetadata = async function () {
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        stat.textContent = v.videoWidth + '×' + v.videoHeight + ' / ' + v.duration.toFixed(1) + '秒';
+        fileFps = await measureFps();
+        $('fileFps').textContent = 'ファイル: 約' + Math.round(fileFps) + 'コマ/秒';
+        if (fileFps > 90) $('cap').value = fileFps > 180 ? '240' : '120';
+        ['run', 'setA', 'setB'].forEach(function (id) { $(id).disabled = !sess; });
+      };
+    });
+    function measureFps() {
+      return new Promise(function (res) {
+        if (!v.requestVideoFrameCallback) { res(30); return; }
+        var ts = [], n = 0;
+        var cb = function (now, md) { ts.push(md.mediaTime); if (++n < 25) v.requestVideoFrameCallback(cb); else { v.pause(); v.currentTime = 0; fin(); } };
+        var fin = function () {
+          var d = []; for (var i = 1; i < ts.length; i++) { var x = ts[i] - ts[i - 1]; if (x > 0.0005) d.push(x); }
+          d.sort(function (a, b) { return a - b; });
+          res(d.length ? 1 / d[Math.floor(d.length * 0.2)] : 30);
+        };
+        v.requestVideoFrameCallback(cb); v.playbackRate = 1; v.play().catch(function () { res(30); });
+        setTimeout(function () { if (n < 25) { v.pause(); fin(); } }, 4000);
+      });
+    }
+    $('setA').addEventListener('click', function () { A = v.currentTime; showRange(); });
+    $('setB').addEventListener('click', function () { B = v.currentTime; showRange(); });
+    function showRange() { $('range').textContent = '範囲: ' + (A == null ? 0 : A).toFixed(2) + '〜' + (B == null ? v.duration : B).toFixed(2) + '秒'; }
+
+    function seek(t) { return new Promise(function (r) { var done = false; v.onseeked = function () { if (!done) { done = true; r(); } }; v.currentTime = t; setTimeout(function () { if (!done) { done = true; r(); } }, 1500); }); }
+
+    // ---- 骨格(MoveNet)。いちばん大きい人を選ぶ ----
+    // 前のコマで見つけた人のまわりだけを切り出して大きく読む(全体を縮めると、手首を見落としやすい)
+    var prevBox = null;
+    async function pose() {
+      var VW = v.videoWidth, VH = v.videoHeight, r;
+      if (prevBox) {
+        var bw = prevBox[2] - prevBox[0], bh = prevBox[3] - prevBox[1], cx = (prevBox[0] + prevBox[2]) / 2;
+        var w2 = Math.max(bw * 2.0, bh * 1.2), y0 = prevBox[1] - bh * 0.6, y1 = prevBox[3] + bh * 0.15;
+        r = { x: Math.max(0, cx - w2 / 2), y: Math.max(0, y0), w: 0, h: 0 };
+        r.w = Math.min(VW, cx + w2 / 2) - r.x; r.h = Math.min(VH, y1) - r.y;
+      } else r = { x: 0, y: 0, w: VW, h: VH };
+      var W = 256, sc = W / r.w, ch = Math.round(r.h * sc), H = Math.ceil(ch / 32) * 32;
+      if (H > 512) { W = Math.floor(W * 512 / H / 32) * 32 || 128; sc = W / r.w; ch = Math.round(r.h * sc); H = Math.ceil(ch / 32) * 32; }
+      off.width = W; off.height = H; octx.fillStyle = '#000'; octx.fillRect(0, 0, W, H);
+      octx.drawImage(v, r.x, r.y, r.w, r.h, 0, 0, W, ch);
+      var px = octx.getImageData(0, 0, W, H).data, d = new Int32Array(W * H * 3);
+      for (var i = 0, j = 0; i < px.length; i += 4) { d[j++] = px[i]; d[j++] = px[i + 1]; d[j++] = px[i + 2]; }
+      var o = (await sess.run({ input: new ort.Tensor('int32', d, [1, H, W, 3]) })).output_0.data;
+      var best = null, area = 0;
+      for (var p = 0; p < 6; p++) {
+        var q = o.subarray(p * 56, p * 56 + 56); if (q[55] < 0.15) continue;
+        var a = (q[54] - q[52]) * (q[53] - q[51]); if (a <= area) continue; area = a;
+        best = []; for (var k = 0; k < 17; k++) best.push([q[k * 3 + 1] * W / sc + r.x, q[k * 3] * H / sc + r.y, q[k * 3 + 2]]);
+        var bx = [q[52] * W / sc + r.x, q[51] * H / sc + r.y, q[54] * W / sc + r.x, q[53] * H / sc + r.y];
+      }
+      prevBox = best ? bx : null;
+      return best;
+    }
+    function mid(kp, i, j, th) {
+      var a = kp[i], b = kp[j];
+      if (a[2] > th && b[2] > th) return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (a[2] > th) return [a[0], a[1]]; if (b[2] > th) return [b[0], b[1]]; return null;
+    }
+
+    // ---- 道具(竹刀・面鳴り): 手元から放射状に、両わきと色が違う細い線が長く続く向きを探す ----
+    function stickScores(hand, elbow) {
+      var SW = Math.min(720, v.videoWidth), k = SW / v.videoWidth, SH = Math.round(v.videoHeight * k);
+      sm.width = SW; sm.height = SH; sctx.drawImage(v, 0, 0, SW, SH);
+      var px = sctx.getImageData(0, 0, SW, SH).data;
+      var S = new Float32Array(NA), L = new Float32Array(NA);
+      var hx = hand[0] * k, hy = hand[1] * k, ea = elbow ? Math.atan2(elbow[1] - hand[1], elbow[0] - hand[0]) : null;
+      var maxR = SH * 0.45, off2 = Math.max(4, Math.round(SW / 68));
+      function col(x, y) { x = x | 0; y = y | 0; if (x < 0 || y < 0 || x >= SW || y >= SH) return null; var i = (y * SW + x) * 4; return [px[i], px[i + 1], px[i + 2]]; }
+      function dist(a, b) { var r = a[0] - b[0], g = a[1] - b[1], bl = a[2] - b[2]; return Math.sqrt(r * r + g * g + bl * bl); }
+      for (var j = 0; j < NA; j++) {
+        var an = j * Math.PI * 2 / NA;
+        if (ea != null) { var dd = Math.abs(((an - ea + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI); if (dd < 0.7) continue; } // 前腕の向きは除く
+        var dx = Math.cos(an), dy = Math.sin(an), nx = -dy, ny = dx, cnt = 0, bad = 0, last = 0, sum = 0, st = false;
+        var rs = Math.max(2, SW / 216); for (var r = SW * 0.04; r < maxR; r += rs) {
+          var x = hx + dx * r, y = hy + dy * r, on = col(x, y), s1 = col(x + nx * off2, y + ny * off2), s2 = col(x - nx * off2, y - ny * off2);
+          if (!on || !s1 || !s2) break;
+          var cc = Math.min(dist(on, s1), dist(on, s2));
+          if (cc > 26) { cnt++; bad = 0; last = r; st = true; sum += Math.min(cc, 120); }
+          else if (++bad > (st ? 5 : 4)) break;
+        }
+        S[j] = cnt + 0.004 * sum; L[j] = last / k;
+      }
+      return { S: S, L: L };
+    }
+
+    // ---- 解析 ----
+    $('stop').addEventListener('click', function () { stopFlag = true; });
+    $('run').addEventListener('click', async function () {
+      stopFlag = false; prevBox = null; $('run').disabled = true; $('stop').disabled = false; $('out').hidden = true; v.pause();
+      var t0 = A == null ? 0 : A, t1 = B == null ? v.duration : B; if (t1 < t0) { var tt = t0; t0 = t1; t1 = tt; }
+      var step = parseInt($('skip').value, 10) / fileFps, frames = [], startWall = performance.now();
+      for (var t = t0 + step / 2; t < t1 && !stopFlag; t += step) {
+        await seek(t);
+        var kp = await pose(), hand = kp && mid(kp, 9, 10, 0.1), el = kp && mid(kp, 7, 8, 0.1);
+        var st = hand ? stickScores(hand, el) : { S: new Float32Array(NA), L: new Float32Array(NA) };
+        frames.push({ t: t, kp: kp, hand: hand, S: st.S, L: st.L });
+        var done = frames.length, total = Math.ceil((t1 - t0) / step), el2 = (performance.now() - startWall) / 1000;
+        stat.textContent = '解析中 ' + done + ' / ' + total + 'コマ(残り約' + Math.round(el2 / done * (total - done)) + '秒)';
+        drawFrame(frames[frames.length - 1], null);
+      }
+      $('stop').disabled = true; $('run').disabled = false;
+      if (frames.length < 10) { stat.textContent = '短すぎて読めませんでした'; return; }
+      try { R = analyze(frames); window.__swing = R; show(R); stat.textContent = '解析おわり(' + frames.length + 'コマ)'; } // __swing: 試験用(中身の確認)
+      catch (e) { stat.textContent = '解析でエラー'; $('log').textContent = String(e && e.stack || e); }
+    });
+
+    function smooth(a, w) { var h = w >> 1, o = []; for (var i = 0; i < a.length; i++) { var s = 0, n = 0; for (var k = -h; k <= h; k++) { var x = a[i + k]; if (x != null && !isNaN(x)) { s += x; n++; } } o.push(n ? s / n : NaN); } return o; }
+    function fill(a) { var o = a.slice(), last = null; for (var i = 0; i < o.length; i++) { if (o[i] == null || isNaN(o[i])) o[i] = last; else last = o[i]; } last = null; for (i = o.length - 1; i >= 0; i--) { if (o[i] == null) o[i] = last; else last = o[i]; } return o; }
+    function ang3(a, b, c2) { if (!a || !b || !c2) return NaN; var ux = a[0] - b[0], uy = a[1] - b[1], vx = c2[0] - b[0], vy = c2[1] - b[1]; return Math.acos(Math.max(-1, Math.min(1, (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy) || 1)))) * 180 / Math.PI; }
+
+    function analyze(F) {
+      var skip = parseInt($('skip').value, 10), capE = parseFloat($('cap').value) / skip; // 間引いたあとの実際のコマ数
+      var N = F.length, dtReal = 1 / capE, sw = Math.max(3, Math.round(capE / 30) * 2 + 1);
+      // 向き: ビタビ(急に向きが飛ばない道筋)
+      var maxJump = Math.max(8, Math.round(30 / (capE / 30))); // 1コマで動ける角度の目安(2度きざみの数)
+      var dp = new Float32Array(NA), bp = [], prev;
+      function norm(S) { var m = 0; for (var j = 0; j < NA; j++) m = Math.max(m, S[j]); var o = new Float32Array(NA); for (j = 0; j < NA; j++) o[j] = m > 0 ? S[j] / m : 0; return o; }
+      prev = norm(F[0].S); dp.set(prev); bp.push(null);
+      for (var i = 1; i < N; i++) {
+        var s = norm(F[i].S), nd = new Float32Array(NA), b = new Int16Array(NA);
+        for (var j = 0; j < NA; j++) {
+          var best = -1e9, bi = 0;
+          for (var d = -maxJump; d <= maxJump; d++) { var k = (j + d + NA) % NA, ad = Math.max(0, Math.abs(d) - 4), val = dp[k] - 1.2 * Math.pow(ad / 15, 2) - 0.004 * Math.abs(d); /* 見えないときは向きを保つ */ if (val > best) { best = val; bi = k; } }
+          nd[j] = best + s[j]; b[j] = bi;
+        }
+        dp = nd; bp.push(b);
+      }
+      var path = new Array(N), jb = 0, bv = -1e9; for (j = 0; j < NA; j++) if (dp[j] > bv) { bv = dp[j]; jb = j; }
+      path[N - 1] = jb; for (i = N - 1; i > 0; i--) path[i - 1] = bp[i][path[i]];
+      var raw = path.map(function (j) { return j * Math.PI * 2 / NA; }), ang = [raw[0]];
+      for (i = 1; i < N; i++) { var dd = raw[i] - raw[i - 1]; dd = ((dd + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI; ang.push(ang[i - 1] + dd); }
+      ang = smooth(ang, sw);
+      var conf = F.map(function (f, i) { return f.S[path[i]]; }), Ls = F.map(function (f, i) { return f.L[path[i]]; });
+      // 長さの校正: よく見えているコマで、画面上いちばん長く見えた長さ(90パーセンタイル) = 実際の長さ
+      var cs = conf.slice().sort(function (a, b) { return a - b; }), cth = cs[Math.floor(cs.length * 0.4)];
+      var good = Ls.filter(function (l, i) { return conf[i] >= cth && l > 0; }).sort(function (a, b) { return a - b; });
+      var Lpx = good.length ? good[Math.floor(good.length * 0.9)] : 300;
+      var mpp = parseFloat($('len').value) / 100 / Lpx; // 1画素 = 何m
+      var hx = smooth(fill(F.map(function (f) { return f.hand ? f.hand[0] : null; })), sw), hy = smooth(fill(F.map(function (f) { return f.hand ? f.hand[1] : null; })), sw);
+      var tip = []; for (i = 0; i < N; i++) tip.push([hx[i] + Lpx * Math.cos(ang[i]), hy[i] + Lpx * Math.sin(ang[i])]);
+      function spd(xs, ys) { var o = []; for (var i = 0; i < N; i++) { var a = Math.max(0, i - 1), b = Math.min(N - 1, i + 1); o.push(Math.hypot(xs[b] - xs[a], ys[b] - ys[a]) / ((b - a) * dtReal) * mpp); } return o; }
+      var vt = spd(tip.map(function (p) { return p[0]; }), tip.map(function (p) { return p[1]; })), vh = spd(hx, hy);
+      // 関節の角度(画面上)
+      var sh = F.map(function (f) { return f.kp && mid(f.kp, 5, 6, 0.2); }), hp = F.map(function (f) { return f.kp && mid(f.kp, 11, 12, 0.2); }), el = F.map(function (f) { return f.kp && mid(f.kp, 7, 8, 0.2); });
+      var aSh = smooth(fill(F.map(function (f, i) { return ang3(hp[i], sh[i], el[i]); })), sw), aEl = smooth(fill(F.map(function (f, i) { return ang3(sh[i], el[i], f.hand); })), sw);
+      var aWr = smooth(fill(F.map(function (f, i) { if (!el[i] || !f.hand) return NaN; var ux = f.hand[0] - el[i][0], uy = f.hand[1] - el[i][1], dx = Math.cos(ang[i]), dy = Math.sin(ang[i]); return Math.acos(Math.max(-1, Math.min(1, (ux * dx + uy * dy) / (Math.hypot(ux, uy) || 1)))) * 180 / Math.PI; })), sw);
+      // 振り下ろし: 先端の速さのピークで、先端が下へ動いているもの
+      var thr = vt.slice().sort(function (a, b) { return a - b; })[Math.floor(N * 0.8)], gap = Math.round(0.5 / dtReal), swings = [];
+      for (i = 1; i < N - 1; i++) {
+        if (vt[i] < thr || vt[i] < vt[i - 1] || vt[i] < vt[i + 1]) continue;
+        if (swings.length && i - swings[swings.length - 1].i < gap) { if (vt[i] > vt[swings[swings.length - 1].i]) swings.pop(); else continue; }
+        if (tip[Math.min(N - 1, i + 1)][1] - tip[Math.max(0, i - 1)][1] <= 0) continue; // 上へ動いている = 振りかぶり
+        swings.push({ i: i });
+      }
+      function peak(arr, i, sign) { var a = Math.max(1, i - Math.round(0.4 / dtReal)), b = Math.min(N - 2, i + Math.round(0.25 / dtReal)), bi = i, bv2 = -1e9; for (var k = a; k <= b; k++) { var d2 = sign * (arr[k + 1] - arr[k - 1]); if (d2 > bv2) { bv2 = d2; bi = k; } } return Math.round((bi - i) * dtReal * 1000); }
+      swings.forEach(function (s2) { var i2 = s2.i; s2.t = F[i2].t; s2.tip = vt[i2]; s2.hand = vh[i2]; s2.sh = peak(aSh, i2, -1); s2.wr = peak(aWr, i2, -1); s2.el = peak(aEl, i2, 1); s2.seen = conf[i2] >= cth; });
+      return { F: F, N: N, tip: tip, vt: vt, vh: vh, ang: ang, conf: conf, cth: cth, Lpx: Lpx, mpp: mpp, swings: swings, hx: hx, hy: hy, dtReal: dtReal };
+    }
+
+    function drawFrame(f, i) {
+      ctx.clearRect(0, 0, c.width, c.height); var lw = Math.max(3, c.width / 250);
+      if (f && f.kp) {
+        ctx.strokeStyle = '#4dc3ff'; ctx.lineWidth = lw;
+        EDGES.forEach(function (e) { var a = f.kp[e[0]], b = f.kp[e[1]]; if (a[2] > 0.2 && b[2] > 0.2) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); } });
+      }
+      if (R && i != null) {
+        ctx.strokeStyle = '#ff4a40'; ctx.lineWidth = lw * 0.7; ctx.beginPath();
+        for (var k = Math.max(0, i - 8); k <= i; k++) { var p = R.tip[k]; if (k === Math.max(0, i - 8)) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]); }
+        ctx.stroke();
+        ctx.strokeStyle = R.conf[i] >= R.cth ? '#3ee07a' : '#ffb020'; ctx.lineWidth = lw * 1.2;
+        ctx.beginPath(); ctx.moveTo(R.hx[i], R.hy[i]); ctx.lineTo(R.tip[i][0], R.tip[i][1]); ctx.stroke();
+        ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(0, 0, c.width, lw * 12);
+        ctx.fillStyle = '#fff'; ctx.font = 'bold ' + (lw * 7) + 'px system-ui'; ctx.fillText('先端 ' + R.vt[i].toFixed(1) + ' m/s  手元 ' + R.vh[i].toFixed(1) + ' m/s', lw * 3, lw * 8.5);
+      }
+    }
+    function show(R2) {
+      $('out').hidden = false;
+      var s = R2.swings, mx = s.reduce(function (m, x) { return Math.max(m, x.tip); }, 0);
+      $('best').textContent = s.length ? '先端の最高 ' + mx.toFixed(1) + ' m/s(振り下ろし ' + s.length + '回)' : '振り下ろしが見つかりませんでした';
+      var h = '<tr><th>時刻</th><th>先端 m/s</th><th>手元 m/s</th><th>肩</th><th>手首</th><th>肘</th></tr>';
+      s.forEach(function (x) { h += '<tr><td>' + x.t.toFixed(2) + '秒' + (x.seen ? '' : '(補った)') + '</td><td>' + x.tip.toFixed(1) + '</td><td>' + x.hand.toFixed(1) + '</td><td>' + x.sh + '</td><td>' + x.wr + '</td><td>' + x.el + '</td></tr>'; });
+      $('tbl').innerHTML = h;
+      var sc = $('scrub'); sc.max = R2.N - 1; sc.value = s.length ? s[0].i : 0; scrubTo(+sc.value);
+      chart(R2);
+    }
+    async function scrubTo(i) { if (!R) return; await seek(R.F[i].t); drawFrame(R.F[i], i); }
+    $('scrub').addEventListener('input', function (e) { scrubTo(+e.target.value); });
+    function chart(R2) {
+      var cv = $('chart'), g = cv.getContext('2d'), W = cv.width, H = cv.height, mx = Math.max.apply(null, R2.vt.concat([1])) * 1.1;
+      g.clearRect(0, 0, W, H); g.strokeStyle = '#2a3354'; g.fillStyle = '#8f9abd'; g.font = '12px system-ui';
+      for (var y = 0; y <= mx; y += Math.max(1, Math.round(mx / 5))) { var yy = H - 18 - (H - 28) * y / mx; g.beginPath(); g.moveTo(30, yy); g.lineTo(W, yy); g.stroke(); g.fillText(y, 4, yy + 4); }
+      function line(a, col) { g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); a.forEach(function (val, i) { var x = 30 + (W - 34) * i / (a.length - 1), yy = H - 18 - (H - 28) * val / mx; if (i) g.lineTo(x, yy); else g.moveTo(x, yy); }); g.stroke(); }
+      R2.swings.forEach(function (s) { var x = 30 + (W - 34) * s.i / (R2.N - 1); g.strokeStyle = 'rgba(255,74,64,.5)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 18); g.stroke(); });
+      line(R2.vt, '#ff4a40'); line(R2.vh, '#4d8bff');
+    }
+    $('copy').addEventListener('click', function () {
+      if (!R) return;
+      var t = 'MITORI 素振りの読み取り(試作)\n端末: ' + navigator.userAgent + '\n道具の長さ ' + $('len').value + 'cm / 撮ったコマ数 ' + $('cap').value + ' / 読むコマ ' + $('skip').value + 'に1つ / ファイル約' + Math.round(fileFps) + 'コマ/秒 / 画面上の長さ ' + Math.round(R.Lpx) + 'px\n';
+      t += '時刻(秒)\t先端m/s\t手元m/s\t肩ms\t手首ms\t肘ms\t見えていた\n';
+      R.swings.forEach(function (x) { t += x.t.toFixed(2) + '\t' + x.tip.toFixed(1) + '\t' + x.hand.toFixed(1) + '\t' + x.sh + '\t' + x.wr + '\t' + x.el + '\t' + (x.seen ? 'はい' : '補った') + '\n'; });
+      navigator.clipboard.writeText(t).then(function () { $('copy').textContent = 'コピーしました'; setTimeout(function () { $('copy').textContent = '結果をコピー'; }, 1500); });
+    });
+  })();
+  </script>
+</body>
+</html>
