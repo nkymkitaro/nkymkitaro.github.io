@@ -3,8 +3,10 @@
 //   依頼 claude/requests/2026-11-13-to-videocoder-fps60-stability-test.md の対応2)。映像は約2割暗くなる
 // - カメラが替わったとき(自撮りへの切り替えなど)や、ほかの処理が取り込みの大きさを頼み直したとき(60の指定が消える)は、自動で頼み直す
 // - 2026-11-22 中山さん「暗くなろうが関係なく、なめらかでは60fpsで撮る」: 明るさより60コマを優先する。
-//   ①60コマちょうど(exact)を頼む(断られたら ideal に戻す) ②それでも50コマを切るなら、ISO(感度)を中間→最大へ上げる
+//   ①60コマちょうど(exact)を頼む(断られたら ideal に戻す) ②それでも50コマを切るなら、ISO(感度)を段々上げる
 //   (Pixel 9a の実測: ISO を上げると露出時間が短いまま明るさが戻り、57コマが出た。代わりに映像がざらつく)。暗い知らせは出さない
+// - 2026-11-22(中山さん「暗くなったらゲインをあげよう」B): 60コマが出ていても、映像が暗ければ ISO(ゲイン)を1段上げ、明るすぎれば1段下げる。
+//   映像の明るさは1秒ごとに 32×18 に縮めて端末の中で測り、すぐ捨てる
 // - 最初はオフ。計測(GA4)には何も送らない
 import { readLocal, writeLocal } from './safe-storage.js';
 
@@ -16,8 +18,13 @@ const WARMUP_MS = 3000; // 開いた直後は露出が落ち着かないので�
 let on = readLocal(KEY) === '1';
 let getTrack = () => null;
 let appliedId = '';
-let level = 0; // 0: continuous だけ / 1: ISO 中間 / 2: ISO 最大(カメラが替わったら0に戻す)
+let level = 0; // 0: ISO は自動 / 1〜4: ISO を段々上げる(カメラが替わったら0に戻す)
+const ISO_STEPS = [0, 400, 1600, 3200, Infinity]; // 端末の範囲に収める。Infinity = 最大
+const MAX_LEVEL = ISO_STEPS.length - 1;
+const DARK = 60; const BRIGHT = 150; // 映像の明るさ(0〜255)。暗い・明るすぎの目安
+let darkSec = 0; let brightSec = 0;
 let exactOk = true; // 60ちょうどを断られた端末は ideal にする
+let isoOk = true; // ISO の指定を断られた端末は、ISO を指定しない
 let lowSec = 0;
 let openedAt = 0;
 let frames = 0;
@@ -25,7 +32,7 @@ let frames = 0;
 export function isSmooth60() { return on; }
 export function setSmooth60(v) {
   on = !!v; writeLocal(KEY, on ? '1' : '0');
-  appliedId = ''; lowSec = 0; level = 0;
+  appliedId = ''; lowSec = 0; level = 0; darkSec = 0; brightSec = 0;
   apply(true);
 }
 
@@ -42,7 +49,7 @@ function withSmooth(t, c) {
   // continuous や ISO に対応しない端末(iPhone など)は、60の頼みだけ
   const adv = {};
   if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
-  if (level > 0 && caps.iso && caps.iso.max) adv.iso = level === 1 ? Math.round((caps.iso.min + caps.iso.max) / 2) : caps.iso.max;
+  if (isoOk && level > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[level]));
   if (Object.keys(adv).length) next.advanced = [adv];
   return next;
 }
@@ -56,7 +63,11 @@ function patchApply() {
       const self = this;
       return origApply.call(this, withSmooth(this, c)).catch((err) => {
         // 60ちょうどを出せない端末: ideal にして頼み直す
-        if (on && exactOk && err && err.name === 'OverconstrainedError') { exactOk = false; return origApply.call(self, withSmooth(self, c)); }
+        // 断られた項目だけやめて、1回だけ頼み直す(60ちょうど → ideal、ISO → 指定しない)
+        if (on && err && err.name === 'OverconstrainedError') {
+          if (err.constraint === 'iso' && isoOk) { isoOk = false; return origApply.call(self, withSmooth(self, c)); }
+          if (exactOk && err.constraint !== 'iso') { exactOk = false; return origApply.call(self, withSmooth(self, c)); }
+        }
         throw err;
       });
     }
@@ -68,12 +79,25 @@ async function apply(force) {
   const t = getTrack();
   if (!t || t.readyState !== 'live' || typeof t.applyConstraints !== 'function') return;
   if (!force && t.id === appliedId) return;
-  if (t.id !== appliedId) { openedAt = performance.now(); lowSec = 0; level = 0; }
+  if (t.id !== appliedId) { openedAt = performance.now(); lowSec = 0; level = 0; darkSec = 0; brightSec = 0; }
   appliedId = t.id;
   if (!base.has(t)) { const c = (t.getConstraints && t.getConstraints()) || {}; delete c.advanced; delete c.frameRate; base.set(t, c); }
   // 新しいカメラで、オフのままなら何もしない(余計に頼み直さない)
   if (!on && !force) return;
   try { await t.applyConstraints(base.get(t)); } catch (err) { /* 頼めない端末は、今のまま */ }
+}
+
+// 映像の明るさ(0〜255の平均)。端末の中で測ってすぐ捨てる
+let lumaVideo = null; const lc = typeof document !== 'undefined' ? document.createElement('canvas') : null; let lctx = null;
+function measureLuma() {
+  const v = lumaVideo; if (!v || !lc || !v.videoWidth) return null;
+  try {
+    if (!lctx) { lc.width = 32; lc.height = 18; lctx = lc.getContext('2d', { willReadFrequently: true }); }
+    lctx.drawImage(v, 0, 0, 32, 18);
+    const d = lctx.getImageData(0, 0, 32, 18).data; let s2 = 0;
+    for (let i = 0; i < d.length; i += 4) s2 += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+    return s2 / (d.length / 4);
+  } catch (err) { return null; }
 }
 
 // 実際のコマ数を数える(画面に出たコマ。親機の見ている映像)
@@ -87,15 +111,21 @@ export function initSmooth60({ trackGetter, video }) {
   getTrack = trackGetter;
   patchApply();
   countFrames(video);
+  lumaVideo = video;
   setInterval(() => {
     apply(false);
     const fps = frames; frames = 0;
     const t = getTrack();
     if (!on || !t || document.hidden || performance.now() - openedAt < WARMUP_MS) { lowSec = 0; return; }
     lowSec = fps > 0 && fps < LOW_FPS ? lowSec + 1 : 0;
-    if (lowSec >= LOW_SECONDS && level < 2) {
-      // 暗くて60が出ない: ISO を1段上げて頼み直す(明るさより60コマ)
-      level += 1; lowSec = 0; openedAt = performance.now();
+    const luma = measureLuma();
+    darkSec = luma != null && luma < DARK ? darkSec + 1 : 0;
+    brightSec = luma != null && luma > BRIGHT ? brightSec + 1 : 0;
+    let next = level;
+    if ((lowSec >= LOW_SECONDS || darkSec >= 2) && level < MAX_LEVEL) next = level + 1; // 60が出ない・暗い: ゲインを上げる
+    else if (brightSec >= 3 && level > 0 && fps >= LOW_FPS) next = level - 1;          // 明るすぎ: ゲインを下げる
+    if (next !== level) {
+      level = next; lowSec = 0; darkSec = 0; brightSec = 0; openedAt = performance.now();
       t.applyConstraints(base.get(t) || {}).catch(() => {});
     }
   }, 1000);
