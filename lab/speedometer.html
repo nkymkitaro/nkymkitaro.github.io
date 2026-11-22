@@ -77,6 +77,23 @@
   .go { min-width: 120px; min-height: 64px; border-radius: 18px; border: 0; background: #fff; color: var(--n900); font-weight: 900; font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 0 var(--shade); }
   .go.stop { background: var(--red); color: #fff; box-shadow: 0 4px 0 #7a1410; }
   .go svg { width: 22px; height: 22px; }
+  /* 横向き: 左に映像(上から下まで)、右の列に ロゴ・状態・メーター・切り替え・はじめる(2026-11-23 実機「横画面クソすぎ」: 映像もメーターも小さく、上下の段で高さを取られていた) */
+  @media (orientation: landscape) {
+    body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 42vw, 440px); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    main { display: contents; }
+    .stage { grid-column: 1; grid-row: 1 / -1; width: auto !important; min-width: 0 !important; }
+    .top { grid-column: 2; grid-row: 1; padding: 8px 10px 2px; gap: 6px; }
+    .top .logo { height: 16px; }
+    .kslogo { height: 34px; }
+    .band { font-size: .95rem; padding: 5px 18px 5px 10px; }
+    .ib { width: 42px; height: 42px; } .ib svg { width: 21px; height: 21px; }
+    #stat { grid-column: 2; grid-row: 2; font-size: .62rem; padding: 0 10px 2px; }
+    .view { grid-column: 2; grid-row: 3; }
+    .dock { grid-column: 2; grid-row: 4; padding: 6px 10px calc(8px + env(safe-area-inset-bottom)); background: none; }
+    .dock { gap: 4px; } .tabs { gap: 0; } .tabs button { font-size: .8rem; padding: 10px 7px; min-height: 44px; white-space: nowrap; }
+    .go { flex: none; min-width: 84px; min-height: 52px; font-size: 1rem; padding: 0 10px; }
+    #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - clamp(320px, 42vw, 440px) - 20px); bottom: 10px; }
+  }
 </style>
 </head>
 <body class="ui-a">
