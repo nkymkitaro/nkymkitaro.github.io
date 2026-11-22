@@ -121,9 +121,11 @@ async function maybePose(t) {
 // ---- 入力 ----
 $('btnCam').onclick = async () => {
   try {
-    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
     if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
+    // 測るのは小さい画像なので、画質より1秒60コマを優先する(640×480)。インカメは大きい画質だと30コマまでのことが多い
+    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } } });
     isFile = false; v.srcObject = st; v.src = ''; await v.play(); begin();
+    tuneCamera(st.getVideoTracks()[0]);
   } catch (e) { stat.textContent = 'カメラを開けません: ' + e.message; }
 };
 $('file').onchange = (e) => {
@@ -131,6 +133,33 @@ $('file').onchange = (e) => {
   isFile = true; v.srcObject = null; v.src = URL.createObjectURL(f); v.loop = false; v.playbackRate = parseFloat($('rate').value);
   v.onloadedmetadata = () => { v.play(); begin(); };
 };
+// ---- 60コマにする(本体の「なめらか」と同じ考え。js/smooth60.js) ----
+// 何も指定しないと、Pixel 9a はふつうの部屋で約20コマ(露出が長くなる)。①60ちょうどを頼む ②露出モード continuous を、大きさの頼みのあとで足す
+// (Chrome は露出の指定が入った頼みでは大きさ・コマ数を変えない) ③それでも50コマを切るなら、ISO(感度)を段々上げる(明るさを保って露出を短くする。映像はざらつく)
+const ISO_STEPS = [0, 400, 800, 1600, 3200];
+let camTrack = null, camBase = null, isoLevel = 0, lowSec = 0, camFps = 0, lastPresented = null;
+async function tuneCamera(tr) {
+  camTrack = tr; isoLevel = 0; lowSec = 0;
+  camBase = { width: { ideal: 640 }, height: { ideal: 480 } };
+  try { await tr.applyConstraints({ ...camBase, frameRate: { exact: 60 } }); camBase.frameRate = { exact: 60 }; }
+  catch (e) { camBase.frameRate = { ideal: 60 }; try { await tr.applyConstraints(camBase); } catch (e2) { /* そのまま */ } }
+  await applyExposure();
+}
+async function applyExposure() {
+  const tr = camTrack; if (!tr || tr.readyState !== 'live') return;
+  const caps = tr.getCapabilities ? tr.getCapabilities() : {}, adv = {};
+  if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
+  if (isoLevel > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[isoLevel]));
+  if (!Object.keys(adv).length) return;
+  try { await tr.applyConstraints({ ...camBase, advanced: [adv] }); } catch (e) { /* 対応しない端末(iPhone など)は、そのまま */ }
+}
+function checkCamFps() { // 1秒ごと。カメラのコマ数が50を切るのが2秒続いたら、ISOを1段上げる
+  if (!camTrack || isFile) return;
+  const caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+  if (!caps.iso || (caps.frameRate && caps.frameRate.max < 50)) return; // ISOを変えられない・そもそも60コマが出ないカメラでは、上げても意味がない(ざらつくだけ)
+  if (camFps > 0 && camFps < 50) { if (++lowSec >= 2 && isoLevel < ISO_STEPS.length - 1) { isoLevel++; lowSec = 0; applyExposure(); } } else lowSec = 0;
+}
+
 function begin() {
   $('help').style.display = 'none'; eng.reset(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
@@ -142,12 +171,16 @@ function onFrame(now, md) {
   if (lastT == null || t > lastT) { eng.process(v, t, { keepDebug: $('dbg').value === 'on' }); lastT = t; maybePose(t); }
   if (lastT != null && t < lastT - 0.5) { eng.reset(); lastT = t; } // 動画を巻き戻したとき
   procMs = procMs * 0.9 + (performance.now() - t0) * 0.1; frames++;
+  if (lastPresented == null) lastPresented = md.presentedFrames; presentedNow = md.presentedFrames;
   draw();
   if (!v.ended) v.requestVideoFrameCallback(onFrame); else running = false;
 }
+let presentedNow = 0;
 setInterval(() => {
+  camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
-  stat.textContent = `処理 ${procMs.toFixed(1)}ms/コマ ・ ${frames}コマ/秒 ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
+  stat.textContent = `カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 

@@ -19,7 +19,7 @@ export function isToolColor(r, g, b, mode) {
 
 export class SwingEngine {
   constructor({ lengthCm = 101.5, color = 'wood', width = 320 } = {}) {
-    this.W = width; this.H = 0; this.lengthCm = lengthCm; this.color = color;
+    this.W = width; this.H = 0; this.targetPx = width * Math.round(width * 9 / 16); this.lengthCm = lengthCm; this.color = color;
     this.cv = document.createElement('canvas'); this.cx = this.cv.getContext('2d', { willReadFrequently: true });
     this.bg = null; this.frames = 0;
     this.samples = []; // { t, ang, len, edge, hand, ok }
@@ -39,7 +39,7 @@ export class SwingEngine {
   get effM() { return Math.max(0.2, (this.lengthCm - GRIP_CM) / 100); }
   get lenPx() {
     if (this.lenHist.length < 5) return null;
-    const a = this.lenHist.slice(-300).sort((x, y) => x - y); return a[Math.floor(a.length * 0.9)];
+    const a = this.lenHist.slice(-300).sort((x, y) => x - y); return a[Math.floor(a.length * 0.75)]; // 上から25%の長さ(取り違えの長い値に引っぱられにくい)
   }
   reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.speed = 0; }
 
@@ -50,9 +50,11 @@ export class SwingEngine {
     const ws = [9, 10].filter(ok); if (!ws.length) return;
     const hand = [ws.reduce((m, j) => m + kp[j][0], 0) / ws.length * k, ws.reduce((m, j) => m + kp[j][1], 0) / ws.length * k];
     const hips = [11, 12].filter(ok), hipY = hips.length ? hips.reduce((m, j) => m + kp[j][1], 0) / hips.length * k : null;
-    const ears = [3, 4].filter(ok), faceX = ok(0) && ears.length ? kp[0][0] - ears.reduce((m, j) => m + kp[j][0], 0) / ears.length : null;
+    // 前(向いている側): 鼻が両肩の真ん中より左右どちらにあるか(構えると頭は前に出る)。肩幅に対する割合で見る
+    const sh = [5, 6].filter(ok), hp2 = [11, 12].filter(ok);
+    const faceX = ok(0) && sh.length && hp2.length ? (kp[0][0] - sh.reduce((m, j) => m + kp[j][0], 0) / sh.length) / Math.max(1, Math.abs(sh.reduce((m, j) => m + kp[j][1], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][1], 0) / hp2.length)) : null;
     this.pose.push({ t, hand, hipY }); if (this.pose.length > 40) this.pose.shift();
-    if (faceX != null && Math.abs(faceX) > 3) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 50) this.faceVotes.shift(); }
+    if (faceX != null && Math.abs(faceX) > 0.08) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 60) this.faceVotes.shift(); } // 胴の長さの8%以上ずれているときだけ数える
   }
   // 人(骨格)が最近見えているか。骨格を使う設定で、0.6秒以上見えていなければ測らない(誰もいない部屋で、家具を道具と取り違えて数えていた。2026-11-22 中山さんの実機)
   personSeen(t) { const P = this.pose; return P.length > 0 && t - P[P.length - 1].t < 0.6; }
@@ -68,7 +70,11 @@ export class SwingEngine {
   // 1コマを処理する。t は実際のコマの時刻(秒)
   process(video, t, { keepDebug = false } = {}) {
     const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
-    const W = this.W, H = this.H || (this.H = Math.round(vh * W / vw));
+    // 処理する画像の大きさは、画素の数を一定(約5.8万)にそろえる。縦長の映像で幅320のままだと、横長の2.4倍の画素になり重かった(2026-11-22 実機で1コマ32ms)
+    if (this.H && (vw !== this.vw || vh !== this.vh)) { this.H = 0; this.bg = null; this.frames = 0; this.lenHist = []; this.lastAng = null; } // 映像の大きさが変わった(カメラの頼み直し・向きの変更)
+    this.vw = vw; this.vh = vh;
+    if (!this.H) { this.W = Math.max(120, Math.round(Math.sqrt(this.targetPx * vw / vh))); this.H = Math.round(vh * this.W / vw); }
+    const W = this.W, H = this.H;
     if (this.cv.width !== W) { this.cv.width = W; this.cv.height = H; }
     this.cx.drawImage(video, 0, 0, W, H);
     const px = this.cx.getImageData(0, 0, W, H).data, N = W * H;
@@ -182,9 +188,17 @@ export class SwingEngine {
   }
   // 振り下ろしの回る向き: 速いほうの向き(直近10本ずつの平均)
   downSign() {
-    // 顔の向きで決める方法は、縮めた画像では鼻と耳の差が数画素しかなく、逆に出ることがあった。速いほうの向きだけで決める(素振りは振り下ろしのほうが速い)
-    const avg = (a) => (a.length ? a.slice(-10).reduce((x, y) => x + y, 0) / Math.min(10, a.length) : 0);
-    return avg(this.signStats[1]) >= avg(this.signStats[-1]) ? 1 : -1;
+    // ①前(向いている側)がはっきりしていれば、最速の瞬間に剣先が前へ動く向き(振り下ろしは、後ろ→上→前へ回る)
+    //  (縦長の映像では振りかぶりも同じくらい速く出て、速さだけでは逆になることがあった。2026-11-22)
+    const fv = this.faceVotes, fs = fv.reduce((a, b) => a + b, 0);
+    if (fv.length >= 8 && Math.abs(fs) >= fv.length * 0.6) {
+      const f = Math.sign(fs); let vote = 0;
+      for (const s of this.swings.slice(-20)) vote += (s.vx * f > 0 ? 1 : -1) * s.sign;
+      if (vote) return vote > 0 ? 1 : -1;
+    }
+    // ②分からなければ、速いほうの向き(直近10本ずつの中央値。外れ値に強い)
+    const med = (a) => { const b = a.slice(-10).sort((x, y) => x - y); return b.length ? b[b.length >> 1] : 0; };
+    return med(this.signStats[1]) >= med(this.signStats[-1]) ? 1 : -1;
   }
   isDown(sw) { return sw.sign === this.downSign(); }
 }
