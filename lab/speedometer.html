@@ -122,8 +122,8 @@ async function maybePose(t) {
 $('btnCam').onclick = async () => {
   try {
     if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
-    // 測るのは小さい画像なので、画質より1秒60コマを優先する(640×480)。インカメは大きい画質だと30コマまでのことが多い
-    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 60 } } });
+    // まず高い画質(1280×720)で60コマを頼み、60が出なければ640×480に下げる(中山さん 2026-11-22「Bで」)。測るのは小さい画像なので、速さの精度は変わらない
+    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
     isFile = false; v.srcObject = st; v.src = ''; await v.play(); begin();
     tuneCamera(st.getVideoTracks()[0]);
   } catch (e) { stat.textContent = 'カメラを開けません: ' + e.message; }
@@ -137,12 +137,18 @@ $('file').onchange = (e) => {
 // 何も指定しないと、Pixel 9a はふつうの部屋で約20コマ(露出が長くなる)。①60ちょうどを頼む ②露出モード continuous を、大きさの頼みのあとで足す
 // (Chrome は露出の指定が入った頼みでは大きさ・コマ数を変えない) ③それでも50コマを切るなら、ISO(感度)を段々上げる(明るさを保って露出を短くする。映像はざらつく)
 const ISO_STEPS = [0, 400, 800, 1600, 3200];
-let camTrack = null, camBase = null, isoLevel = 0, lowSec = 0, camFps = 0, lastPresented = null;
-async function tuneCamera(tr) {
-  camTrack = tr; isoLevel = 0; lowSec = 0;
-  camBase = { width: { ideal: 640 }, height: { ideal: 480 } };
-  try { await tr.applyConstraints({ ...camBase, frameRate: { exact: 60 } }); camBase.frameRate = { exact: 60 }; }
-  catch (e) { camBase.frameRate = { ideal: 60 }; try { await tr.applyConstraints(camBase); } catch (e2) { /* そのまま */ } }
+const TIERS = [[1280, 720], [640, 480]]; // 画質の段。60コマが出ないときは下の段へ
+let camTrack = null, camBase = null, isoLevel = 0, lowSec = 0, camFps = 0, lastPresented = null, tier = 0;
+async function tuneCamera(tr, startTier = 0) {
+  camTrack = tr; isoLevel = 0; lowSec = 0; tier = startTier;
+  for (; tier < TIERS.length; tier++) { // 60ちょうどを頼める段を上から探す
+    const base = { width: { ideal: TIERS[tier][0] }, height: { ideal: TIERS[tier][1] } };
+    try { await tr.applyConstraints({ ...base, frameRate: { exact: 60 } }); camBase = { ...base, frameRate: { exact: 60 } }; break; } catch (e) { /* 次の段 */ }
+  }
+  if (tier >= TIERS.length) { // どの段でも60ちょうどは断られた: 頼んだ段の画質で「できれば60」。実際のコマ数を見て、下げるかを決める
+    tier = startTier; camBase = { width: { ideal: TIERS[tier][0] }, height: { ideal: TIERS[tier][1] }, frameRate: { ideal: 60 } };
+    try { await tr.applyConstraints(camBase); } catch (e) { /* そのまま */ }
+  }
   await applyExposure();
 }
 async function applyExposure() {
@@ -155,6 +161,8 @@ async function applyExposure() {
 }
 function checkCamFps() { // 1秒ごと。カメラのコマ数が50を切るのが2秒続いたら、ISOを1段上げる
   if (!camTrack || isFile) return;
+  // 50コマを切るのが3秒続いたら、まず画質の段を下げる(高い画質では60が出ないカメラが多い。インカメなど)
+  if (camFps > 0 && camFps < 50 && tier < TIERS.length - 1) { if (++lowSec >= 3) { lowSec = 0; tuneCamera(camTrack, tier + 1); } return; }
   const caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   if (!caps.iso || (caps.frameRate && caps.frameRate.max < 50)) return; // ISOを変えられない・そもそも60コマが出ないカメラでは、上げても意味がない(ざらつくだけ)
   if (camFps > 0 && camFps < 50) { if (++lowSec >= 2 && isoLevel < ISO_STEPS.length - 1) { isoLevel++; lowSec = 0; applyExposure(); } } else lowSec = 0;
