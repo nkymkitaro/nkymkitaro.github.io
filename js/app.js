@@ -58,6 +58,18 @@ let sendZoom = null; // 子機のズームの操作
 const DEFAULT_BUFFER_SEC = 30;
 // 録画の幅の既定は640px(カメラの取り込みと同じ大きさ。拡大して見たときに粗くならないよう、2026-10-14 に320pxから上げた)
 const recorder = new MultiCamRecorder({ fps: 15, durationSec: DEFAULT_BUFFER_SEC, width: 640, quality: 0.6 });
+// VARの自動の下げ(2026-11-18): ためる量の上限。Androidは端末メモリ(navigator.deviceMemory。8GBで頭打ち)の8%、
+// 取れない端末(iPhoneなど)は固定200MB。数字は案で、実機では未測定(手元の見積もりから)。変えるときはここだけ
+function autoDowngradeCapBytes() {
+  const gb = navigator.deviceMemory;
+  return gb ? gb * 1024 * 1024 * 1024 * 0.08 : 200 * 1024 * 1024;
+}
+recorder.memCapBytes = autoDowngradeCapBytes();
+recorder.onAutoDowngrade = ({ width }) => {
+  showToast('VARの画質を下げました。⚙で、さかのぼる秒数や画質を変えられます');
+  const note = document.getElementById('qualityAutoNote');
+  if (note) { note.textContent = `VARは${width}pxに下げています。`; note.hidden = false; }
+};
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 // --- VAR設定(親機からいつでも調整できる) ---
@@ -592,6 +604,7 @@ function selectRewindSeconds(sec) {
   varSettings.rewindSeconds = sec;
   varSettings.bufferSeconds = isMaxQuality() ? MAX_QUALITY_SEC : Math.max(MIN_BUFFER_SEC, sec);
   recorder.setDurationSec(varSettings.bufferSeconds);
+  resetAutoDowngrade(); // 秒数を変えたら、下げた状態を解いて、見込みを取り直す
   updateRewindLabel();
   renderSecondsSelector('rewindSecSelector', rewindOptions(), varSettings.rewindSeconds, selectRewindSeconds);
   updateBufferNote();
@@ -601,6 +614,12 @@ function selectRewindSeconds(sec) {
 function updateBufferNote() {
   const note = document.getElementById('bufferHeavyNote');
   if (note) note.hidden = varSettings.bufferSeconds < BUFFER_HEAVY_SEC;
+}
+
+function resetAutoDowngrade() {
+  recorder.resetAutoCap();
+  const note = document.getElementById('qualityAutoNote');
+  if (note) note.hidden = true;
 }
 
 function selectQuality(key) {

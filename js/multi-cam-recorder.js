@@ -5,6 +5,9 @@ import { diagOn, diagSet, diagAdd, diagTime } from './diag.js';
 // 「4台同時に録画してもメモリを圧迫しない」ようにするため、生のImageDataではなく
 // 縮小した映像をJPEGに圧縮したBlobとして保持する。Blobは圧縮されたバイト列のまま
 // 保持され、実際にコマとして描画するときだけ ReplayPlayer 側でデコードする。
+// 自動の下げの段(幅px)。設定の幅より小さいものだけを順に使う
+const AUTO_STEPS = [1920, 1280, 640, 320];
+const AUTO_MIN_SAMPLES = 15; // 下げた直後は、新しい大きさの写真がこの枚数たまるまで、次の判断をしない
 export class MultiCamRecorder {
   constructor({ fps = 15, durationSec = 15, width = 320, quality = 0.6 } = {}) {
     this.fps = fps;
@@ -18,6 +21,47 @@ export class MultiCamRecorder {
     // 新しいコマは追加し続け、増えすぎないよう holdExtraSec 秒ぶんまでは持つ。LIVEに戻ったら切り詰める
     this.holding = false;
     this.holdExtraSec = 60;
+    // VARの自動の下げ(2026-11-18): ためる量の見込み(最近の写真の大きさの平均 × 持つコマ数 × 台数)が
+    // memCapBytes を超えるときだけ、写真の幅を1段ずつ下げる。ライブの表示・録画・ディレイは変えない。
+    // memCapBytes が 0 のときは何もしない。下げたとき onAutoDowngrade({ width, estBytes, capBytes }) を呼ぶ
+    this.memCapBytes = 0;
+    this.autoCapWidth = 0; // 0 = 下げていない。それ以外は、写真の幅の上限(px)
+    this.onAutoDowngrade = null;
+  }
+
+  // 実際に使う幅(設定の幅と、自動の下げの小さいほう)
+  effectiveWidth() {
+    return this.autoCapWidth ? Math.min(this.width, this.autoCapWidth) : this.width;
+  }
+
+  // ためる量の見込み(バイト)。VAR中の追加ぶんも含めた最大。最近の写真が足りないカメラは数えない
+  estimateBytes() {
+    const frames = this.fps * (this.durationSec + this.holdExtraSec);
+    let total = 0;
+    for (const cam of this.cams.values()) {
+      const r = cam.recentBytes;
+      if (!r || r.length < AUTO_MIN_SAMPLES) continue;
+      total += (r.reduce((a, b) => a + b, 0) / r.length) * frames;
+    }
+    return total;
+  }
+
+  // 設定(画質・秒数)を変えたときなど、自動の下げを解いて、見込みを取り直す
+  resetAutoCap() {
+    this.autoCapWidth = 0;
+    for (const cam of this.cams.values()) cam.recentBytes = [];
+  }
+
+  _checkMemory() {
+    if (!this.memCapBytes) return;
+    const est = this.estimateBytes();
+    if (est <= this.memCapBytes) return;
+    const cur = this.effectiveWidth();
+    const next = AUTO_STEPS.find((w) => w < cur);
+    if (!next) return; // これ以上は下げない(320px)
+    this.autoCapWidth = next;
+    for (const cam of this.cams.values()) cam.recentBytes = []; // 新しい大きさで取り直す
+    if (this.onAutoDowngrade) this.onAutoDowngrade({ width: next, estBytes: est, capBytes: this.memCapBytes });
   }
 
   // 今持ってよいコマ数の上限(VAR中は holdExtraSec 秒ぶん多く持つ)
@@ -66,6 +110,7 @@ export class MultiCamRecorder {
       canvas,
       ctx: canvas.getContext('2d'),
       frames: [],
+      recentBytes: [], // 最近の写真の大きさ(自動の下げの判断用。直近30枚)
       paused: false,
       dropped: 0,
     });
@@ -146,7 +191,7 @@ export class MultiCamRecorder {
       if (!video || !video.videoWidth || video.readyState < video.HAVE_CURRENT_DATA) continue;
 
       // 元の映像より大きくは引き伸ばさない(「高」「最大」で、小さい映像の写真がむだに大きくならないように)
-      let scale = Math.min(1, this.width / video.videoWidth);
+      let scale = Math.min(1, this.effectiveWidth() / video.videoWidth);
       if (this.maxEdge) scale = Math.min(scale, this.maxEdge / Math.max(video.videoWidth, video.videoHeight));
       const outW = Math.round(video.videoWidth * scale);
       const height = Math.round(video.videoHeight * scale);
@@ -166,7 +211,10 @@ export class MultiCamRecorder {
           cam.encoding = false;
           if (!blob) return;
           cam.frames.push({ ts: now, blob });
+          cam.recentBytes.push(blob.size);
+          if (cam.recentBytes.length > 30) cam.recentBytes.shift();
           this._trim(cam);
+          this._checkMemory();
           if (diagOn) {
             diagTime('写真の圧縮ms', performance.now() - t0);
             diagSet('写真の大きさ', `${outW}x${height}`);
