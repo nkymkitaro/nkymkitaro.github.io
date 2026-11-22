@@ -54,6 +54,8 @@ export class SwingEngine {
     this.pose.push({ t, hand, hipY }); if (this.pose.length > 40) this.pose.shift();
     if (faceX != null && Math.abs(faceX) > 3) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 50) this.faceVotes.shift(); }
   }
+  // 人(骨格)が最近見えているか。骨格を使う設定で、0.6秒以上見えていなければ測らない(誰もいない部屋で、家具を道具と取り違えて数えていた。2026-11-22 中山さんの実機)
+  personSeen(t) { const P = this.pose; return P.length > 0 && t - P[P.length - 1].t < 0.6; }
   handAt(t) { // 骨格の両手の位置を、時刻 t に合わせて直線でつなぐ(少し先までなら伸ばす)
     const P = this.pose; if (!P.length) return null;
     if (P.length === 1 || t <= P[0].t) return Math.abs(t - P[0].t) < 0.3 ? P[0].hand : null;
@@ -71,19 +73,24 @@ export class SwingEngine {
     this.cx.drawImage(video, 0, 0, W, H);
     const px = this.cx.getImageData(0, 0, W, H).data, N = W * H;
     if (!this.bg) { this.bg = new Float32Array(N * 3); for (let i = 0, o = 0; i < N * 4; i += 4) { this.bg[o++] = px[i]; this.bg[o++] = px[i + 1]; this.bg[o++] = px[i + 2]; } }
-    const alpha = this.frames < 20 ? 0.15 : 0.02; this.frames++;
+    const alpha = this.frames < 20 ? 0.15 : 0.04, upd = this.frames < 20 || (this.frames & 1) === 0; this.frames++; // 背景は2コマに1回だけ直す(軽くする)
     const pz = this.pose.length ? this.pose[this.pose.length - 1] : null;
     const hand = this.handAt(t) || (pz && pz.hand);
     const ylim = pz ? Math.min(pz.hipY != null ? pz.hipY : 1e9, (hand ? hand[1] : 1e9) + H * 0.11) : H;
-    const mask = new Uint8Array(N), bg = this.bg, mode = this.color;
+    const mask = new Uint8Array(N), bg = this.bg, mode = this.color; let changed = 0;
     for (let y = 0, i = 0, o = 0, p = 0; y < H; y++) {
       for (let x = 0; x < W; x++, i += 4, o += 3, p++) {
         const r = px[i], g = px[i + 1], b = px[i + 2];
         const d = Math.max(Math.abs(r - bg[o]), Math.abs(g - bg[o + 1]), Math.abs(b - bg[o + 2]));
-        if (d > 25 && y < ylim && isToolColor(r, g, b, mode)) mask[p] = 1;
-        bg[o] += (r - bg[o]) * alpha; bg[o + 1] += (g - bg[o + 1]) * alpha; bg[o + 2] += (b - bg[o + 2]) * alpha;
+        if (d > 25) { changed++; if (y < ylim && isToolColor(r, g, b, mode)) mask[p] = 1; }
+        if (upd) { bg[o] += (r - bg[o]) * alpha; bg[o + 1] += (g - bg[o + 1]) * alpha; bg[o + 2] += (b - bg[o + 2]) * alpha; }
       }
     }
+    // 画面の3割以上が背景と違う = スマホが動いた・明るさが変わった。このコマは使わず、背景を早めに作り直す
+    if (changed > N * 0.3) { this.frames = Math.min(this.frames, 10); this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this.shaky = true; this._update(); return null; }
+    this.shaky = false;
+    // 骨格を使う設定で人が見えていないときは、測らない
+    if (this.needPerson && !this.personSeen(t)) { this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this._update(); return null; }
     // かたまりに分け、いちばん「細長く大きい」もの(手元に近ければ加点)を道具とする
     const lab = new Int32Array(N), stack = new Int32Array(N); let best = null, bestScore = 0, nlab = 0;
     for (let p0 = 0; p0 < N; p0++) {
@@ -100,6 +107,7 @@ export class SwingEngine {
       if (n < 25) continue;
       const mx = sx / n, my = sy / n, cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
       const tr = cxx + cyy, det = cxx * cyy - cxy * cxy, l1 = tr / 2 + Math.sqrt(Math.max(0, tr * tr / 4 - det)), l2 = Math.max(1e-3, tr - l1);
+      // 形で道具をはじくのはやめた(ぶれた道具と手の肌がつながると太く見え、本物まで落ちた)。誰もいない部屋の取り違えは、人が見えないとき測らないことで防ぐ
       let score = Math.sqrt(l1) * Math.sqrt(n) * Math.pow(l1 / l2, 0.25);
       if (hand) { // 手元からいちばん近い点までの距離
         let dmin = 1e9; for (let q = 0; q < pts.length; q += 3) { const dx = pts[q] % W - hand[0], dy = ((pts[q] / W) | 0) - hand[1]; dmin = Math.min(dmin, dx * dx + dy * dy); }
@@ -141,7 +149,7 @@ export class SwingEngine {
   // ならした向きから、回る速さと剣先の速さ(少し前の時刻)を出す。2次の多項式(9点)の傾き
   _update() {
     const S = this.samples, m = 4, n = S.length; if (n < 2 * m + 3) return;
-    const c = n - 2 - m, win = S.slice(c - m, c + m + 1); if (win.some((s) => s.ang == null)) { this.speed *= 0.9; return; }
+    const c = n - 2 - m, win = S.slice(c - m, c + m + 1); if (win.some((s) => s.ang == null)) { this.speed *= 0.8; this._peak = null; return; }
     const t0 = win[m].t; let sk2 = 0, skx = 0, sky = 0, nh = 0; const H = [];
     for (let k = -m; k <= m; k++) { const s = win[k + m], dt = s.t - t0; sk2 += dt * dt; }
     // 回る速さ: 向きを2次の多項式(9点)でならし、その前後1コマの差。9点の直線の傾きより、最速の瞬間がつぶれにくい
@@ -172,10 +180,9 @@ export class SwingEngine {
       }
     }
   }
-  // 振り下ろしの回る向き: 顔の向きが分かれば「最速の瞬間に剣先が顔の側へ動く」向き、分からなければ速いほうの向き
+  // 振り下ろしの回る向き: 速いほうの向き(直近10本ずつの平均)
   downSign() {
-    const f = this.faceVotes.length >= 5 ? Math.sign(this.faceVotes.reduce((a, b) => a + b, 0)) : 0;
-    if (f) { let vote = 0; for (const s of this.swings.slice(-20)) vote += (s.vx * f > 0 ? 1 : -1) * s.sign * s.v; if (vote) return vote > 0 ? 1 : -1; }
+    // 顔の向きで決める方法は、縮めた画像では鼻と耳の差が数画素しかなく、逆に出ることがあった。速いほうの向きだけで決める(素振りは振り下ろしのほうが速い)
     const avg = (a) => (a.length ? a.slice(-10).reduce((x, y) => x + y, 0) / Math.min(10, a.length) : 0);
     return avg(this.signStats[1]) >= avg(this.signStats[-1]) ? 1 : -1;
   }

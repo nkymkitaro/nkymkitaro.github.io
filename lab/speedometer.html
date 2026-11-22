@@ -53,6 +53,7 @@
     <option value="101.5">木刀(形の大刀)</option><option value="120">竹刀 一般 120</option><option value="117">竹刀 高校 117</option><option value="114">竹刀 中学 114</option>
   </select></label>
   <label>色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
+  <label>カメラ <select id="facing"><option value="user">インカメ(自撮り)</option><option value="environment">外カメ</option></select></label>
   <label>骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
   <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
   <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
@@ -83,6 +84,8 @@ document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
 });
 $('tool').onchange = () => eng.setLength(parseFloat($('tool').value));
 $('col').onchange = () => eng.setColor($('col').value);
+$('facing').onchange = () => { if (!isFile && v.srcObject) $('btnCam').click(); }; // 開いているときは、すぐ切り替える
+$('pose').onchange = () => { eng.needPerson = $('pose').value === 'on'; };
 $('rate').onchange = () => { v.playbackRate = parseFloat($('rate').value); };
 $('btnReset').onclick = () => { eng.swings = []; eng.signStats = { 1: [], '-1': [] }; };
 function resize() {
@@ -91,6 +94,7 @@ function resize() {
 addEventListener('resize', resize);
 
 // ---- 骨格(別の処理)。1秒10回まで。前の結果のまわりを切り出して読む ----
+const pcv = document.createElement('canvas'), pcx = pcv.getContext('2d'); let poseScale = 1;
 let worker = null, poseBusy = false, poseLast = 0, prevBox = null, poseN = 0, poseT0 = performance.now();
 function startWorker() {
   if (worker) return;
@@ -98,22 +102,27 @@ function startWorker() {
   worker.onmessage = (ev) => {
     const d = ev.data; if (d.ready || d.error) { if (d.error) stat.textContent = '骨格の読み込みに失敗(道具だけで測ります)'; return; }
     poseBusy = false; poseN++;
-    if (d.kp) { eng.addPose(d.t, d.kp, v.videoWidth); prevBox = d.box; } else prevBox = null;
+    if (d.kp) { eng.addPose(d.t, d.kp, pcv.width); prevBox = d.box; } else prevBox = null; // 座標は縮めた画像のもの
   };
 }
 async function maybePose(t) {
   if ($('pose').value !== 'on' || !worker || poseBusy) return;
   const now = performance.now(); if (now - poseLast < 100) return;
   poseBusy = true; poseLast = now;
+  // 骨格には、縮めた画像(長い辺480)を送る(元の大きさのまま送ると重く、1秒2回しか回らなかった)
+  const VW0 = v.videoWidth, VH0 = v.videoHeight, ps = Math.min(1, 480 / Math.max(VW0, VH0));
+  if (pcv.width !== Math.round(VW0 * ps)) { pcv.width = Math.round(VW0 * ps); pcv.height = Math.round(VH0 * ps); }
+  pcx.drawImage(v, 0, 0, pcv.width, pcv.height); poseScale = ps;
   let crop = null;
-  if (prevBox) { const VW = v.videoWidth, VH = v.videoHeight, bw = prevBox[2] - prevBox[0], bh = prevBox[3] - prevBox[1], cx = (prevBox[0] + prevBox[2]) / 2, w2 = Math.max(bw * 2, bh * 1.2), y0 = Math.max(0, prevBox[1] - bh * 0.6), y1 = Math.min(VH, prevBox[3] + bh * 0.15), x0 = Math.max(0, cx - w2 / 2); crop = [x0, y0, Math.min(VW, cx + w2 / 2) - x0, y1 - y0]; }
-  try { const bm = await createImageBitmap(v); worker.postMessage({ bitmap: bm, t, crop }, [bm]); } catch (e) { poseBusy = false; }
+  if (prevBox) { const VW = pcv.width, VH = pcv.height, bw = prevBox[2] - prevBox[0], bh = prevBox[3] - prevBox[1], cx = (prevBox[0] + prevBox[2]) / 2, w2 = Math.max(bw * 2, bh * 1.2), y0 = Math.max(0, prevBox[1] - bh * 0.6), y1 = Math.min(VH, prevBox[3] + bh * 0.15), x0 = Math.max(0, cx - w2 / 2); crop = [x0, y0, Math.min(VW, cx + w2 / 2) - x0, y1 - y0]; }
+  try { const bm = await createImageBitmap(pcv); worker.postMessage({ bitmap: bm, t, crop }, [bm]); } catch (e) { poseBusy = false; }
 }
 
 // ---- 入力 ----
 $('btnCam').onclick = async () => {
   try {
-    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
+    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
+    if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
     isFile = false; v.srcObject = st; v.src = ''; await v.play(); begin();
   } catch (e) { stat.textContent = 'カメラを開けません: ' + e.message; }
 };
@@ -123,7 +132,7 @@ $('file').onchange = (e) => {
   v.onloadedmetadata = () => { v.play(); begin(); };
 };
 function begin() {
-  $('help').style.display = 'none'; eng.reset(); startWorker(); resize();
+  $('help').style.display = 'none'; eng.reset(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
 }
 
@@ -150,6 +159,8 @@ function draw() {
   display = eng.speed > display ? eng.speed : Math.max(eng.speed, display - 0.25);
   const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + s.v, 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, s.v), 0);
   drawOverlay();
+  const hint = eng.shaky ? 'スマホを固定してください' : (eng.needPerson && eng.H && lastT != null && !eng.personSeen(lastT) ? '全身が映るように置いてください' : '');
+  const hp = $('help'); if (hint) { hp.style.display = 'flex'; hp.textContent = hint; } else if (running) hp.style.display = 'none';
   if (ui === 'a') drawGauge(last, avg, best, D.length);
   else if (ui === 'b') drawBars(last, avg, best, D);
   else { $('bigN').textContent = last ? last.v.toFixed(1) : '--'; $('bigS').textContent = `いま ${eng.speed.toFixed(1)} ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)`; }
