@@ -26,7 +26,7 @@ export class SwingEngine {
     this.lenHist = []; // 道具の見えた長さ(画素、幅320で)。端にかからないもの
     this.pose = []; // { t, hand:[x,y](幅320で), hipY, faceX }
     this.lastAng = null;
-    this.speed = 0; this.omega = 0;
+    this.speed = 0; this.omega = 0; this.speeds = { tip: 0, mono: 0, hand: 0 };
     this.swings = []; // { t, v, sign }
     this._peak = null;
     this.signStats = { 1: [], '-1': [] };
@@ -41,7 +41,7 @@ export class SwingEngine {
     if (this.lenHist.length < 5) return null;
     const a = this.lenHist.slice(-300).sort((x, y) => x - y); return a[Math.floor(a.length * 0.75)]; // 上から25%の長さ(取り違えの長い値に引っぱられにくい)
   }
-  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.speed = 0; }
+  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.speed = 0; this.speeds = { tip: 0, mono: 0, hand: 0 }; }
 
   // 骨格の結果(元の映像の座標)を受け取る。kp: [[x,y,score]×17]
   addPose(t, kp, videoW) {
@@ -172,6 +172,7 @@ export class SwingEngine {
     }
     let tipPt = null;
     if (ang != null) { const Lp = this.lenPx; tipPt = hand && Lp ? [hand[0] + Lp * Math.cos(ang), hand[1] + Lp * Math.sin(ang)] : (Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - ang) > 0 ? p1 : p0); }
+    this.seenN = (this.seenN || 0) + (ang != null ? 1 : 0); this.allN = (this.allN || 0) + 1; // 道具が見えたコマの数(画面の「道具 ○%」)
     this.samples.push({ t, ang, len, edge, hand, tip: tipPt }); if (this.samples.length > 240) this.samples.shift();
     if (keepDebug) this.debug = { mask, W, H, p0, p1, ang, hand };
     this._update();
@@ -181,12 +182,16 @@ export class SwingEngine {
   // ならした向きから、回る速さと剣先の速さ(少し前の時刻)を出す。前後4コマ(9点)に2次の式を当てはめた傾き。
   // 一番速い瞬間は、ぶれて道具が見えないコマが混じりやすい。9点のうち6点以上あれば、欠けたまま計算する(欠けると数えていなかった。2026-11-22 実機)
   _update() {
-    const S = this.samples, m = 4, n = S.length; if (n < 2 * m + 2) return;
+    // ならす幅は時間で決める(前後約0.07秒)。30コマのカメラでは前後2コマ、60コマでは前後4コマ。
+    // コマ数で固定していると、30コマのカメラでは0.3秒もならして速い振りがつぶれ、欠けたコマで数えられなかった(2026-11-22 実機「取りこぼしが多い」)
+    const S = this.samples, n = S.length; if (n < 8) return;
+    const dts = []; for (let k = n - 6; k < n; k++) if (S[k] && S[k - 1]) dts.push(S[k].t - S[k - 1].t);
+    const dtm = dts.sort((x, y) => x - y)[dts.length >> 1] || 1 / 60, m = Math.max(2, Math.min(4, Math.round(0.07 / dtm)));
     const c = n - 1 - m, t0 = S[c].t, pts = [];
     for (let k = -m; k <= m; k++) { const s = S[c + k]; if (s && s.ang != null) pts.push([s.t - t0, s.ang]); }
-    const left = pts.filter((q) => q[0] < 0).length, right = pts.filter((q) => q[0] > 0).length;
-    if (pts.length < 6 || left < 2 || right < 2) {
-      this.speed *= 0.85;
+    const left = pts.filter((q) => q[0] < 0).length, right = pts.filter((q) => q[0] > 0).length, need = Math.ceil((2 * m + 1) * 0.6);
+    if (pts.length < Math.max(4, need) || left < 1 || right < 1) {
+      this.speed *= 0.85; for (const k in this.speeds) this.speeds[k] *= 0.85;
       if (this._peak && t0 - this._peak.t > 0.25) this._finishPeak(); // 長く見えなければ、その1本は区切る
       return;
     }
@@ -199,23 +204,28 @@ export class SwingEngine {
     const a0 = det3(y0, s1, s2, y1, s2, s3, y2, s3, s4) / D;
     const win = [], H = []; let sk2 = 0, skx = 0, sky = 0, nh = 0;
     for (let k = -m; k <= m; k++) { const s = S[c + k]; win.push(s); sk2 += (s.t - t0) * (s.t - t0); }
-    // 手元の速さ(骨格があるとき)。画素→mは道具の見えた長さから
+    // 手元の速さ(骨格があるとき)。骨格の結果そのもの(前後0.2秒)に直線を当てる。画素→mは道具の見えた長さから
+    // (コマの時刻で手元を補うと、骨格は遅れて届くので最新のコマで手元が取れず、いつも0になっていた)
     let vhx = 0, vhy = 0; const Lp = this.lenPx;
-    if (Lp) {
-      const mpp = this.effM / Lp;
-      for (const s of win) { const h = this.handAt(s.t); if (!h) { nh = -1; break; } H.push([s.t - t0, h]); }
-      if (nh === 0 && H.length && this.lenHist.length > 30) {
-        for (const [dt, h] of H) { skx += dt * h[0]; sky += dt * h[1]; } vhx = skx / sk2 * mpp; vhy = sky / sk2 * mpp;
+    if (Lp && this.lenHist.length > 30) {
+      const mpp = this.effM / Lp, P = this.pose.filter((q) => Math.abs(q.t - t0) <= 0.2);
+      if (P.length >= 2) {
+        const tm = P.reduce((a2, q) => a2 + q.t, 0) / P.length, xm = P.reduce((a2, q) => a2 + q.hand[0], 0) / P.length, ym = P.reduce((a2, q) => a2 + q.hand[1], 0) / P.length;
+        let stt = 0, stx = 0, sty = 0; for (const q of P) { const dt = q.t - tm; stt += dt * dt; stx += dt * (q.hand[0] - xm); sty += dt * (q.hand[1] - ym); }
+        if (stt > 1e-6) { vhx = stx / stt * mpp; vhy = sty / stt * mpp; }
         const hv = Math.hypot(vhx, vhy); if (hv > 4) { vhx *= 4 / hv; vhy *= 4 / hv; } // 手元は速くても毎秒3m前後。骨格のゆれで大きく出たときは抑える(メーターが振り切れたままになっていた)
       }
     }
-    const a = a0, L = this.effM;
-    const vx = vhx - omega * L * Math.sin(a), vy = vhy + omega * L * Math.cos(a);
-    const v = Math.min(30, Math.hypot(vx, vy)), lenC = win[m].len; this.speed = v; this.omega = omega; this.speedT = t0; this.tipVx = vx;
-    // 1本の区切り: 3m/秒を超えてから、最高の6割を切ったら、その最高を1本とする
-    if (!this._peak) { if (v > 3) this._peak = { v, t: t0, sign: Math.sign(omega), vx }; }
+    // 3か所の速さ: 剣先(両手の真ん中から 全長−13cm)、物打ち(柄頭から全長の3/4。剣先から1/4)、手元(両手の真ん中)
+    const a = a0, L = this.effM, Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100);
+    const at = (r) => Math.min(30, Math.hypot(vhx - omega * r * Math.sin(a), vhy + omega * r * Math.cos(a)));
+    const vx = vhx - omega * L * Math.sin(a);
+    const v = at(L), vm = at(Lm), vh = Math.min(30, Math.hypot(vhx, vhy));
+    this.speed = v; this.speeds = { tip: v, mono: vm, hand: vh }; this.omega = omega; this.speedT = t0; this.tipVx = vx;
+    // 1本の区切り: 剣先が3m/秒を超えてから、最高の6割を切ったら、その最高を1本とする(物打ち・手元は、その瞬間の値)
+    if (!this._peak) { if (v > 3) this._peak = { v, mono: vm, hand: vh, t: t0, sign: Math.sign(omega), vx }; }
     else {
-      if (v > this._peak.v) Object.assign(this._peak, { v, t: t0, sign: Math.sign(omega) || this._peak.sign, vx });
+      if (v > this._peak.v) Object.assign(this._peak, { v, mono: vm, hand: vh, t: t0, sign: Math.sign(omega) || this._peak.sign, vx });
       else if (v < this._peak.v * 0.6) this._finishPeak();
     }
   }

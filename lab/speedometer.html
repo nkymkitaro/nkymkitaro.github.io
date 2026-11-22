@@ -5,71 +5,109 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="robots" content="noindex,nofollow">
 <!-- 試作: 素振りのスピードメーター(リアルタイム)。道具は毎コマ、骨格は1秒10回ほど(別の処理)。表示は3案(メーター・数字・映像)を切り替えて見比べる。
+     見た目は MITORI の撮影画面にそろえる(紺・白・赤、斜めの帯、白い細い縁の丸ボタン、Murecho。中山さん 2026-11-22)。速さは読み上げもできる(遠くからでも分かるように。奥さまの案)
      映像は端末の中だけで扱い、保存も送信もしない。計測の出来事(GA4)は送らない。通常のページからリンクしない -->
 <title>MITORI(試作: 素振りスピードメーター)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
 <style>
-  :root { --bg: #070d22; --panel: #101a3d; --line: #2a3354; --text: #fff; --soft: #9aa5c8; --red: #ff4a40; --yel: #ffd23f; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, "Hiragino Sans", sans-serif; }
-  body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  .bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; align-items: center; background: var(--panel); }
-  .bar button, .bar select, .file { min-height: 44px; padding: 0 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: 0; background: var(--line); color: var(--text); display: inline-flex; align-items: center; }
-  .bar button.on, .file.main { background: var(--text); color: #000; }
-  .tabs { display: inline-flex; border-radius: 10px; overflow: hidden; }
-  .tabs button { border-radius: 0; }
-  input[type=file] { display: none; }
-  .bar label { font-size: 13px; color: var(--soft); display: inline-flex; gap: 4px; align-items: center; }
+  :root { --n950: #070d22; --n900: #0c1636; --n800: #14224d; --n700: #1d3170; --line: rgba(255,255,255,.2); --shade: #2c4aa0; --red: #d6231b; --text: #fff; --soft: rgba(255,255,255,.62); --skew: -14deg; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--n950); color: var(--text); font-family: "Murecho", -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); overflow: hidden; }
+  button, select { font-family: inherit; }
+  /* 上の段: ロゴ・状態の帯・丸ボタン */
+  .top { display: flex; align-items: center; gap: 10px; padding: 10px 12px 6px; }
+  .top .logo { height: 22px; opacity: .9; }
+  .band { display: inline-flex; align-items: center; gap: 8px; padding: 6px 22px 6px 12px; font-weight: 900; font-size: 1.05rem; line-height: 1; letter-spacing: .04em; white-space: nowrap; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); background: var(--n700); }
+  .band[data-state="on"] { background: var(--red); }
+  .band[data-state="on"]::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
+  .sp { flex: 1; }
+  .ib { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; list-style: none; }
+  .ib svg { width: 24px; height: 24px; }
+  .ib.off { opacity: .45; }
   details.set { position: relative; }
-  details.set summary { min-height: 44px; padding: 0 12px; border-radius: 10px; background: var(--line); font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; list-style: none; cursor: pointer; }
-  details.set .setp { position: absolute; z-index: 5; top: 50px; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 8px; min-width: 240px; }
-  #stat { font-size: 13px; color: var(--soft); margin-left: auto; font-variant-numeric: tabular-nums; }
-  main { flex: 1; position: relative; overflow: hidden; display: flex; }
+  details.set summary::-webkit-details-marker { display: none; }
+  details.set .setp { position: absolute; z-index: 20; top: 56px; right: 0; width: min(86vw, 340px); max-height: 70vh; overflow: auto; background: var(--n900); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+  .setp h4 { margin: 4px 0 0; font-size: .8rem; color: var(--soft); font-weight: 800; }
+  .setp label { display: grid; grid-template-columns: 6.5em 1fr; align-items: center; gap: 8px; font-size: .9rem; font-weight: 800; }
+  .setp select, .setp .btn, .file { min-height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--n800); color: #fff; font-size: .95rem; font-weight: 800; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+  .setp .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  input[type=file] { display: none; }
+  #logInfo { font-size: .8rem; color: var(--soft); }
+  #stat { font-size: .72rem; color: var(--soft); padding: 0 14px 4px; font-variant-numeric: tabular-nums; min-height: 1.2em; }
+  /* 真ん中: 映像と表示 */
+  main { flex: 1; position: relative; overflow: hidden; display: flex; min-height: 0; }
   .stage { position: relative; background: #000; }
   .stage video { display: block; width: 100%; height: 100%; object-fit: contain; }
   .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  .view { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
-  .view canvas { width: 100%; height: 100%; }
-  /* 案A・案B: 左に小さい映像、右に表示。案C: 映像いっぱい */
-  body.ui-a .stage, body.ui-b .stage { width: 32%; min-width: 180px; }
+  .view { flex: 1; position: relative; min-height: 0; }
+  .view canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  body.ui-a .stage, body.ui-b .stage { width: 34%; min-width: 160px; }
   body.ui-c .stage { flex: 1; }
   body.ui-c .view { display: none; }
   @media (orientation: portrait) {
     main { flex-direction: column; }
-    body.ui-a .stage, body.ui-b .stage { width: 100%; height: 30%; }
+    body.ui-a .stage, body.ui-b .stage { width: auto; height: 28%; margin: 0 12px; border-radius: 12px; overflow: hidden; }
   }
-  .big { position: absolute; left: 12px; top: 8px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px #000; display: none; }
+  .big { position: absolute; left: 14px; top: 12px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.8); display: none; }
   body.ui-c .big { display: block; }
-  .big .n { font-size: 64px; line-height: 1; } .big .u { font-size: 20px; margin-left: 4px; } .big .s { display: block; font-size: 16px; color: #ddd; }
-  .help { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--soft); font-size: 15px; line-height: 1.8; padding: 16px; }
+  .big .tag { display: inline-block; background: #fff; color: var(--n900); font-size: 1rem; padding: 4px 16px 4px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  .big .n { display: block; font-size: 96px; line-height: 1; } .big .u { font-size: 22px; margin-left: 4px; } .big .s { display: block; font-size: 15px; color: #eee; white-space: pre-line; }
+  .help { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1rem; font-weight: 800; line-height: 1.8; padding: 16px; background: rgba(7,13,34,.55); }
+  /* 下の段: 表示の切り替え(名前の帯)と、はじめる・とめる */
+  .dock { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); background: var(--n900); }
+  .tabs { display: flex; gap: 6px; }
+  .tabs button { position: relative; border: 0; background: transparent; color: var(--soft); font-weight: 900; font-size: 1rem; padding: 12px 14px; min-height: 48px; cursor: pointer; }
+  .tabs button::before, .tabs button::after { content: ''; position: absolute; inset: 4px 0; transform: skewX(var(--skew)); z-index: -1; }
+  .tabs button { z-index: 0; }
+  .tabs button.on { color: var(--n900); }
+  .tabs button.on::after { background: var(--shade); transform: skewX(var(--skew)) translate(4px, 4px); z-index: -2; }
+  .tabs button.on::before { background: #fff; }
+  .go { min-width: 120px; min-height: 64px; border-radius: 18px; border: 0; background: #fff; color: var(--n900); font-weight: 900; font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 4px 0 var(--shade); }
+  .go.stop { background: var(--red); color: #fff; box-shadow: 0 4px 0 #7a1410; }
+  .go svg { width: 22px; height: 22px; }
 </style>
 </head>
 <body class="ui-a">
-<div class="bar">
-  <button id="btnCam" type="button">カメラ</button>
-  <label class="file">動画<input id="file" type="file" accept="video/*"></label>
-  <span class="tabs"><button data-ui="a" class="on" type="button">A メーター</button><button data-ui="b" type="button">B 数字</button><button data-ui="c" type="button">C 映像</button></span>
-  <details class="set"><summary>設定</summary><div class="setp">
-  <label>道具 <select id="tool">
-    <option value="101.5">木刀(形の大刀)</option><option value="120">竹刀 一般 120</option><option value="117">竹刀 高校 117</option><option value="114">竹刀 中学 114</option>
-  </select></label>
-  <label>色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
-  <label>カメラ <select id="facing"><option value="user">インカメ(自撮り)</option><option value="environment">外カメ</option></select></label>
-  <label>骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
-  <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
-  <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
-  <button id="btnReset" type="button">記録を消す</button>
+<header class="top">
+  <img class="logo" src="../icons/logo-mitori-white.png" alt="MITORI">
+  <span class="band" id="band" data-state="idle">素振りスピード</span>
+  <span class="sp"></span>
+  <button class="ib" id="btnVoice" type="button" aria-label="速さを読み上げる" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
+  <details class="set"><summary class="ib" aria-label="設定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary><div class="setp">
+    <h4>測り方</h4>
+    <label>出す速さ <select id="which"><option value="tip">剣先</option><option value="mono">物打ち</option><option value="hand">手元(両手)</option></select></label>
+    <label>道具 <select id="tool">
+      <option value="101.5">木刀(形の大刀)</option><option value="120">竹刀 一般 120</option><option value="117">竹刀 高校 117</option><option value="114">竹刀 中学 114</option>
+    </select></label>
+    <label>色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
+    <label>カメラ <select id="facing"><option value="user">インカメ(自撮り)</option><option value="environment">外カメ</option></select></label>
+    <label>骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
+    <h4>試験用</h4>
+    <div class="row"><label class="file">動画で試す<input id="file" type="file" accept="video/*"></label></div>
+    <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
+    <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
+    <h4>記録(この端末の中だけ)</h4>
+    <div class="row"><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
+    <span id="logInfo"></span>
   </div></details>
-  <span id="stat">カメラか動画を選んでください</span>
-</div>
+</header>
+<div id="stat"></div>
 <main>
   <div class="stage" id="stage">
     <video id="v" playsinline muted></video>
     <canvas id="ov"></canvas>
-    <div class="big" id="big"><span class="n" id="bigN">--</span><span class="u">m/秒</span><span class="s" id="bigS"></span></div>
-    <div class="help" id="help">真横から、全身と剣先が入るように置いてください。<br>暗いと速さが低く出ます。</div>
+    <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
+    <div class="help" id="help">真横から、全身と剣先が入るように置いて、<br>「はじめる」を押してください</div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
 </main>
+<footer class="dock">
+  <div class="tabs"><button data-ui="a" class="on" type="button">メーター</button><button data-ui="b" type="button">数字</button><button data-ui="c" type="button">映像</button></div>
+  <button class="go" id="btnCam" type="button">はじめる</button>
+</footer>
 <script type="module">
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
@@ -84,10 +122,10 @@ document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
 });
 $('tool').onchange = () => eng.setLength(parseFloat($('tool').value));
 $('col').onchange = () => eng.setColor($('col').value);
-$('facing').onchange = () => { if (!isFile && v.srcObject) $('btnCam').click(); }; // 開いているときは、すぐ切り替える
+$('facing').onchange = () => { if (!isFile && v.srcObject) openCamera(); }; // 開いているときは、すぐ切り替える
 $('pose').onchange = () => { eng.needPerson = $('pose').value === 'on'; };
 $('rate').onchange = () => { v.playbackRate = parseFloat($('rate').value); };
-$('btnReset').onclick = () => { eng.swings = []; eng.signStats = { 1: [], '-1': [] }; };
+$('btnReset').onclick = () => { eng.swings = []; eng.signStats = { 1: [], '-1': [] }; }; // 画面の表示だけ。保存した記録は消さない
 function resize() {
   for (const c of [ov, gauge]) { const r = c.getBoundingClientRect(); c.width = Math.max(1, Math.round(r.width * devicePixelRatio)); c.height = Math.max(1, Math.round(r.height * devicePixelRatio)); }
 }
@@ -119,19 +157,29 @@ async function maybePose(t) {
 }
 
 // ---- 入力 ----
-$('btnCam').onclick = async () => {
+let stopped = false;
+function stopAll() { // とめる: カメラを閉じ、計測を止める(記録はそのまま)
+  stopped = true; running = false;
+  if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
+  if (isFile) v.pause();
+  camTrack = null; setGo(false); $('help').style.display = 'flex'; $('help').innerHTML = '真横から、全身と剣先が入るように置いて、<br>「はじめる」を押してください';
+}
+function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : '素振りスピード'; }
+$('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
+async function openCamera() {
   try {
+    voiceUnlock();
     if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
     // まず高い画質(1280×720)で60コマを頼み、60が出なければ640×480に下げる(中山さん 2026-11-22「Bで」)。測るのは小さい画像なので、速さの精度は変わらない
     const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
-    isFile = false; v.srcObject = st; v.src = ''; await v.play(); begin();
+    isFile = false; v.srcObject = st; v.removeAttribute('src'); await v.play(); begin();
     tuneCamera(st.getVideoTracks()[0]);
   } catch (e) { stat.textContent = 'カメラを開けません: ' + e.message; }
-};
+}
 $('file').onchange = (e) => {
   const f = e.target.files[0]; if (!f) return;
   isFile = true; v.srcObject = null; v.src = URL.createObjectURL(f); v.loop = false; v.playbackRate = parseFloat($('rate').value);
-  v.onloadedmetadata = () => { v.play(); begin(); };
+  v.onloadedmetadata = () => { v.play(); begin(); $('rate').closest('details') && ($('rate').closest('details').open = false); };
 };
 // ---- 60コマにする(本体の「なめらか」と同じ考え。js/smooth60.js) ----
 // 何も指定しないと、Pixel 9a はふつうの部屋で約20コマ(露出が長くなる)。①60ちょうどを頼む ②露出モード continuous を、大きさの頼みのあとで足す
@@ -169,7 +217,8 @@ function checkCamFps() { // 1秒ごと。カメラのコマ数が50を切るの�
 }
 
 function begin() {
-  $('help').style.display = 'none'; eng.reset(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
+  stopped = false; setGo(true);
+  $('help').style.display = 'none'; eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
 }
 
@@ -181,30 +230,43 @@ function onFrame(now, md) {
   procMs = procMs * 0.9 + (performance.now() - t0) * 0.1; frames++;
   if (lastPresented == null) lastPresented = md.presentedFrames; presentedNow = md.presentedFrames;
   draw();
-  if (!v.ended) v.requestVideoFrameCallback(onFrame); else running = false;
+  if (!v.ended && !stopped) v.requestVideoFrameCallback(onFrame); else { running = false; if (v.ended) setGo(false); }
 }
-let presentedNow = 0;
+let presentedNow = 0, visPct = 100;
 setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
-  stat.textContent = `カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
+  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 
 // ---- 表示 ----
 const downs = () => eng.swings.filter((s) => eng.isDown(s));
-function colorOf(sp) { const u = Math.max(0, Math.min(1, sp / 16)); return `hsl(${220 - 220 * u},90%,55%)`; }
+// 出す速さ(剣先・物打ち・手元)。1本の記録 s は、剣先 v・物打ち mono・手元 hand を持つ
+const WHICH = { tip: '剣先', mono: '物打ち', hand: '手元' };
+const which = () => $('which').value;
+const val = (s) => (which() === 'tip' ? s.v : s[which()]) || 0;
+const cur = () => (eng.speeds ? eng.speeds[which()] : eng.speed) || 0;
+const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0).toFixed(1)} ・ 手元 ${(s.hand || 0).toFixed(1)}` : '';
+// 速さの色: 遅い=白 → 速い=赤(MITORIの赤 #d6231b)
+function colorOf(sp) { const u = Math.max(0, Math.min(1, (sp - 4) / 12)); return `rgb(${Math.round(255 - 41 * u)},${Math.round(255 - 220 * u)},${Math.round(255 - 228 * u)})`; }
+const FONT = '"Murecho", system-ui, sans-serif';
 function draw() {
   // 針: 上がるときはすぐ、下がるときはゆっくり
-  display = eng.speed > display ? eng.speed : Math.max(eng.speed, display - 0.25);
-  const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + s.v, 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, s.v), 0);
+  const cv = cur(); display = cv > display ? cv : Math.max(cv, display - 0.25);
+  const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
   drawOverlay();
-  const hint = eng.shaky ? 'スマホを固定してください' : (eng.needPerson && eng.H && lastT != null && !eng.personSeen(lastT) ? '全身が映るように置いてください' : '');
+  const noPerson = eng.needPerson && eng.H && lastT != null && !eng.personSeen(lastT);
+  // 人はいるのに道具がほとんど見えない: 正面から撮っている(道具がカメラの方を向いて短く見える)か、暗い・道具の色が合っていない
+  const hint = eng.shaky ? 'スマホを固定してください' : noPerson ? '全身が映るように置いてください' : (running && !isFile && visPct < 25 ? '道具が見えにくいです。真横から撮る・明るくする・設定の「色」を合わせる' : '');
   const hp = $('help'); if (hint) { hp.style.display = 'flex'; hp.textContent = hint; } else if (running) hp.style.display = 'none';
+  speakNew();
+  $('bigTag').textContent = WHICH[which()];
   if (ui === 'a') drawGauge(last, avg, best, D.length);
   else if (ui === 'b') drawBars(last, avg, best, D);
-  else { $('bigN').textContent = last ? last.v.toFixed(1) : '--'; $('bigS').textContent = `いま ${eng.speed.toFixed(1)} ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)`; }
+  else { $('bigN').innerHTML = (last ? val(last).toFixed(1) : '--') + '<span class="u">m/秒</span>'; $('bigS').textContent = `平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)\n${three(last)}`; }
 }
 function vidRect() { // 映像が実際に映っている場所(object-fit: contain)
   const W = ov.width, H = ov.height, ar = (v.videoWidth || 16) / (v.videoHeight || 9); let w = W, h = W / ar; if (h > H) { h = H; w = H * ar; }
@@ -232,29 +294,78 @@ function drawOverlay() {
 }
 function drawGauge(last, avg, best, n) {
   const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
-  const R = Math.min(W * 0.36, H * 0.42), cx = W / 2, cy = H * 0.5, MAX = 20, a0 = Math.PI * 0.85, a1 = Math.PI * 2.15, A = (s) => a0 + (a1 - a0) * Math.min(1, s / MAX);
-  g.lineWidth = R * 0.14; g.lineCap = 'butt';
-  g.strokeStyle = '#1b264d'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();
-  const grd = g.createLinearGradient(cx - R, 0, cx + R, 0); grd.addColorStop(0, '#2f7bff'); grd.addColorStop(0.6, '#ffd23f'); grd.addColorStop(1, '#ff4a40');
-  g.strokeStyle = grd; g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();
-  g.fillStyle = '#9aa5c8'; g.font = `${R * 0.09}px system-ui`; g.textAlign = 'center';
-  for (let s = 0; s <= MAX; s += 5) { const a = A(s); g.fillText(s, cx + Math.cos(a) * R * 1.2, cy + Math.sin(a) * R * 1.2 + R * 0.03); }
-  if (best) { const a = A(best); g.strokeStyle = '#ff4a40'; g.lineWidth = 4; g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86); g.lineTo(cx + Math.cos(a) * R * 1.12, cy + Math.sin(a) * R * 1.12); g.stroke(); }
-  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(4, R * 0.03); g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * R * 0.95, cy + Math.sin(an) * R * 0.95); g.stroke();
+  const R = Math.min(W * 0.38, H * 0.40), cx = W / 2, cy = H * 0.46, MAX = 20, a0 = Math.PI * 0.8, a1 = Math.PI * 2.2, A = (s) => a0 + (a1 - a0) * Math.min(1, s / MAX);
+  g.lineCap = 'butt'; g.lineWidth = R * 0.13;
+  g.strokeStyle = '#1d3170'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();                       // 地: 紺
+  g.strokeStyle = colorOf(display); g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();      // いま: 白→赤
+  g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let s = 0; s <= MAX; s += 5) { const a = A(s); g.fillText(s, cx + Math.cos(a) * R * 1.2, cy + Math.sin(a) * R * 1.2); }
+  if (best) { const a = A(best); g.strokeStyle = '#d6231b'; g.lineWidth = Math.max(4, R * 0.035); g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.84, cy + Math.sin(a) * R * 0.84); g.lineTo(cx + Math.cos(a) * R * 1.1, cy + Math.sin(a) * R * 1.1); g.stroke(); }
+  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(4, R * 0.035); g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * R * 0.92, cy + Math.sin(an) * R * 0.92); g.stroke();
   g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, R * 0.06, 0, 7); g.fill();
-  g.font = `900 ${R * 0.42}px system-ui`; g.fillText(last ? last.v.toFixed(1) : '--', cx, cy + R * 0.5);
-  g.font = `700 ${R * 0.1}px system-ui`; g.fillStyle = '#9aa5c8'; g.fillText(`今の1本 m/秒 ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${n}本)`, cx, cy + R * 0.68);
+  bigReadout(g, cx, cy + R * 0.62, R * 0.5, last, avg, best, n);
+}
+// 今の1本の数字(大きく)と、斜めの札「剣先」、その下に平均・最高と3か所の速さ
+function bigReadout(g, cx, y, size, last, avg, best, n) {
+  const W = gauge.width, tag = WHICH[which()];
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = `900 ${size * 0.36}px ${FONT}`; const tw = g.measureText(tag).width + size * 0.4, th = size * 0.5, tx = cx - tw / 2, ty = y - size * 1.05;
+  g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
+  g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
+  g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.75);
+  g.fillStyle = last ? colorOf(val(last)) : '#fff'; g.font = `900 ${size}px ${FONT}`; g.fillText(last ? val(last).toFixed(1) : '--', cx, y + size * 0.15);
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${Math.max(12, size * 0.2)}px ${FONT}`; g.fillText(`m/秒 ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${n}本)`, cx, y + size * 0.48);
+  if (last) { g.font = `500 ${Math.max(11, size * 0.17)}px ${FONT}`; g.fillText(three(last), cx, y + size * 0.74); }
 }
 function drawBars(last, avg, best, D) {
   const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
-  g.textAlign = 'center'; g.fillStyle = last ? colorOf(last.v) : '#fff'; g.font = `900 ${Math.min(W * 0.28, H * 0.36)}px system-ui`;
-  g.fillText(last ? last.v.toFixed(1) : '--', W / 2, H * 0.38);
-  g.fillStyle = '#9aa5c8'; g.font = `700 ${Math.min(W * 0.04, H * 0.05)}px system-ui`; g.fillText(`m/秒(今の1本)  いま ${eng.speed.toFixed(1)}`, W / 2, H * 0.47);
-  const B = D.slice(-12), x0 = W * 0.06, x1 = W * 0.94, y0 = H * 0.56, y1 = H * 0.92, MAX = Math.max(16, best * 1.1), bw = (x1 - x0) / 12;
-  g.strokeStyle = '#2a3354'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.stroke();
-  B.forEach((s, i) => { const h = (y1 - y0) * s.v / MAX; g.fillStyle = i === B.length - 1 ? colorOf(s.v) : '#3a4a80'; g.fillRect(x0 + i * bw + bw * 0.15, y1 - h, bw * 0.7, h); g.fillStyle = '#c8d0e6'; g.font = `${bw * 0.28}px system-ui`; g.fillText(s.v.toFixed(1), x0 + i * bw + bw / 2, y1 - h - 6); });
-  if (avg) { const y = y1 - (y1 - y0) * avg / MAX; g.strokeStyle = '#ffd23f'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#ffd23f'; g.textAlign = 'left'; g.fillText(`平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)`, x0, y0 - 8); }
+  bigReadout(g, W / 2, H * 0.42, Math.min(W * 0.26, H * 0.3), last, avg, best, D.length);
+  const B = D.slice(-12), x0 = W * 0.06, x1 = W * 0.94, y0 = H * 0.66, y1 = H * 0.95, MAX = Math.max(16, best * 1.1), bw = (x1 - x0) / 12;
+  g.strokeStyle = 'rgba(255,255,255,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.stroke();
+  g.textAlign = 'center';
+  B.forEach((s, i) => { const vv = val(s), h = (y1 - y0) * vv / MAX, isLast = i === B.length - 1; g.fillStyle = isLast ? colorOf(vv) : '#2c4aa0'; g.fillRect(x0 + i * bw + bw * 0.15, y1 - h, bw * 0.7, h); g.fillStyle = 'rgba(255,255,255,.8)'; g.font = `800 ${bw * 0.28}px ${FONT}`; g.fillText(vv.toFixed(1), x0 + i * bw + bw / 2, y1 - h - 6); });
+  if (avg) { const y = y1 - (y1 - y0) * avg / MAX; g.strokeStyle = '#fff'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([]); }
 }
+// ---- 読み上げ(遠くからでも分かるように。奥さまの案 2026-11-22)。振り下ろしの1本ごとに「12.3」と言う。押すと止める ----
+let voiceOn = true, spoken = new Set();
+try { voiceOn = localStorage.getItem('mitori.speedo.voice') !== '0'; } catch (e) { /* そのまま */ }
+const vb = $('btnVoice'); const showVoice = () => { vb.classList.toggle('off', !voiceOn); vb.setAttribute('aria-pressed', String(voiceOn)); }; showVoice();
+vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
+function voiceUnlock() { try { if (voiceOn) speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* 読み上げに対応しない端末 */ } } // 押した操作の中で一度呼ぶ(端末によっては、これがないと話さない)
+function say(text) {
+  if (!voiceOn || !('speechSynthesis' in window)) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.15; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
+}
+function speakNew() {
+  const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
+  spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return; say(val(s).toFixed(1));
+}
+
+// ---- 記録(端末の中だけ。localStorage)。振り下ろしの1本ごとに、日時・道具・剣先・物打ち・手元を残す。書き出しはCSV ----
+const LOG_KEY = 'mitori.speedo.log';
+const readLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY) || '[]'); } catch (e) { return []; } };
+const writeLog = (a) => { try { localStorage.setItem(LOG_KEY, JSON.stringify(a.slice(-5000))); } catch (e) { /* 残せなくても測るのは続ける */ } };
+const showLogInfo = () => { $('logInfo').textContent = `保存した記録 ${readLog().length}本`; };
+let logged = new Set();
+function saveDowns() { // 振り下ろしと分かったものだけ(向きの判定が後で変わることがあるので、表示のたびに見直して足す)
+  if (isFile) return; const D = downs(), add = D.filter((s) => !logged.has(s)); if (!add.length) return;
+  const a = readLog(), tool = $('tool').selectedOptions[0].textContent;
+  for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2) }); }
+  writeLog(a); showLogInfo();
+}
+setInterval(saveDowns, 1000);
+$('btnExport').onclick = () => {
+  const a = readLog(); if (!a.length) { $('logInfo').textContent = 'まだ記録がありません'; return; }
+  const csv = '日時,道具,剣先(m/秒),物打ち(m/秒),手元(m/秒)\n' + a.map((r) => [new Date(r.at).toLocaleString(), r.tool, r.tip, r.mono, r.hand].join(',')).join('\n');
+  const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })), el = document.createElement('a');
+  el.href = url; el.download = `mitori-suburi-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(el); el.click(); el.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
+let clearArm = 0;
+$('btnClearLog').onclick = () => { // 2回押しで消す(1回目は知らせるだけ)
+  if (Date.now() - clearArm > 3000) { clearArm = Date.now(); $('logInfo').textContent = 'もう一度押すと、保存した記録を消します'; return; }
+  writeLog([]); logged = new Set(eng.swings); clearArm = 0; showLogInfo();
+};
+showLogInfo();
 // 試験用(中身の確認)
 window.__speedo = { eng, downs };
 resize();
