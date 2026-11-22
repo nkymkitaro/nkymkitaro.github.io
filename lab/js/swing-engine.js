@@ -35,6 +35,8 @@ export class SwingEngine {
   }
   setLength(cm) { this.lengthCm = cm; }
   setColor(c) { this.color = c; }
+  // 1秒ごとの見え方の数(画面の「どうすれば測れるか」の案内に使う。ページが takeStats() で読んで0に戻す)
+  takeStats() { const s = this.st || {}; this.st = { n: 0, shaky: 0, noPerson: 0, measured: 0, seen: 0, edge: 0, short: 0, colorNear: 0, luma: 0, lumaN: 0 }; return s; }
   setWidth(w) { if (w !== this.W) { this.W = w; this.H = 0; this.reset(); } }
   get effM() { return Math.max(0.2, (this.lengthCm - GRIP_CM) / 100); }
   get lenPx() {
@@ -88,6 +90,8 @@ export class SwingEngine {
     const hand = this.handAt(t) || (pz && pz.hand);
     const ylim = pz ? Math.min(pz.hipY != null ? pz.hipY : 1e9, (hand ? hand[1] : 1e9) + H * 0.11) : H;
     const mask = new Uint8Array(N), bg = this.bg, mode = this.color; let changed = 0;
+    const ST = this.st || this.takeStats() && this.st; ST.n++;
+    for (let i = 0; i < N * 4; i += 64) { ST.luma += 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; ST.lumaN++; } // 明るさ(ざっと)
     for (let y = 0, i = 0, o = 0, p = 0; y < H; y++) {
       for (let x = 0; x < W; x++, i += 4, o += 3, p++) {
         const r = px[i], g = px[i + 1], b = px[i + 2];
@@ -97,12 +101,17 @@ export class SwingEngine {
       }
     }
     // 画面の3割以上が背景と違う = スマホが動いた・明るさが変わった。このコマは使わず、背景を早めに作り直す
-    if (changed > N * 0.3) { this.frames = Math.min(this.frames, 10); this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this.shaky = true; this._update(); return null; }
+    if (changed > N * 0.3) { ST.shaky++; this.frames = Math.min(this.frames, 10); this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this.shaky = true; this._update(); return null; }
     this.shaky = false;
     // 骨格を使う設定で人が見えていないときは、測らない
-    if (this.needPerson && !this.personSeen(t)) { this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this._update(); return null; }
+    if (this.needPerson && !this.personSeen(t)) { ST.noPerson++; this.lastAng = null; this.samples.push({ t, ang: null }); if (this.samples.length > 240) this.samples.shift(); this._update(); return null; }
+    ST.measured++;
+    if (hand) { // 手元のまわり(幅の25%)に、道具の色の動く画素がどれだけあるか(色が合っていないと、ほぼ0)
+      const rr = W * 0.25, x0 = Math.max(0, Math.floor(hand[0] - rr)), x1 = Math.min(W, Math.ceil(hand[0] + rr)), y0 = Math.max(0, Math.floor(hand[1] - rr)), y1 = Math.min(H, Math.ceil(hand[1] + rr));
+      let cnt = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) cnt += mask[y * W + x]; if (cnt > 20) ST.colorNear++;
+    }
     // かたまりに分け、いちばん「細長く大きい」もの(手元に近ければ加点)を道具とする
-    const lab = new Int32Array(N), stack = new Int32Array(N); let best = null, bestScore = 0, nlab = 0;
+    const lab = new Int32Array(N), stack = new Int32Array(N); let best = null, bestScore = 0, nlab = 0, shortNear = false;
     for (let p0 = 0; p0 < N; p0++) {
       if (!mask[p0] || lab[p0]) continue;
       nlab++; let sp = 0; stack[sp++] = p0; lab[p0] = nlab;
@@ -129,7 +138,7 @@ export class SwingEngine {
         if (ref) {
           const R = this.why || (this.why = { far: 0, short: 0, long: 0, thick: 0, ok: 0 });
           if (dmin > ref * 0.9) { R.far++; continue; }                         // 手元から離れている
-          if (length < ref * (ref === T ? 0.6 : 0.9)) { R.short++; continue; }  // 短い(腕・手だけ)
+          if (length < ref * (ref === T ? 0.6 : 0.9)) { R.short++; if (dmin < ref * 0.3 && length > ref * 0.25) shortNear = true; continue; }  // 短い(腕・手だけ。正面から撮って道具がカメラを向くと、道具も短く見える)
           if (length > ref * 3.6) { R.long++; continue; }                      // 長すぎる
           if (n / Math.max(1, length) > ref * 0.3) { R.thick++; continue; }    // 太すぎる(ぶれた道具の扇は通す幅)
           R.ok++;
@@ -166,12 +175,14 @@ export class SwingEngine {
       }
       if (!jump) { ang = a; this.lastAng = a; }
       const tip = Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - a) > 0 ? p1 : p0; edge = tip[0] < 2 || tip[1] < 2 || tip[0] > W - 3 || tip[1] > H - 3;
+      if (edge) ST.edge++;
       // 長さ(画素)は、両手の真ん中から剣先まで。骨格が無いときは、かたまり全体の長さ(手の肌も入るので、少し長めに出る)
       len = hand ? Math.hypot(tip[0] - hand[0], tip[1] - hand[1]) : hi - lo;
       if (!edge && len < H * 0.85) { this.lenHist.push(len); if (this.lenHist.length > 600) this.lenHist.shift(); } // 画面の高さに近い長さは、取り違え(近づいて来た人など)として使わない
     }
     let tipPt = null;
     if (ang != null) { const Lp = this.lenPx; tipPt = hand && Lp ? [hand[0] + Lp * Math.cos(ang), hand[1] + Lp * Math.sin(ang)] : (Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - ang) > 0 ? p1 : p0); }
+    if (ang != null) ST.seen++; else if (shortNear) ST.short++;
     this.seenN = (this.seenN || 0) + (ang != null ? 1 : 0); this.allN = (this.allN || 0) + 1; // 道具が見えたコマの数(画面の「道具 ○%」)
     this.samples.push({ t, ang, len, edge, hand, tip: tipPt }); if (this.samples.length > 240) this.samples.shift();
     if (keepDebug) this.debug = { mask, W, H, p0, p1, ang, hand };

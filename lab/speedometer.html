@@ -55,6 +55,8 @@
   body.ui-c .big { display: block; }
   .big .tag { display: inline-block; background: #fff; color: var(--n900); font-size: 1rem; padding: 4px 16px 4px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
   .big .n { display: block; font-size: 96px; line-height: 1; } .big .u { font-size: 22px; margin-left: 4px; } .big .s { display: block; font-size: 15px; color: #eee; white-space: pre-line; }
+  #coach { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 5; display: none; align-items: center; gap: 10px; background: var(--red); color: #fff; border-radius: 12px; font-size: 1.15rem; font-weight: 900; line-height: 1.5; padding: 14px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  #coach::before { content: '!'; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #fff; color: var(--red); display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
   .help { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1rem; font-weight: 800; line-height: 1.8; padding: 16px; background: rgba(7,13,34,.55); }
   /* 下の段: 表示の切り替え(名前の帯)と、はじめる・とめる */
   .dock { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); background: var(--n900); }
@@ -103,6 +105,7 @@
     <div class="help" id="help">真横から、全身と剣先が入るように置いて、<br>「はじめる」を押してください</div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
+  <div id="coach" role="status" aria-live="polite"></div>
 </main>
 <footer class="dock">
   <div class="tabs"><button data-ui="a" class="on" type="button">メーター</button><button data-ui="b" type="button">数字</button><button data-ui="c" type="button">映像</button></div>
@@ -163,7 +166,7 @@ function stopAll() { // とめる: カメラを閉じ、計測を止める(記�
   stopped = true; running = false;
   if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
   if (isFile) v.pause();
-  camTrack = null; setGo(false); $('help').style.display = 'flex'; $('help').innerHTML = '真横から、全身と剣先が入るように置いて、<br>「はじめる」を押してください';
+  camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = '真横から、全身と剣先が入るように置いて、<br>「はじめる」を押してください';
 }
 function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : '素振りスピード'; }
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
@@ -235,12 +238,32 @@ function onFrame(now, md) {
   draw();
   if (!v.ended && !stopped) v.requestVideoFrameCallback(onFrame); else { running = false; if (v.ended) setGo(false); }
 }
-let presentedNow = 0, visPct = 100;
+let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
+// ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
+// 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
+function coach(st, vis) {
+  if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
+  const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128;
+  const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+  let m = '';
+  if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
+  else if (r('noPerson') > 0.5) m = '全身が映るまで、スマホから離れてください';
+  else if (luma < 55 || (camFps > 0 && camFps < 40 && (!caps.iso || isoLevel >= ISO_STEPS.length - 1))) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
+  else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が画面から出ています。もう少し離れてください';
+  else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を横に向けてください。スマホに対して真横に立つと測れます';
+  else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '道具が見つかりません。⚙の「色」を道具の色に合わせてください';
+  else if (meas && vis < 30) m = '道具が見えにくいです。真横から、全身と剣先が入るように置いてください';
+  coachRun = m === coachRun.msg ? { msg: m, n: coachRun.n + 1 } : { msg: m, n: 1 };
+  coachMsg = coachRun.n >= 2 ? m : (m ? coachMsg : '');
+  if (coachMsg && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 10000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
+  if (!coachMsg) coachSaid = '';
+}
 setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
+  coach(eng.takeStats(), vis);
   stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
@@ -263,10 +286,8 @@ function draw() {
   if (cv >= display) { display = cv; holdUntil = nowMs + 300; } else if (nowMs > holdUntil) display = Math.max(cv, display - 0.3);
   const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
   drawOverlay();
-  const noPerson = eng.needPerson && eng.H && lastT != null && !eng.personSeen(lastT);
-  // 人はいるのに道具がほとんど見えない: 正面から撮っている(道具がカメラの方を向いて短く見える)か、暗い・道具の色が合っていない
-  const hint = eng.shaky ? 'スマホを固定してください' : noPerson ? '全身が映るように置いてください' : (running && !isFile && visPct < 25 ? '道具が見えにくいです。真横から撮る・明るくする・設定の「色」を合わせる' : '');
-  const hp = $('help'); if (hint) { hp.style.display = 'flex'; hp.textContent = hint; } else if (running) hp.style.display = 'none';
+  const hint = coachMsg;
+  const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
   speakNew();
   $('bigTag').textContent = WHICH[which()];
   if (ui === 'a') drawGauge(last, avg, best, D.length);
