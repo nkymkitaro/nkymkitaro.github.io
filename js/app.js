@@ -27,7 +27,7 @@ import { initAnalytics, track, getDisplayMode } from './analytics.js';
 import { createZoomControl } from './zoom-control.js';
 import { initRoleSurvey, maybeAskRole, dismissRoleSurvey, openRoleSurveyFromHelp, getSavedRole } from './role-survey.js';
 import { readLocal, writeLocal } from './safe-storage.js';
-import { initSmooth60, isSmooth60, setSmooth60 } from './smooth60.js';
+import { initSmooth60, isSmooth60, setSmooth60, SMOOTH60_VER } from './smooth60.js';
 
 // LINEなどのアプリ内ブラウザの判定(js/in-app-browser.js が <head> で先に済ませている)。
 // leaving: LINEから標準ブラウザへ開き直している最中。blocked: 「ブラウザで開いてください」を出して先へ進ませない
@@ -1306,6 +1306,7 @@ document.addEventListener('keydown', (e) => {
 
 // ?diag=1 のとき: カメラの取り込みの大きさと、端末の情報を数字に出す(js/diag.js)
 if (diagOn) {
+  diagSet('版(app/なめらか)', `11-22b / ${SMOOTH60_VER}`); // 古いファイルが端末に残っていないかの確認用。直したら数字を進める
   diagSet('端末', navigator.userAgent.slice(0, 80));
   setInterval(() => {
     const v = cameraLink.localMonitorVideo;

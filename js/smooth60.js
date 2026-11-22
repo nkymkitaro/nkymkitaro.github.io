@@ -11,6 +11,7 @@
 import { readLocal, writeLocal } from './safe-storage.js';
 
 const KEY = 'kendovar.smooth60';
+export const SMOOTH60_VER = '11-22b'; // 診断に出す版(古いファイルが端末に残っていないかの確認用)
 const LOW_FPS = 50;
 const LOW_SECONDS = 3; // 何秒続けて下回ったら、ISO を1段上げるか
 const WARMUP_MS = 3000; // 開いた直後は露出が落ち着かないので数えない
