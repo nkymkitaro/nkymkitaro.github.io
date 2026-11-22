@@ -7,6 +7,18 @@
 
 export const B_MIME = 'application/x-kvar-b';
 
+// 録画の大きさの上限: 長い辺1920px・短い辺1080px(技術マネージャーの回答 2026-11-15「案1」)。
+// 取り込みがこれより大きい(画質「最大」の2560×1440など)ときは、圧縮の前に縮める。縦横比は保ち、幅・高さは偶数にそろえる
+export const REC_MAX_LONG = 1920;
+export const REC_MAX_SHORT = 1080;
+export function fitRecSize(width, height) {
+  const long = Math.max(width, height), short = Math.min(width, height);
+  const k = Math.min(1, REC_MAX_LONG / long, REC_MAX_SHORT / short);
+  if (k >= 1) return { width, height, scaled: false };
+  const even = (n) => Math.max(2, Math.round(n * k / 2) * 2);
+  return { width: even(width), height: even(height), scaled: true };
+}
+
 // MP4に入れられる圧縮方式だけを使う(VP8はMP4に入らないため使わない)
 const VIDEO_CANDIDATES = [
   { codec: 'avc1.42001f', avc: { format: 'avc' } },
@@ -140,8 +152,17 @@ export class RecorderB {
   async start() {
     const track = this.stream.getVideoTracks()[0];
     const st = (track && track.getSettings()) || {};
-    const width = st.width || 640;
-    const height = st.height || 480;
+    const srcW = st.width || 640;
+    const srcH = st.height || 480;
+    const fit = fitRecSize(srcW, srcH);
+    const width = fit.width;
+    const height = fit.height;
+    this._canvas = null;
+    if (fit.scaled) { // 上限を超える大きさは、圧縮の前に縮める(コマごとにキャンバスへ描いてから渡す)
+      this._canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(width, height) : Object.assign(document.createElement('canvas'), { width, height });
+      this._ctx = this._canvas.getContext('2d', { alpha: false });
+      if (!this._ctx) throw new Error('録画の縮小に使うキャンバスが作れません');
+    }
     this.fps = Math.round(st.frameRate || this.fps) || 30;
     const cfg = await pickConfigB(width, height, this.bitrate, this.fps);
     if (!cfg) throw new Error('この端末では、MP4にできる圧縮が使えません');
@@ -274,7 +295,10 @@ export class RecorderB {
     if (ts <= (this._lastTs ?? -1)) return; // 時刻が戻る・同じ(同じコマを2回)ときは捨てる
     if (this.encoder.encodeQueueSize > 8) { this.dropped++; return; }
     let frame;
-    try { frame = new VideoFrame(this.video, { timestamp: ts }); } catch (err) { this.dropped++; return; }
+    try {
+      if (this._canvas) { this._ctx.drawImage(this.video, 0, 0, this._canvas.width, this._canvas.height); frame = new VideoFrame(this._canvas, { timestamp: ts }); }
+      else frame = new VideoFrame(this.video, { timestamp: ts });
+    } catch (err) { this.dropped++; return; }
     this._lastTs = ts;
     let key = false;
     if (ts - this._segStartTs >= this.segMs * 1000 && this._boundaries.length === 0 && this._seg) {
@@ -350,6 +374,7 @@ export class RecorderB {
     this.encoder = null;
     this._closeAudioCtx();
     if (this.video) { this.video.srcObject = null; this.video = null; }
+    this._canvas = null; this._ctx = null;
   }
 
   get active() { return this.running; }
