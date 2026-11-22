@@ -30,7 +30,7 @@ export class SwingEngine {
     this.swings = []; // { t, v, sign }
     this._peak = null;
     this.signStats = { 1: [], '-1': [] };
-    this.faceVotes = [];
+    this.faceVotes = []; this.torsoHist = []; this.rejects = 0;
     this.debug = null; // { mask, comp, a, p0, p1 }
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -41,7 +41,7 @@ export class SwingEngine {
     if (this.lenHist.length < 5) return null;
     const a = this.lenHist.slice(-300).sort((x, y) => x - y); return a[Math.floor(a.length * 0.75)]; // 上から25%の長さ(取り違えの長い値に引っぱられにくい)
   }
-  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.speed = 0; }
+  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.speed = 0; }
 
   // 骨格の結果(元の映像の座標)を受け取る。kp: [[x,y,score]×17]
   addPose(t, kp, videoW) {
@@ -53,10 +53,14 @@ export class SwingEngine {
     // 前(向いている側): 鼻が両肩の真ん中より左右どちらにあるか(構えると頭は前に出る)。肩幅に対する割合で見る
     const sh = [5, 6].filter(ok), hp2 = [11, 12].filter(ok);
     const faceX = ok(0) && sh.length && hp2.length ? (kp[0][0] - sh.reduce((m, j) => m + kp[j][0], 0) / sh.length) / Math.max(1, Math.abs(sh.reduce((m, j) => m + kp[j][1], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][1], 0) / hp2.length)) : null;
+    // 胴の長さ(両肩の真ん中〜両腰の真ん中、画素)。道具の長さの見込みに使う(手元〜剣先は、だいたい胴の1〜3倍)
+    const torso = sh.length && hp2.length ? Math.hypot(sh.reduce((m, j) => m + kp[j][0], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][0], 0) / hp2.length, sh.reduce((m, j) => m + kp[j][1], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][1], 0) / hp2.length) * k : null;
+    if (torso) { this.torsoHist.push(torso); if (this.torsoHist.length > 30) this.torsoHist.shift(); }
     this.pose.push({ t, hand, hipY }); if (this.pose.length > 40) this.pose.shift();
     if (faceX != null && Math.abs(faceX) > 0.08) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 60) this.faceVotes.shift(); } // 胴の長さの8%以上ずれているときだけ数える
   }
   // 人(骨格)が最近見えているか。骨格を使う設定で、0.6秒以上見えていなければ測らない(誰もいない部屋で、家具を道具と取り違えて数えていた。2026-11-22 中山さんの実機)
+  get torso() { const a = this.torsoHist.slice().sort((x, y) => x - y); return a.length >= 3 ? a[a.length >> 1] : null; }
   personSeen(t) { const P = this.pose; return P.length > 0 && t - P[P.length - 1].t < 0.6; }
   handAt(t) { // 骨格の両手の位置を、時刻 t に合わせて直線でつなぐ(少し先までなら伸ばす)
     const P = this.pose; if (!P.length) return null;
@@ -113,13 +117,26 @@ export class SwingEngine {
       if (n < 25) continue;
       const mx = sx / n, my = sy / n, cxx = sxx / n - mx * mx, cyy = syy / n - my * my, cxy = sxy / n - mx * my;
       const tr = cxx + cyy, det = cxx * cyy - cxy * cxy, l1 = tr / 2 + Math.sqrt(Math.max(0, tr * tr / 4 - det)), l2 = Math.max(1e-3, tr - l1);
-      // 形で道具をはじくのはやめた(ぶれた道具と手の肌がつながると太く見え、本物まで落ちた)。誰もいない部屋の取り違えは、人が見えないとき測らないことで防ぐ
-      let score = Math.sqrt(l1) * Math.sqrt(n) * Math.pow(l1 / l2, 0.25);
-      if (hand) { // 手元からいちばん近い点までの距離
-        let dmin = 1e9; for (let q = 0; q < pts.length; q += 3) { const dx = pts[q] % W - hand[0], dy = ((pts[q] / W) | 0) - hand[1]; dmin = Math.min(dmin, dx * dx + dy * dy); }
-        dmin = Math.sqrt(dmin); score *= dmin < W * 0.06 ? 2 : dmin < W * 0.15 ? 1 : 0.3;
+      let score = Math.sqrt(l1) * Math.sqrt(n) * Math.pow(l1 / l2, 0.25), near = null, length = 0;
+      if (hand) {
+        // 道具は「手元の近くから始まり、胴の約1〜3倍の長さで、細い」。腕・服・家具は、これで落とす(振っていないのにメーターが動いていた。2026-11-22 実機)
+        // 骨格は1秒数回なので、速い振りの最中は手元の位置が数十画素ずれる。そこで手元そのものではなく「かたまりの手元側の端」を起点にする
+        const a0 = 0.5 * Math.atan2(2 * cxy, cxx - cyy), ux = Math.cos(a0), uy = Math.sin(a0);
+        let lo = 1e9, hi = -1e9; for (let q = 0; q < pts.length; q += 2) { const pr = (pts[q] % W - mx) * ux + (((pts[q] / W) | 0) - my) * uy; if (pr < lo) lo = pr; if (pr > hi) hi = pr; }
+        const e0 = [mx + ux * lo, my + uy * lo], e1 = [mx + ux * hi, my + uy * hi], d0 = Math.hypot(e0[0] - hand[0], e0[1] - hand[1]), d1 = Math.hypot(e1[0] - hand[0], e1[1] - hand[1]);
+        near = d0 <= d1 ? e0 : e1; const dmin = Math.min(d0, d1); length = hi - lo;
+        const T = this.torso, Lp = this.lenPx, ref = Lp && this.lenHist.length > 30 ? Lp / 1.8 : T;
+        if (ref) {
+          const R = this.why || (this.why = { far: 0, short: 0, long: 0, thick: 0, ok: 0 });
+          if (dmin > ref * 0.9) { R.far++; continue; }                         // 手元から離れている
+          if (length < ref * (ref === T ? 0.6 : 0.9)) { R.short++; continue; }  // 短い(腕・手だけ)
+          if (length > ref * 3.6) { R.long++; continue; }                      // 長すぎる
+          if (n / Math.max(1, length) > ref * 0.3) { R.thick++; continue; }    // 太すぎる(ぶれた道具の扇は通す幅)
+          R.ok++;
+        }
+        score = length * Math.sqrt(n) * (dmin < (ref || W) * 0.3 ? 2 : 1);
       }
-      if (score > bestScore) { bestScore = score; best = { n, mx, my, cxx, cyy, cxy, l1, pts }; }
+      if (score > bestScore) { bestScore = score; best = { n, mx, my, cxx, cyy, cxy, l1, pts, near, length }; }
     }
     let ang = null, len = null, edge = false, p0 = null, p1 = null;
     if (best) {
@@ -132,13 +149,22 @@ export class SwingEngine {
       else if (this.lastAng != null) { const d = (a) => Math.abs(Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng))); tipFirst = d(cand[0]) <= d(cand[1]) ? 1 : 0; }
       else tipFirst = p1[1] < p0[1] ? 1 : 0;
       let a = tipFirst ? cand[0] : cand[1];
+      if (hand && best.near) { // 手元側の端から、遠い側の画素の向きの平均(ぶれた扇なら真ん中=露出の真ん中の向き。手の肌がつながっても曲がらない)
+        let vx = 0, vy = 0; for (const p of best.pts) { const dx = p % W - best.near[0], dy = ((p / W) | 0) - best.near[1], r = Math.hypot(dx, dy); if (r > best.length * 0.45) { vx += dx; vy += dy; } }
+        if (vx || vy) a = Math.atan2(vy, vx);
+      }
       // 手元の判定と前のコマの向きが食い違う(160度以上の飛び)ときは、前のコマの向きを信じる(1コマで半回転はしない)
+      let jump = false;
       if (this.lastAng != null) {
         const dd = Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng));
-        if (Math.abs(dd) > 2.8) a = tipFirst ? cand[1] : cand[0];
-        const d2 = Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng)); a = this.lastAng + d2; // 続けてつなぐ
+        if (!hand && Math.abs(dd) > 2.8) a = tipFirst ? cand[1] : cand[0];
+        const d2 = Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng));
+        // 1コマで動ける角度を超える飛び(毎秒2000度+20度より大きい)は取り違えとして使わない。3コマ続いたら新しい向きを信じる
+        const S0 = this.samples[this.samples.length - 1], dt = S0 ? Math.max(0.008, t - S0.t) : 0.017;
+        if (Math.abs(d2) > (2000 * dt + 20) * Math.PI / 180 && this.rejects < 3) { jump = true; this.rejects++; }
+        else { this.rejects = 0; a = this.lastAng + d2; }
       }
-      ang = a; this.lastAng = a;
+      if (!jump) { ang = a; this.lastAng = a; }
       const tip = Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - a) > 0 ? p1 : p0; edge = tip[0] < 2 || tip[1] < 2 || tip[0] > W - 3 || tip[1] > H - 3;
       // 長さ(画素)は、両手の真ん中から剣先まで。骨格が無いときは、かたまり全体の長さ(手の肌も入るので、少し長めに出る)
       len = hand ? Math.hypot(tip[0] - hand[0], tip[1] - hand[1]) : hi - lo;
@@ -152,39 +178,51 @@ export class SwingEngine {
     return { ang, len, edge };
   }
 
-  // ならした向きから、回る速さと剣先の速さ(少し前の時刻)を出す。2次の多項式(9点)の傾き
+  // ならした向きから、回る速さと剣先の速さ(少し前の時刻)を出す。前後4コマ(9点)に2次の式を当てはめた傾き。
+  // 一番速い瞬間は、ぶれて道具が見えないコマが混じりやすい。9点のうち6点以上あれば、欠けたまま計算する(欠けると数えていなかった。2026-11-22 実機)
   _update() {
-    const S = this.samples, m = 4, n = S.length; if (n < 2 * m + 3) return;
-    const c = n - 2 - m, win = S.slice(c - m, c + m + 1); if (win.some((s) => s.ang == null)) { this.speed *= 0.8; this._peak = null; return; }
-    const t0 = win[m].t; let sk2 = 0, skx = 0, sky = 0, nh = 0; const H = [];
-    for (let k = -m; k <= m; k++) { const s = win[k + m], dt = s.t - t0; sk2 += dt * dt; }
-    // 回る速さ: 向きを2次の多項式(9点)でならし、その前後1コマの差。9点の直線の傾きより、最速の瞬間がつぶれにくい
-    let omega = 0;
-    if (c - m - 1 >= 0 && c + m + 1 < n && S[c - m - 1].ang != null && S[c + m + 1].ang != null) {
-      const CF = [-21, 14, 39, 54, 59, 54, 39, 14, -21].map((x) => x / 231), sm = (cc) => { let v = 0; for (let k = -m; k <= m; k++) v += CF[k + m] * S[cc + k].ang; return v; };
-      omega = (sm(c + 1) - sm(c - 1)) / ((S[c + 1].t - S[c - 1].t) || 1e-3);
-    } else { let skA = 0; for (let k = -m; k <= m; k++) skA += (win[k + m].t - t0) * win[k + m].ang; omega = skA / (sk2 || 1); }
+    const S = this.samples, m = 4, n = S.length; if (n < 2 * m + 2) return;
+    const c = n - 1 - m, t0 = S[c].t, pts = [];
+    for (let k = -m; k <= m; k++) { const s = S[c + k]; if (s && s.ang != null) pts.push([s.t - t0, s.ang]); }
+    const left = pts.filter((q) => q[0] < 0).length, right = pts.filter((q) => q[0] > 0).length;
+    if (pts.length < 6 || left < 2 || right < 2) {
+      this.speed *= 0.85;
+      if (this._peak && t0 - this._peak.t > 0.25) this._finishPeak(); // 長く見えなければ、その1本は区切る
+      return;
+    }
+    // 2次の最小二乗(ang = a0 + a1*dt + a2*dt^2)。傾き a1 が回る速さ
+    let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, y0 = 0, y1 = 0, y2 = 0;
+    for (const [x, y] of pts) { const x2 = x * x; s0++; s1 += x; s2 += x2; s3 += x2 * x; s4 += x2 * x2; y0 += y; y1 += x * y; y2 += x2 * y; }
+    const det3 = (a, b, cc, d, e, f, g, h, i) => a * (e * i - f * h) - b * (d * i - f * g) + cc * (d * h - e * g);
+    const D = det3(s0, s1, s2, s1, s2, s3, s2, s3, s4); if (Math.abs(D) < 1e-18) return;
+    const omega = det3(s0, y0, s2, s1, y1, s3, s2, y2, s4) / D;
+    const a0 = det3(y0, s1, s2, y1, s2, s3, y2, s3, s4) / D;
+    const win = [], H = []; let sk2 = 0, skx = 0, sky = 0, nh = 0;
+    for (let k = -m; k <= m; k++) { const s = S[c + k]; win.push(s); sk2 += (s.t - t0) * (s.t - t0); }
     // 手元の速さ(骨格があるとき)。画素→mは道具の見えた長さから
     let vhx = 0, vhy = 0; const Lp = this.lenPx;
     if (Lp) {
       const mpp = this.effM / Lp;
-      for (let k = -m; k <= m; k++) { const s = win[k + m]; const h = this.handAt(s.t); if (!h) { nh = -1; break; } H.push([s.t - t0, h]); }
-      if (nh === 0 && H.length) { for (const [dt, h] of H) { skx += dt * h[0]; sky += dt * h[1]; } vhx = skx / sk2 * mpp; vhy = sky / sk2 * mpp; }
-    }
-    const a = win[m].ang, L = this.effM;
-    const vx = vhx - omega * L * Math.sin(a), vy = vhy + omega * L * Math.cos(a);
-    const v = Math.hypot(vx, vy), lenC = win[m].len; this.speed = v; this.omega = omega; this.speedT = t0; this.tipVx = vx;
-    // 1本の区切り: 3m/秒を超えてから、最高の6割を切ったら、その最高を1本とする
-    if (!this._peak) { if (v > 3) this._peak = { v, t: t0, sign: Math.sign(omega), vx, len: lenC }; }
-    else {
-      if (v > this._peak.v) Object.assign(this._peak, { v, t: t0, sign: Math.sign(omega) || this._peak.sign, vx, len: lenC });
-      else if (v < this._peak.v * 0.6) {
-        const pk = this._peak; this._peak = null;
-        // 道具がはっきり見えていた(見えた長さが、ふだんの長さの4割〜1.5倍)ときだけ数える。歩いて近づく・道具を置くなどの動きを数えない
-        const Lp = this.lenPx, seen = Lp && pk.len != null && pk.len > Lp * 0.4 && pk.len < Lp * 1.5;
-        if (pk.v >= 4 && seen && this.frames > 30) { this.signStats[pk.sign].push(pk.v); this.swings.push(pk); if (this.swings.length > 200) this.swings.shift(); if (this.onSwing) this.onSwing(pk); }
+      for (const s of win) { const h = this.handAt(s.t); if (!h) { nh = -1; break; } H.push([s.t - t0, h]); }
+      if (nh === 0 && H.length && this.lenHist.length > 30) {
+        for (const [dt, h] of H) { skx += dt * h[0]; sky += dt * h[1]; } vhx = skx / sk2 * mpp; vhy = sky / sk2 * mpp;
+        const hv = Math.hypot(vhx, vhy); if (hv > 4) { vhx *= 4 / hv; vhy *= 4 / hv; } // 手元は速くても毎秒3m前後。骨格のゆれで大きく出たときは抑える(メーターが振り切れたままになっていた)
       }
     }
+    const a = a0, L = this.effM;
+    const vx = vhx - omega * L * Math.sin(a), vy = vhy + omega * L * Math.cos(a);
+    const v = Math.min(30, Math.hypot(vx, vy)), lenC = win[m].len; this.speed = v; this.omega = omega; this.speedT = t0; this.tipVx = vx;
+    // 1本の区切り: 3m/秒を超えてから、最高の6割を切ったら、その最高を1本とする
+    if (!this._peak) { if (v > 3) this._peak = { v, t: t0, sign: Math.sign(omega), vx }; }
+    else {
+      if (v > this._peak.v) Object.assign(this._peak, { v, t: t0, sign: Math.sign(omega) || this._peak.sign, vx });
+      else if (v < this._peak.v * 0.6) this._finishPeak();
+    }
+  }
+  _finishPeak() {
+    const pk = this._peak; this._peak = null; if (!pk) return;
+    // 道具かどうかは見つける段階で確かめている(手元から始まる・胴の1〜3倍の長さ・細い)。ここでは遅すぎる動き(4m/秒未満)と、始めの背景づくりの間を除く
+    if (pk.v >= 4 && this.frames > 30) { this.signStats[pk.sign].push(pk.v); this.swings.push(pk); if (this.swings.length > 200) this.swings.shift(); if (this.onSwing) this.onSwing(pk); }
   }
   // 振り下ろしの回る向き: 速いほうの向き(直近10本ずつの平均)
   downSign() {
