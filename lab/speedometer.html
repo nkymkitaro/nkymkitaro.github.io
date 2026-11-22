@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Reggae+One&text=%E3%82%B1%E3%83%B3%E3%82%BD%E3%82%AF&display=block" rel="stylesheet"><!-- ロゴの4文字だけ読む -->
 <style>
   :root { --n950: #070d22; --n900: #0c1636; --n800: #14224d; --n700: #1d3170; --line: rgba(255,255,255,.2); --shade: #2c4aa0; --red: #d6231b; --text: #fff; --soft: rgba(255,255,255,.62); --skew: -14deg; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -22,6 +23,8 @@
   .top .logo { height: 22px; opacity: .9; }
   .band { display: inline-flex; align-items: center; gap: 8px; padding: 6px 22px 6px 12px; font-weight: 900; font-size: 1.05rem; line-height: 1; letter-spacing: .04em; white-space: nowrap; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); background: var(--n700); }
   .band[data-state="on"] { background: var(--red); }
+  .band[data-state="idle"] { background: none; clip-path: none; padding: 0 4px; }
+  .kslogo { height: 44px; width: auto; display: block; overflow: visible; }
   .band[data-state="on"]::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
   .sp { flex: 1; }
   .ib { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; list-style: none; }
@@ -79,7 +82,7 @@
 <body class="ui-a">
 <header class="top">
   <img class="logo" src="../icons/logo-mitori-white.png" alt="MITORI">
-  <span class="band" id="band" data-state="idle">ケンソク！</span>
+  <span class="band" id="band" data-state="idle"><svg class="kslogo" viewBox="14 4 252 80" role="img" aria-label="ケンソク！"><g transform="skewX(-8)"><text x="22" y="70" font-family="Reggae One" font-size="54" letter-spacing="-5" fill="#fff">ケンソク</text><path d="M250 10 L260 10 L254 58 L248 58 Z" fill="#e0353b"/><circle cx="250" cy="72" r="6.5" fill="#e0353b"/></g><path d="M214 20 Q 236 8 262 12" stroke="#e0353b" stroke-width="2" fill="none" opacity=".9"/><path d="M208 30 Q 232 16 260 20" stroke="#e0353b" stroke-width="1.2" fill="none" opacity=".5"/></svg></span>
   <span class="sp"></span>
   <button class="ib" id="btnVoice" type="button" aria-label="速さを読み上げる" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
   <details class="set"><summary class="ib" aria-label="設定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary><div class="setp">
@@ -173,7 +176,8 @@ function stopAll() { // とめる: カメラを閉じ、計測を止める(記�
   camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = '<ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol>';
 }
 $('coach').onclick = () => { coachMuteUntil = performance.now() + 30000; coachMsg = ''; $('coach').style.display = 'none'; };
-function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : 'ケンソク！'; }
+const KSLOGO = $('band').innerHTML; // ロゴ「ケンソク！」(案A 一太刀: 「！」が振り下ろした剣、点が剣先)
+function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').innerHTML = on ? '計測中' : KSLOGO; }
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
 async function openCamera() {
   try {
