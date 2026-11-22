@@ -44,7 +44,7 @@ function withSmooth(t, c) {
   const next = { ...(c || {}) };
   delete next.frameRate; delete next.advanced;
   if (!on) return next;
-  next.frameRate = exactOk ? { exact: 60 } : { ideal: 60 };
+  next.frameRate = exactOk && !sizeFirst.has(t.id) ? { exact: 60 } : { ideal: 60 };
   const caps = t.getCapabilities ? t.getCapabilities() : {};
   // continuous や ISO に対応しない端末(iPhone など)は、60の頼みだけ
   const adv = {};
@@ -52,6 +52,14 @@ function withSmooth(t, c) {
   if (isoOk && level > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[level]));
   if (Object.keys(adv).length) next.advanced = [adv];
   return next;
+}
+// 60ちょうどを頼むと、画質が半分より小さくなるカメラ(Pixel 9a の自撮り: 60ちょうどは480×640しか出せず、しかも暗いと30コマ)は、
+// そのカメラだけ「60はできれば」(ideal)にして、画質を守る(2026-11-22 中山さんの実機の診断)。外カメは今までどおり60ちょうど
+const sizeFirst = new Set();
+function wantShortOf(c) {
+  const v = (x) => (x == null ? 0 : typeof x === 'number' ? x : x.ideal || x.exact || x.min || 0);
+  const w = v(c && c.width); const h = v(c && c.height);
+  return w && h ? Math.min(w, h) : 0;
 }
 let origApply = null;
 function patchApply() {
@@ -61,12 +69,27 @@ function patchApply() {
     if (this.kind === 'video' && this === getTrack()) {
       base.set(this, { ...(c || {}) });
       const self = this;
-      return origApply.call(this, withSmooth(this, c)).catch((err) => {
+      const checkSize = () => {
+        if (!on || sizeFirst.has(self.id) || !exactOk) return undefined;
+        const want = wantShortOf(c); const g = self.getSettings ? self.getSettings() : {};
+        const got = Math.min(g.width || 0, g.height || 0);
+        if (want && got && got * 2 < want) { sizeFirst.add(self.id); return twoStep(c).catch(() => {}); }
+        return undefined;
+      };
+      // Chrome は、露出モード・ISO(advanced)が入った頼みでは、大きさ・コマ数を替えない(その頼みの大きさは無視される)。
+      // そのため「最大」でも 480×640 のままだった(2026-11-22 中山さんの実機の診断で判明)。先に大きさ・コマ数だけを頼み、そのあと advanced を足して頼む
+      const twoStep = (cc) => {
+        const full = withSmooth(self, cc);
+        if (!full.advanced) return origApply.call(self, full);
+        const first = { ...full }; delete first.advanced;
+        return origApply.call(self, first).then(() => origApply.call(self, full));
+      };
+      return twoStep(c).then(checkSize, (err) => {
         // 60ちょうどを出せない端末: ideal にして頼み直す
         // 断られた項目だけやめて、1回だけ頼み直す(60ちょうど → ideal、ISO → 指定しない)
         if (on && err && err.name === 'OverconstrainedError') {
-          if (err.constraint === 'iso' && isoOk) { isoOk = false; return origApply.call(self, withSmooth(self, c)); }
-          if (exactOk && err.constraint !== 'iso') { exactOk = false; return origApply.call(self, withSmooth(self, c)); }
+          if (err.constraint === 'iso' && isoOk) { isoOk = false; return twoStep(c).then(checkSize); }
+          if (exactOk && err.constraint !== 'iso') { exactOk = false; return twoStep(c).then(checkSize); }
         }
         throw err;
       });
