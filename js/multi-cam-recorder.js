@@ -27,6 +27,8 @@ export class MultiCamRecorder {
     this.memCapBytes = 0;
     this.autoCapWidth = 0; // 0 = 下げていない。それ以外は、写真の幅の上限(px)
     this.onAutoDowngrade = null;
+    // 負荷の目安(2026-11-22): 写真を撮ろうとした回数・圧縮が間に合わず飛ばした回数・圧縮にかかった時間。app.js が1秒ごとに読んで0に戻す
+    this.load = { tries: 0, skipped: 0, encMs: 0, encN: 0 };
   }
 
   // 実際に使う幅(設定の幅と、自動の下げの小さいほう)
@@ -201,7 +203,8 @@ export class MultiCamRecorder {
       }
       // 前の写真の圧縮が終わっていないときは、このコマは飛ばす(「高」「最大」で圧縮が間に合わないと、
       // 待ちが積み上がって、メモリが増え、画面が固まるため。2026-11-03)
-      if (cam.encoding && now - cam.encodingSince < 1500) { diagAdd('写真を飛ばした回数'); continue; } // 1.5秒たっても終わらないときは、取りこぼしとして続ける
+      this.load.tries++;
+      if (cam.encoding && now - cam.encodingSince < 1500) { this.load.skipped++; diagAdd('写真を飛ばした回数'); continue; } // 1.5秒たっても終わらないときは、取りこぼしとして続ける
       cam.encoding = true;
       cam.encodingSince = now;
       const t0 = performance.now();
@@ -209,6 +212,7 @@ export class MultiCamRecorder {
       cam.canvas.toBlob(
         (blob) => {
           cam.encoding = false;
+          this.load.encMs += performance.now() - t0; this.load.encN++;
           if (!blob) return;
           cam.frames.push({ ts: now, blob });
           cam.recentBytes.push(blob.size);

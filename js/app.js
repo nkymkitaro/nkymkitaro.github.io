@@ -75,10 +75,9 @@ const player = new ReplayPlayer(document.getElementById('displayCanvas'), record
 // --- VAR設定(親機からいつでも調整できる) ---
 const REWIND_OPTIONS = [10, 15, 30]; // 秒。さかのぼれる長さは、これに合わせて自動で決める(2026-10-30。2つの設定がぶつかるのを防ぐ)
 const MIN_BUFFER_SEC = DEFAULT_BUFFER_SEC; // ためる長さの下限。戻る秒数が短くても、この長さはためる
-// 画質「最大」のときだけ、ためる長さも戻る秒数・ディレイも10秒に絞る(4Kの写真は重いため。中山さんの案 2026-11-03)
-const MAX_QUALITY_SEC = 10;
-function isMaxQuality() { return varSettings.qualityKey === 'max'; }
-function rewindOptions() { return isMaxQuality() ? [MAX_QUALITY_SEC] : REWIND_OPTIONS; }
+// 画質「最大」でも、戻る秒数・ディレイの秒数は絞らない(2026-11-22 中山さん「縛りを外す」。以前は10秒だけにしていた)。
+// メモリが足りなくなりそうなときは、VARの自動の下げ(recorder.memCapBytes)がVARの写真だけ1段下げる
+function rewindOptions() { return REWIND_OPTIONS; }
 const BUFFER_HEAVY_SEC = 60; // 戻る秒数にこの長さを選んだときは「重くなることがあります。」を出す
 // 録画の画質。カメラは既定で640×480で取り込むので、640pxより上げても細かくならない(2026-10-14 に「高」を外し、2026-11-03 に、取り込みの大きさも替える形で戻した)。
 // 「低」は、重い・熱くなる端末向けの逃げ道(以前の標準の320px)
@@ -95,8 +94,9 @@ const SAVE_SCOPE_OPTIONS = [
   { key: 'selected', label: '選択中のみ' },
   { key: 'all', label: '全カメラ' },
 ];
-// 画質の既定は「高」(1280×720。2026-11-15、中山さんの指示「デフォ画質低いの直して」)。「最大」は録画の保存失敗との関わりを確かめるまで既定にしない(959c72a)
-const DEFAULT_QUALITY_KEY = 'high';
+// 画質の既定は「最大」(2026-11-22、中山さんの指示)。負荷がかなり重くなったら「高」に自動で下げる(下の watchLoad)。
+// 録画は1920×1080を超えないよう縮めてから圧縮する(lab/js/recorder-b.js の fitRecSize)
+const DEFAULT_QUALITY_KEY = 'max';
 const varSettings = {
   rewindSeconds: 15,
   bufferSeconds: DEFAULT_BUFFER_SEC,
@@ -602,7 +602,7 @@ function renderQualitySelector() {
 // 戻る秒数を選ぶと、さかのぼれる長さも合わせて決まる(戻る秒数と同じ。ただし下限あり)
 function selectRewindSeconds(sec) {
   varSettings.rewindSeconds = sec;
-  varSettings.bufferSeconds = isMaxQuality() ? MAX_QUALITY_SEC : Math.max(MIN_BUFFER_SEC, sec);
+  varSettings.bufferSeconds = Math.max(MIN_BUFFER_SEC, sec);
   recorder.setDurationSec(varSettings.bufferSeconds);
   resetAutoDowngrade(); // 秒数を変えたら、下げた状態を解いて、見込みを取り直す
   updateRewindLabel();
@@ -622,13 +622,42 @@ function resetAutoDowngrade() {
   if (note) note.hidden = true;
 }
 
-function selectQuality(key) {
+// 負荷がかなり重いときは、画質「最大」を「高」に下げる(2026-11-22 中山さん)。ブラウザは端末の温度を読めないので、熱で遅くなった症状を見る。
+// 1秒ごとに、次のどれかなら「重い1秒」と数え、10秒続いたら1回だけ下げる(上げ戻しはしない。⚙で「最大」を選び直せば、また見張る):
+//  ・VARの写真の半分以上を、圧縮が間に合わず飛ばした(ふだんは0)
+//  ・写真1枚の圧縮に平均150ms以上かかった(1秒15枚なら67msが限度)
+//  ・画面の描き直しが平均60ms以上の間隔(1秒に17回を切る。画面がカクつく)
+// 画面が隠れている間・録画中・VARの再生中は数えない(録画の途中で取り込みの大きさを変えないため。終わってから判断する)。数字は案で、実機では未測定
+const LOAD_HEAVY_SEC = 10;
+const loadWatch = { heavySec: 0, frames: 0, frameMs: 0, last: 0 };
+function watchLoad() {
+  const tick = (t) => { if (loadWatch.last) { loadWatch.frames++; loadWatch.frameMs += t - loadWatch.last; } loadWatch.last = t; requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+  setInterval(() => {
+    const L = recorder.load; const tries = L.tries, skipped = L.skipped, encAvg = L.encN ? L.encMs / L.encN : 0;
+    recorder.load = { tries: 0, skipped: 0, encMs: 0, encN: 0 };
+    const rafAvg = loadWatch.frames ? loadWatch.frameMs / loadWatch.frames : 0;
+    loadWatch.frames = 0; loadWatch.frameMs = 0; loadWatch.last = 0;
+    const area = document.getElementById('monitorArea');
+    const busy = document.visibilityState !== 'visible' || !area || area.classList.contains('lab-recording') || area.classList.contains('replaying');
+    if (varSettings.qualityKey !== 'max' || busy) { if (busy) loadWatch.heavySec = 0; return; }
+    const heavy = (tries >= 5 && skipped / tries >= 0.5) || encAvg >= 150 || rafAvg >= 60;
+    loadWatch.heavySec = heavy ? loadWatch.heavySec + 1 : 0;
+    if (diagOn) diagSet('重さ(飛ばし/圧縮ms/描き直しms/続いた秒)', `${skipped}/${tries} ${Math.round(encAvg)} ${Math.round(rafAvg)} ${loadWatch.heavySec}`);
+    if (loadWatch.heavySec >= LOAD_HEAVY_SEC) {
+      loadWatch.heavySec = 0;
+      selectQuality('high', { auto: true });
+      showToast('重くなってきたので、画質を「高」に下げました');
+    }
+  }, 1000);
+}
+
+function selectQuality(key, { auto = false } = {}) {
   varSettings.qualityKey = key;
+  if (!auto) loadWatch.heavySec = 0; // 自分で選び直したら、重さの数えをやり直す(「最大」を選び直せば、また自動で下げられる)
   diagSet('画質', key);
   const opt = QUALITY_OPTIONS.find((o) => o.key === key);
   recorder.setQuality(opt.width, opt.quality, opt.maxEdge || 0);
-  // 「最大」に入る・出るときは、戻る秒数・ためる長さ・ディレイの選択肢を合わせる
-  if (isMaxQuality()) varSettings.rewindSeconds = MAX_QUALITY_SEC;
   selectRewindSeconds(varSettings.rewindSeconds);
   renderDelaySelector();
   renderQualitySelector();
@@ -1115,6 +1144,7 @@ function renderDelaySelector() {
 }
 renderDelaySelector();
 selectQuality(DEFAULT_QUALITY_KEY);
+watchLoad();
 // ⚙「なめらか(60コマ)」(2026-11-17)。親機のカメラだけ
 function renderSmoothSelector() {
   const box = document.getElementById('smoothSelector');
