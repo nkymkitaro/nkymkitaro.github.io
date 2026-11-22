@@ -94,17 +94,22 @@ function init() {
   const fmt = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   function showNote(t) { note.textContent = t; note.classList.add('show'); clearTimeout(showNote.t); showNote.t = setTimeout(() => note.classList.remove('show'), 1800); }
 
-  // ---- 帯の言葉: LIVE / ディレイ 10秒 / VAR 15秒前(RECの帯は出さない) ----
+  // ---- 帯の言葉: LIVE / ディレイ:10秒おくれ / VAR 15秒前(RECの帯は出さない) ----
+  // ディレイは「ディレイ:」を今の大きさ、「10秒おくれ」を約75%で出す(中山さん 2026-11-21。依頼 2026-11-21-to-coder-delay-band-wording.md)。準備中も同じ言葉
   const band = $('#stateBand');
   function fixBand() {
     if (!band) return;
     const t = band.querySelector('.state-band-text'); if (!t) return;
     const s = band.dataset.state;
-    let want = null;
+    let want = null; let small = null;
     if (s === 'live') want = 'LIVE';
     else if (s === 'replay') want = `VAR ${rewindSec()}秒前`;
-    else if (s === 'delay' || s === 'delayWait') want = `ディレイ ${delaySec()}秒`;
-    if (want && t.textContent !== want) t.textContent = want;
+    else if (s === 'delay' || s === 'delayWait') { small = `${delaySec()}秒おくれ`; want = `ディレイ:${small}`; }
+    if (!want) return;
+    if (small) {
+      // js/app.js が毎秒、帯の文字を書き換えるので、言葉か小さい文字の部分が崩れていたら作り直す
+      if (t.textContent !== want || !t.querySelector('.mw-band-sm')) t.innerHTML = `ディレイ:<span class="mw-band-sm">${small}</span>`;
+    } else if (t.textContent !== want) t.textContent = want;
   }
   // 小さい帯の「REC 0:12」も出さない(文字は書き換えず、印を付けて見た目だけ隠す)
   const subBand = $('#stateSubBand');
