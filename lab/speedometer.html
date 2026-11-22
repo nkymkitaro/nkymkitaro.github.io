@@ -7,7 +7,7 @@
 <!-- 試作: 素振りのスピードメーター(リアルタイム)。道具は毎コマ、骨格は1秒10回ほど(別の処理)。表示は3案(メーター・数字・映像)を切り替えて見比べる。
      見た目は MITORI の撮影画面にそろえる(紺・白・赤、斜めの帯、白い細い縁の丸ボタン、Murecho。中山さん 2026-11-22)。速さは読み上げもできる(遠くからでも分かるように。奥さまの案)
      映像は端末の中だけで扱い、保存も送信もしない。計測の出来事(GA4)は送らない。通常のページからリンクしない -->
-<title>ケンソク(MITORI 試作)</title>
+<title>ケンソク！(MITORI 試作)</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Murecho:wght@500;800;900&display=swap" rel="stylesheet">
@@ -79,7 +79,7 @@
 <body class="ui-a">
 <header class="top">
   <img class="logo" src="../icons/logo-mitori-white.png" alt="MITORI">
-  <span class="band" id="band" data-state="idle">ケンソク</span>
+  <span class="band" id="band" data-state="idle">ケンソク！</span>
   <span class="sp"></span>
   <button class="ib" id="btnVoice" type="button" aria-label="速さを読み上げる" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg></button>
   <details class="set"><summary class="ib" aria-label="設定"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></summary><div class="setp">
@@ -173,7 +173,7 @@ function stopAll() { // とめる: カメラを閉じ、計測を止める(記�
   camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = '<ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol>';
 }
 $('coach').onclick = () => { coachMuteUntil = performance.now() + 30000; coachMsg = ''; $('coach').style.display = 'none'; };
-function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : 'ケンソク'; }
+function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : 'ケンソク！'; }
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
 async function openCamera() {
   try {
