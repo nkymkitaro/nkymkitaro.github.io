@@ -59,7 +59,7 @@ export class CameraLink {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: this.monitorFacing || 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, // 向きは app.js が決める(最後に使った向き。初めては自撮り)
         audio: false,
       });
       this.localMonitorVideo.srcObject = stream;

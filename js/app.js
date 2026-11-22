@@ -51,6 +51,7 @@ if (!inApp.leaving) {
 }
 
 const cameraLink = new CameraLink();
+const FACING_KEY = 'mitori.cameraFacing'; // 親機のカメラの向き(最後に使った向き)を端末に覚える
 let hostZoom = null; // 親機のズームの操作(js/zoom-control.js)
 let sendZoom = null; // 子機のズームの操作
 // さかのぼれる長さの既定は30秒(15秒は試合でも地稽古でも短いため、2026-10-17 に15秒から上げた)。
@@ -121,8 +122,15 @@ function startMonitor() {
   cameraLink.onCamsChanged = handleCamsChanged;
   cameraLink.onCamRemoved = (camId) => recorder.unregisterCamera(camId);
 
+  // 親機のカメラの向き: 初めては自撮り(前面)、そのあとは最後に使った向き(中山さん 2026-11-22 案A)
+  cameraLink.monitorFacing = readLocal(FACING_KEY) === 'environment' ? 'environment' : 'user';
   // 表示サイズは映像の縦横比に合わせてReplayPlayer側で自動調整する
   cameraLink.startAsMonitor(() => {
+    { // 実際に開いた向きに合わせる(前面がない端末などでは、頼んだ向きと違うことがある)
+      const tr = cameraLink.localMonitorVideo.srcObject && cameraLink.localMonitorVideo.srcObject.getVideoTracks()[0];
+      const f = tr && tr.getSettings ? tr.getSettings().facingMode : null;
+      facingMode = f === 'user' || f === 'environment' ? f : cameraLink.monitorFacing;
+    }
     if (!liveStartSent) { liveStartSent = true; track('live_start'); } // 撮影の画面に着いた(許可が通り、映像が出た)。1回だけ
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
     // 親機自身のカメラ(カメラ1)のズーム。対応していない端末では出さない
@@ -666,7 +674,7 @@ function selectQuality(key, { auto = false } = {}) {
 
 // --- インカメ(前面カメラ)に切り替える(2026-11-03、中山さんの案): 標準のカメラアプリと同じ、画面のボタンで背面⇄前面。親機のカメラだけ ---
 // 映像は左右を反転しない(VAR・保存した動画の左右が、実際と同じになるように)。録画中・VAR中は押せない
-let facingMode = 'environment';
+let facingMode = 'environment'; // 起動時に、実際に開いた向きで上書きする
 const btnFlipCam = document.getElementById('btnFlipCam');
 const btnDelayFlip = document.getElementById('btnDelayFlip'); // 10秒ディレイの画面にも同じボタンを出す
 async function initFlipCam() {
@@ -682,7 +690,7 @@ async function flipCamera() {
   [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.add('is-busy'));
   const opt = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey) || QUALITY_OPTIONS[1];
   const used = await cameraLink.switchLocalCamera(facingMode === 'user' ? 'environment' : 'user', opt.capture);
-  if (used) facingMode = used; else showToast('カメラを切り替えられませんでした');
+  if (used) { facingMode = used; writeLocal(FACING_KEY, used); } else showToast('カメラを切り替えられませんでした');
   if (hostZoom) hostZoom.refresh(); // 前面カメラはズームがないことが多い。倍率は1倍から
   [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.remove('is-busy'));
   flipping = false;
