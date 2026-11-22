@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<!-- 試験ページ: ディレイ(遅れて映す)の「遅れの正確さ」「表示の滑らかさ」「連続して動く時間」を測る(依頼: 2026-11-15-to-videocoder-delay-quality-test.md)。
+     通常のページからリンクしない・検索に出さない・計測の出来事は送らない(分析の部品を読まない)。映像は端末の中だけで、保存しない。
+     ディレイの仕組みは本体と同じ js/delay-codec.js をそのまま使う。表示の呼び出し(60msごと・canvasに描く)も、本体(replay-player.js の _delayTickCodec)と同じにしてある -->
+<meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>MITORI(試験:ディレイの質)</title>
+<style>
+  :root { --n9: #0c1636; --n8: #17275a; --w: #fff; --r: #d6231b; --o: #ffb020; --g: #4cd964; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--n9); color: var(--w); font-family: system-ui, "Hiragino Sans", sans-serif; font-size: 15px; padding: 12px 12px calc(16px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  h2 { font-size: 15px; margin: 14px 0 4px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; }
+  .row span.l { width: 5.5em; font-weight: 800; }
+  button { min-height: 48px; min-width: 56px; padding: 0 12px; border: 2px solid rgba(255,255,255,.85); border-radius: 24px; background: transparent; color: var(--w); font: inherit; font-weight: 800; }
+  button.sel { background: var(--w); color: var(--n9); }
+  button.go { border-color: var(--r); background: var(--r); }
+  button:disabled { opacity: .4; }
+  video, canvas.view { width: 100%; max-height: 24vh; background: #000; border-radius: 8px; object-fit: contain; display: block; }
+  .big { font-size: 28px; font-weight: 900; }
+  .mid { font-size: 18px; font-weight: 800; }
+  pre { white-space: pre-wrap; word-break: break-all; background: var(--n8); padding: 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 8px 0; }
+  th, td { border-bottom: 1px solid rgba(255,255,255,.2); padding: 6px 4px; text-align: left; vertical-align: top; }
+  .note { font-size: 12px; opacity: .8; line-height: 1.6; }
+  .how { background: var(--n8); border-radius: 8px; padding: 10px; font-size: 14px; line-height: 1.6; }
+  .ok { color: var(--g); font-weight: 800; } .ng { color: var(--o); font-weight: 800; }
+</style>
+</head>
+<body>
+<h1>ディレイの質の試験(試験ページ)</h1>
+<div class="how">条件を選んで「測る」を押してください。ディレイがたまるまで(秒数ぶん)待ってから、設定した時間だけ測ります。測り終わったら「結果をコピー」を押して貼ってください。</div>
+<p class="note">映像は保存せず、端末の外に出しません。ディレイの仕組みは本体と同じものです。分析の部品は読みません。</p>
+
+<h2>条件</h2>
+<div class="row"><span class="l">ディレイ</span><button data-g="sec" data-v="10">10秒</button><button data-g="sec" data-v="20">20秒</button><button data-g="sec" data-v="30">30秒</button></div>
+<div class="row"><span class="l">取り込み</span><button data-g="res" data-v="1280">1280×720</button><button data-g="res" data-v="1920">1920×1080</button></div>
+<div class="row"><span class="l">表示の呼び方</span><button data-g="tick" data-v="60">本体と同じ(60msごと)</button><button data-g="tick" data-v="0">毎回の画面更新</button></div>
+<div class="row"><span class="l">測る長さ</span><button data-g="len" data-v="180">3分</button><button data-g="len" data-v="30">30秒(動作確認)</button><button data-g="len" data-v="1800">30分(③)</button><button data-g="len" data-v="3600">60分(③)</button></div>
+<p class="note">①②は「3分」。③は、画面を点けたまま・触らず・充電しないで「30分」「60分」(ディレイ30秒・1920×1080)。「毎回の画面更新」は、本体の呼び方がなめらかさの上限になっていないかを見る比較用です。</p>
+
+<div class="row"><button class="go" id="btnRun">測る</button><button id="btnStop">止める</button><button id="btnCopy">結果をコピー</button><button id="btnClear">表を消す</button></div>
+
+<video id="v" autoplay playsinline muted></video>
+<canvas class="view" id="view" width="640" height="360"></canvas>
+<div class="row"><span class="big" id="live">― fps</span><span class="mid" id="liveLag">遅れ ―</span></div>
+<div class="note" id="status">まだ始めていません</div>
+<pre id="now"></pre>
+
+<h2>手動の確認(①の、カメラが出す最初のコマまでの遅れ)</h2>
+<div class="how">1) 別のスマホ(または画面)で、<code>lab/stopwatch.html</code> を開いてスタートする。2) この端末で「ディレイ10秒」を選び、カメラをそのストップウォッチに向けて「測る」(30秒でよい)。3) ディレイの表示が出たら、ストップウォッチの実物とこの画面の映像を並べて、別のスマホで写真に撮る。4) 写真の2つの数字の差が、実際の遅れ(約10秒になるはず)。</div>
+
+<table id="tbl"><thead><tr><th>条件</th><th>①遅れ(秒)平均/ばらつき/最大(設定との差)</th><th>最初1分→最後1分</th><th>②fps平均・最大間隔・止まり</th></tr></thead><tbody></tbody></table>
+<pre id="dev"></pre>
+
+<script type="module">
+import { DelayCodec, delayCodecSupported } from '../js/delay-codec.js';
+
+const $ = (s) => document.querySelector(s);
+const v = $('#v'); const view = $('#view'); const vctx = view.getContext('2d');
+const st = { sec: '10', res: '1280', tick: '60', len: '180', running: false, abort: false, results: [], device: '' };
+const LS = 'delayQualityState';
+const wait = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+const setStatus = (t) => { $('#status').textContent = t; };
+const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+const sd = (a) => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(mean(a.map((x) => (x - m) ** 2))); };
+const f2 = (x) => (x == null || !isFinite(x) ? '?' : Number(x).toFixed(2));
+const f1 = (x) => (x == null || !isFinite(x) ? '?' : Number(x).toFixed(1));
+const save = (k, o) => { try { localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* 残せなくても続ける */ } };
+const load = (k, d) => { try { const s = localStorage.getItem(k); return s ? JSON.parse(s) : d; } catch (e) { return d; } };
+st.results = load('delayQualityResults', []);
+
+// ---- 条件の選択 ----
+const sel = () => document.querySelectorAll('[data-g]').forEach((b) => b.classList.toggle('sel', st[b.dataset.g] === b.dataset.v));
+document.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => { if (!st.running) { st[b.dataset.g] = b.dataset.v; sel(); } });
+sel();
+
+// ---- 端末の情報 ----
+(async () => {
+  const lines = [`userAgent: ${navigator.userAgent}`, `画面: devicePixelRatio=${devicePixelRatio} ${screen.width}x${screen.height}`];
+  try {
+    if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+      const h = await navigator.userAgentData.getHighEntropyValues(['model', 'platform', 'platformVersion', 'fullVersionList']);
+      lines.unshift(`端末: ${h.model || '(不明)'} / ${h.platform} ${h.platformVersion}`, `ブラウザ: ${(h.fullVersionList || []).map((x) => `${x.brand} ${x.version}`).join(', ')}`);
+    }
+  } catch (err) { /* 取れない端末は userAgent だけ */ }
+  lines.push(`動画の部品(WebCodecs): ${delayCodecSupported() ? '使える' : '使えない(本体は写真方式になる。この試験はできない)'}`);
+  st.device = lines.join('\n');
+  $('#dev').textContent = st.device;
+})();
+
+// ---- 再読み込みの検知(③): 開始時刻を端末に残す ----
+let reloadNote = '';
+{
+  const prev = load('delayQualityRun', null);
+  if (prev && !prev.finished) {
+    reloadNote = `前の測定(${new Date(prev.startedAt).toLocaleTimeString()}開始、${prev.len}秒の予定)は、終わる前にページが読み込み直されました。記録は ${prev.logs ? prev.logs.length : 0} 行まで残っています`;
+    prev.reloads = (prev.reloads || 0) + 1; prev.finished = true; prev.interrupted = true;
+    save('delayQualityRun', prev);
+    setStatus(reloadNote);
+    if (prev.logs && prev.logs.length) $('#now').textContent = `${reloadNote}\n(最後の記録) ${JSON.stringify(prev.logs[prev.logs.length - 1])}`;
+  }
+}
+
+// ---- カメラ ----
+async function openCamera(edge) {
+  const w = edge; const h = Math.round(edge * 9 / 16);
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: false,
+    video: { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, frameRate: { ideal: 30 } },
+  });
+  v.srcObject = stream; await v.play().catch(() => {});
+  return stream;
+}
+
+// ---- 画面を点けたままにする ----
+let wl = null; let wlOk = false;
+async function holdScreen() {
+  try { if ('wakeLock' in navigator) { wl = await navigator.wakeLock.request('screen'); wlOk = true; wl.addEventListener('release', () => { wlOk = false; }); } } catch (e) { wlOk = false; }
+}
+document.addEventListener('visibilitychange', () => { if (st.running && document.visibilityState === 'visible' && !wlOk) holdScreen(); });
+
+// ---- 測る ----
+async function run() {
+  if (st.running) return;
+  if (!delayCodecSupported()) { setStatus('この端末は動画の部品(WebCodecs)が使えないため、測れません'); return; }
+  st.running = true; st.abort = false;
+  $('#btnRun').disabled = true;
+  const sec = Number(st.sec); const edge = Number(st.res); const lenSec = Number(st.len); const tickMs = Number(st.tick);
+  const long = lenSec >= 1800;
+  const cond = `ディレイ${sec}秒・取り込み${edge}・${tickMs ? '本体と同じ(60ms)' : '毎回の画面更新'}・${lenSec}秒`;
+  const runRec = { startedAt: Date.now(), len: lenSec, cond, logs: [], reloads: 0, finished: false };
+  save('delayQualityRun', runRec);
+  let stream = null; let codec = null; let raf = 0;
+  try {
+    await holdScreen();
+    setStatus('カメラを開いています…');
+    stream = await openCamera(edge);
+    const tr = stream.getVideoTracks()[0]; const ts = tr.getSettings();
+    const got = `${v.videoWidth}x${v.videoHeight}`;
+    // 本体と同じ仕組み。recorder は DelayCodec が読む最小の形(cams・getLabel)だけを持つ
+    const recorder = { cams: new Map([['cam1', { paused: false, getVideoEl: () => v }]]), getLabel: () => 'カメラ1' };
+    codec = await DelayCodec.create(recorder, edge);
+    if (!codec) { setStatus('この端末は動画方式が使えません(本体も写真方式になります)'); return; }
+    codec.start(sec, 0);
+
+    // 記録
+    const disp = []; // 新しいコマを出した時刻と、そのコマの撮った時刻: { now, ts }
+    let lastTs = null; let ready = false; let readyAt = null;
+    const t0 = performance.now();
+    let prevDraw = 0;
+    const step = () => {
+      if (st.abort || !st.running) return;
+      const now = performance.now();
+      if (!tickMs || now - prevDraw >= tickMs) {
+        prevDraw = now;
+        const target = now - sec * 1000;
+        const old = codec.oldestTs('cam1');
+        if (old != null && old <= target + 150) {
+          if (!ready) { ready = true; readyAt = now; }
+          const f = codec.frameFor('cam1', target);
+          if (f) {
+            if (view.width !== f.displayWidth) { view.width = f.displayWidth; view.height = f.displayHeight; }
+            vctx.drawImage(f, 0, 0, view.width, view.height);
+            if (f.timestamp !== lastTs) { lastTs = f.timestamp; disp.push({ now, ts: f.timestamp / 1000 }); }
+          }
+        }
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+
+    // 待つ → 測る(ready になってから lenSec)
+    const logs = runRec.logs;
+    let lastLog = 0; let lastLogIdx = 0; let seq0 = 0;
+    const seqNow = () => { const ch = codec.channels.get('cam1'); return ch ? ch.baseSeq + ch.chunks.length : 0; };
+    let batt = null; try { if (navigator.getBattery) batt = await navigator.getBattery(); } catch (e) { batt = null; }
+    const battStart = batt ? Math.round(batt.level * 100) : null;
+    while (!st.abort) {
+      await wait(250);
+      const now = performance.now();
+      if (!ready) { setStatus(`ためています…あと${Math.max(0, Math.ceil(sec - (now - t0) / 1000))}秒(取り込み ${got})`); continue; }
+      const el = (now - readyAt) / 1000;
+      if (el >= lenSec) break;
+      const recent = disp.filter((d) => now - d.now <= 1000);
+      const lag = disp.length ? (disp[disp.length - 1].now - disp[disp.length - 1].ts) / 1000 : null;
+      $('#live').textContent = `${recent.length} fps`;
+      $('#liveLag').textContent = `遅れ ${f2(lag)}秒(設定 ${sec})`;
+      setStatus(`測っています ${Math.floor(el)}/${lenSec}秒 取り込み ${got} 計測用の画面を点けたままにしてください`);
+      if (long && now - lastLog >= 30000) {
+        lastLog = now;
+        const part = disp.slice(lastLogIdx); lastLogIdx = disp.length;
+        const seq = seqNow();
+        const row = {
+          秒: Math.round(el), fps: part.length ? +(part.length / 30).toFixed(1) : 0,
+          遅れ差平均: part.length ? +(mean(part.map((d) => (d.now - d.ts) / 1000 - sec))).toFixed(2) : null,
+          取り込みfps: +((seq - seq0) / 30).toFixed(1),
+          JSメモリMB: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
+          電池: batt ? Math.round(batt.level * 100) : null,
+          画面点灯の維持: wlOk, 再読み込み: 0,
+        };
+        seq0 = seq; logs.push(row); save('delayQualityRun', runRec);
+        $('#now').textContent = `直近の記録(30秒ごと)\n${JSON.stringify(row)}`;
+      }
+      if (!long) { seq0 = seq0 || 0; }
+    }
+    cancelAnimationFrame(raf);
+    const endAt = performance.now();
+    const measured = disp.filter((d) => d.now >= readyAt);
+    // ① 遅れの差
+    const errs = measured.map((d) => (d.now - d.ts) / 1000 - sec);
+    const span = (endAt - readyAt) / 1000;
+    const firstMin = measured.filter((d) => d.now - readyAt < 60000).map((d) => (d.now - d.ts) / 1000 - sec);
+    const lastMin = measured.filter((d) => endAt - d.now < 60000).map((d) => (d.now - d.ts) / 1000 - sec);
+    // ② 滑らかさ
+    const secBuckets = new Array(Math.max(1, Math.floor(span))).fill(0);
+    measured.forEach((d) => { const i = Math.min(secBuckets.length - 1, Math.floor((d.now - readyAt) / 1000)); secBuckets[i]++; });
+    const gaps = []; for (let i = 1; i < measured.length; i++) gaps.push(measured[i].now - measured[i - 1].now);
+    const stalls = gaps.filter((g) => g >= 200).length;
+    const fpsAvg = measured.length / span;
+    const res = {
+      cond, at: new Date().toLocaleString(), got, trackFps: ts.frameRate,
+      n: measured.length, errMean: mean(errs), errSd: sd(errs), errMax: errs.length ? Math.max(...errs.map(Math.abs)) : null,
+      first: mean(firstMin), last: mean(lastMin),
+      fpsAvg, fpsMin: Math.min(...secBuckets), gapMax: gaps.length ? Math.max(...gaps) : null, stalls, stallsPerMin: stalls / (span / 60),
+      captureFps: (seqNow()) / ((endAt - t0) / 1000),
+      battStart, battEnd: batt ? Math.round(batt.level * 100) : null,
+      mem: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : null,
+      aborted: st.abort, long, logs: long ? logs.slice() : null, wl: wlOk,
+    };
+    st.results.push(res); save('delayQualityResults', st.results);
+    runRec.finished = true; save('delayQualityRun', runRec);
+    render();
+    setStatus(st.abort ? '止めました(ここまでの結果を表に入れました)' : '測り終わりました。「結果をコピー」を押してください');
+  } catch (err) {
+    console.error(err);
+    setStatus(`失敗: ${err && err.message ? err.message : err}`);
+  } finally {
+    cancelAnimationFrame(raf);
+    st.running = false; $('#btnRun').disabled = false;
+    if (codec) codec.dispose();
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    v.srcObject = null;
+    if (wl) { try { wl.release(); } catch (e) { /* 終わり */ } wl = null; }
+  }
+}
+$('#btnRun').onclick = run;
+$('#btnStop').onclick = () => { st.abort = true; };
+$('#btnClear').onclick = () => { st.results = []; save('delayQualityResults', []); render(); };
+
+// ---- 表と、コピー ----
+// 合格の目安(案): 平均の差 ±0.5秒・最大 ±1.0秒(①)、平均24fps以上・止まり1分に2回以下(②)
+const judge1 = (r) => (r.errMean != null && Math.abs(r.errMean) <= 0.5 && r.errMax <= 1.0);
+const judge2 = (r) => (r.fpsAvg >= 24 && r.stallsPerMin <= 2);
+function render() {
+  const tb = $('#tbl tbody'); tb.textContent = '';
+  st.results.forEach((r) => {
+    const tr = document.createElement('tr');
+    const c = (html) => { const td = document.createElement('td'); td.innerHTML = html; tr.appendChild(td); };
+    c(`${r.cond}<br>取れた映像 ${r.got}`);
+    c(`<span class="${judge1(r) ? 'ok' : 'ng'}">${f2(r.errMean)} / ${f2(r.errSd)} / ${f2(r.errMax)}</span>`);
+    c(`${f2(r.first)} → ${f2(r.last)}`);
+    c(`<span class="${judge2(r) ? 'ok' : 'ng'}">${f1(r.fpsAvg)}fps</span> 最小${r.fpsMin} 間隔最大${f1(r.gapMax)}ms 止まり${r.stalls}回(1分に${f1(r.stallsPerMin)})`);
+    tb.appendChild(tr);
+  });
+}
+render();
+$('#btnCopy').onclick = async () => {
+  const out = [`ディレイの質の試験 ${new Date().toLocaleString()}`, st.device, reloadNote, ''];
+  st.results.forEach((r, i) => {
+    out.push(`#${i + 1} ${r.cond} (${r.at}) 取れた映像 ${r.got} カメラの申告fps ${r.trackFps}`);
+    out.push(`  ①遅れ(設定との差・秒): 平均 ${f2(r.errMean)} / ばらつき ${f2(r.errSd)} / 最大(絶対値) ${f2(r.errMax)} / 最初の1分 ${f2(r.first)} → 最後の1分 ${f2(r.last)} / 目安 ${judge1(r) ? '合格' : '外れ'} / 表示したコマ ${r.n}`);
+    out.push(`  ②滑らかさ: 平均 ${f1(r.fpsAvg)}fps / 1秒の最小 ${r.fpsMin}fps / コマ間隔の最大 ${f1(r.gapMax)}ms / 200ms以上の止まり ${r.stalls}回(1分に${f1(r.stallsPerMin)}) / 目安 ${judge2(r) ? '合格' : '外れ'} / 取り込み側 ${f1(r.captureFps)}fps`);
+    if (r.long) out.push(`  ③電池 ${r.battStart}% → ${r.battEnd}% / JSメモリ ${r.mem}MB / 画面点灯の維持 ${r.wl} / 中断 ${r.aborted}\n  30秒ごとの記録: ${JSON.stringify(r.logs)}`);
+  });
+  const text = out.join('\n');
+  try { await navigator.clipboard.writeText(text); setStatus('コピーしました'); } catch (e) { $('#now').textContent = text; setStatus('コピーできなかったので、下の文字を選んでコピーしてください'); }
+};
+</script>
+</body>
+</html>
