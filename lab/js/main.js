@@ -884,10 +884,10 @@ async function initParent(app) {
         if (durMs >= 30 * 60000) { const n = document.createElement('p'); n.className = 'lab-note'; n.textContent = '保存に時間がかかります。'; li.appendChild(n); }
         const row = document.createElement('div');
         row.className = 'lab-take-btns';
-        const mk = (icon, label, fn, dis, wide) => { const b = document.createElement('button'); b.type = 'button'; b.className = wide ? 'lab-act lab-act-text' : 'lab-act'; b.innerHTML = wide ? iconText(icon, label) : icon; b.setAttribute('aria-label', label); if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
+        const mk = (icon, label, fn, dis, wide, emph) => { const b = document.createElement('button'); b.type = 'button'; b.className = wide ? 'lab-act lab-act-text' : (emph ? 'lab-act lab-act-text lab-act-icon' : 'lab-act'); b.innerHTML = wide ? iconText(icon, label) : icon; b.setAttribute('aria-label', label); if (dis) b.disabled = true; b.addEventListener('click', fn); attachPress(b, { vibrate: 30 }); return b; };
         row.append(
           mk(ICON.play, '見る', () => openViewer(t.id)),
-          mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, isUnsaved(t)),
+          mk(ICON.save, '保存', () => saveTake(t), savingIds.has(t.id) || !!making, false, isUnsaved(t)), // 文字なし(中山さん 2026-11-13)。未保存のときだけ白く強める。読み上げ名は aria-label の「保存」
           showTrash ? mk(ICON.trash, '戻す', async () => { await store.unhideTake(t.id); takesSig = ''; render(); }, false, true) : mk(ICON.trash, '消す', (ev) => {
             // 未保存の録画は、2回押しで消す(1回目は知らせるだけ。中山さん 2026-11-15)
             const b = ev.currentTarget;

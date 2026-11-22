@@ -79,6 +79,8 @@ body.mode-monitor #monitorArea.replaying.lab-recording .zoom-badge { top: calc(e
 /* 未保存の録画の「保存」は、文字付きの主要ボタン(白地・黒文字。幅は他の2つの2倍) */
 .lab-act-text { flex: 2; gap: 8px; background: var(--text); color: var(--bg, #000); font-family: inherit; font-size: 1.5rem; font-weight: 800; }
 .lab-act-text svg { width: 28px; height: 28px; }
+.lab-act-text.lab-act-icon { flex: 1; } /* 文字なしで強めるボタン(未保存の「保存」)。ほかのボタンと同じ幅 */
+.lab-act-text.lab-act-icon svg { width: 30px; height: 30px; }
 .lab-take-info em.lab-saved { color: var(--text-soft); font-weight: 500; }
 .help-sheet p.lab-unsaved-note { color: var(--text); font-size: 1rem; font-weight: 800; margin: 6px 0; }
 .lab-act:disabled { opacity: 0.4; }
