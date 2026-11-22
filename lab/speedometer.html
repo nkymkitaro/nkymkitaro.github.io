@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<!-- 試作: 素振りのスピードメーター(リアルタイム)。道具は毎コマ、骨格は1秒10回ほど(別の処理)。表示は3案(メーター・数字・映像)を切り替えて見比べる。
+     映像は端末の中だけで扱い、保存も送信もしない。計測の出来事(GA4)は送らない。通常のページからリンクしない -->
+<title>MITORI(試作: 素振りスピードメーター)</title>
+<style>
+  :root { --bg: #070d22; --panel: #101a3d; --line: #2a3354; --text: #fff; --soft: #9aa5c8; --red: #ff4a40; --yel: #ffd23f; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, "Hiragino Sans", sans-serif; }
+  body { display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; align-items: center; background: var(--panel); }
+  .bar button, .bar select, .file { min-height: 44px; padding: 0 12px; font-size: 15px; font-weight: 700; border-radius: 10px; border: 0; background: var(--line); color: var(--text); display: inline-flex; align-items: center; }
+  .bar button.on, .file.main { background: var(--text); color: #000; }
+  .tabs { display: inline-flex; border-radius: 10px; overflow: hidden; }
+  .tabs button { border-radius: 0; }
+  input[type=file] { display: none; }
+  .bar label { font-size: 13px; color: var(--soft); display: inline-flex; gap: 4px; align-items: center; }
+  details.set { position: relative; }
+  details.set summary { min-height: 44px; padding: 0 12px; border-radius: 10px; background: var(--line); font-size: 15px; font-weight: 700; display: inline-flex; align-items: center; list-style: none; cursor: pointer; }
+  details.set .setp { position: absolute; z-index: 5; top: 50px; left: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: grid; gap: 8px; min-width: 240px; }
+  #stat { font-size: 13px; color: var(--soft); margin-left: auto; font-variant-numeric: tabular-nums; }
+  main { flex: 1; position: relative; overflow: hidden; display: flex; }
+  .stage { position: relative; background: #000; }
+  .stage video { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .view { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+  .view canvas { width: 100%; height: 100%; }
+  /* 案A・案B: 左に小さい映像、右に表示。案C: 映像いっぱい */
+  body.ui-a .stage, body.ui-b .stage { width: 32%; min-width: 180px; }
+  body.ui-c .stage { flex: 1; }
+  body.ui-c .view { display: none; }
+  @media (orientation: portrait) {
+    main { flex-direction: column; }
+    body.ui-a .stage, body.ui-b .stage { width: 100%; height: 30%; }
+  }
+  .big { position: absolute; left: 12px; top: 8px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 8px #000; display: none; }
+  body.ui-c .big { display: block; }
+  .big .n { font-size: 64px; line-height: 1; } .big .u { font-size: 20px; margin-left: 4px; } .big .s { display: block; font-size: 16px; color: #ddd; }
+  .help { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--soft); font-size: 15px; line-height: 1.8; padding: 16px; }
+</style>
+</head>
+<body class="ui-a">
+<div class="bar">
+  <button id="btnCam" type="button">カメラ</button>
+  <label class="file">動画<input id="file" type="file" accept="video/*"></label>
+  <span class="tabs"><button data-ui="a" class="on" type="button">A メーター</button><button data-ui="b" type="button">B 数字</button><button data-ui="c" type="button">C 映像</button></span>
+  <details class="set"><summary>設定</summary><div class="setp">
+  <label>道具 <select id="tool">
+    <option value="101.5">木刀(形の大刀)</option><option value="120">竹刀 一般 120</option><option value="117">竹刀 高校 117</option><option value="114">竹刀 中学 114</option>
+  </select></label>
+  <label>色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
+  <label>骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
+  <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
+  <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
+  <button id="btnReset" type="button">記録を消す</button>
+  </div></details>
+  <span id="stat">カメラか動画を選んでください</span>
+</div>
+<main>
+  <div class="stage" id="stage">
+    <video id="v" playsinline muted></video>
+    <canvas id="ov"></canvas>
+    <div class="big" id="big"><span class="n" id="bigN">--</span><span class="u">m/秒</span><span class="s" id="bigS"></span></div>
+    <div class="help" id="help">真横から、全身と剣先が入るように置いてください。<br>暗いと速さが低く出ます。</div>
+  </div>
+  <div class="view"><canvas id="gauge"></canvas></div>
+</main>
+<script type="module">
+import { SwingEngine } from './js/swing-engine.js';
+const $ = (id) => document.getElementById(id);
+const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
+const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
+let ui = 'a', running = false, isFile = false, frames = 0, procMs = 0, display = 0, lastT = null, poseFps = 0;
+
+// ---- 設定 ----
+document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
+  ui = b.dataset.ui; document.body.className = 'ui-' + ui;
+  document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); resize();
+});
+$('tool').onchange = () => eng.setLength(parseFloat($('tool').value));
+$('col').onchange = () => eng.setColor($('col').value);
+$('rate').onchange = () => { v.playbackRate = parseFloat($('rate').value); };
+$('btnReset').onclick = () => { eng.swings = []; eng.signStats = { 1: [], '-1': [] }; };
+function resize() {
+  for (const c of [ov, gauge]) { const r = c.getBoundingClientRect(); c.width = Math.max(1, Math.round(r.width * devicePixelRatio)); c.height = Math.max(1, Math.round(r.height * devicePixelRatio)); }
+}
+addEventListener('resize', resize);
+
+// ---- 骨格(別の処理)。1秒10回まで。前の結果のまわりを切り出して読む ----
+let worker = null, poseBusy = false, poseLast = 0, prevBox = null, poseN = 0, poseT0 = performance.now();
+function startWorker() {
+  if (worker) return;
+  try { worker = new Worker('./js/pose-worker.js'); } catch (e) { worker = null; return; }
+  worker.onmessage = (ev) => {
+    const d = ev.data; if (d.ready || d.error) { if (d.error) stat.textContent = '骨格の読み込みに失敗(道具だけで測ります)'; return; }
+    poseBusy = false; poseN++;
+    if (d.kp) { eng.addPose(d.t, d.kp, v.videoWidth); prevBox = d.box; } else prevBox = null;
+  };
+}
+async function maybePose(t) {
+  if ($('pose').value !== 'on' || !worker || poseBusy) return;
+  const now = performance.now(); if (now - poseLast < 100) return;
+  poseBusy = true; poseLast = now;
+  let crop = null;
+  if (prevBox) { const VW = v.videoWidth, VH = v.videoHeight, bw = prevBox[2] - prevBox[0], bh = prevBox[3] - prevBox[1], cx = (prevBox[0] + prevBox[2]) / 2, w2 = Math.max(bw * 2, bh * 1.2), y0 = Math.max(0, prevBox[1] - bh * 0.6), y1 = Math.min(VH, prevBox[3] + bh * 0.15), x0 = Math.max(0, cx - w2 / 2); crop = [x0, y0, Math.min(VW, cx + w2 / 2) - x0, y1 - y0]; }
+  try { const bm = await createImageBitmap(v); worker.postMessage({ bitmap: bm, t, crop }, [bm]); } catch (e) { poseBusy = false; }
+}
+
+// ---- 入力 ----
+$('btnCam').onclick = async () => {
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
+    isFile = false; v.srcObject = st; v.src = ''; await v.play(); begin();
+  } catch (e) { stat.textContent = 'カメラを開けません: ' + e.message; }
+};
+$('file').onchange = (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  isFile = true; v.srcObject = null; v.src = URL.createObjectURL(f); v.loop = false; v.playbackRate = parseFloat($('rate').value);
+  v.onloadedmetadata = () => { v.play(); begin(); };
+};
+function begin() {
+  $('help').style.display = 'none'; eng.reset(); startWorker(); resize();
+  if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
+}
+
+// ---- 1コマごと ----
+function onFrame(now, md) {
+  const t = md.mediaTime, t0 = performance.now();
+  if (lastT == null || t > lastT) { eng.process(v, t, { keepDebug: $('dbg').value === 'on' }); lastT = t; maybePose(t); }
+  if (lastT != null && t < lastT - 0.5) { eng.reset(); lastT = t; } // 動画を巻き戻したとき
+  procMs = procMs * 0.9 + (performance.now() - t0) * 0.1; frames++;
+  draw();
+  if (!v.ended) v.requestVideoFrameCallback(onFrame); else running = false;
+}
+setInterval(() => {
+  const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
+  stat.textContent = `処理 ${procMs.toFixed(1)}ms/コマ ・ ${frames}コマ/秒 ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  frames = 0;
+}, 1000);
+
+// ---- 表示 ----
+const downs = () => eng.swings.filter((s) => eng.isDown(s));
+function colorOf(sp) { const u = Math.max(0, Math.min(1, sp / 16)); return `hsl(${220 - 220 * u},90%,55%)`; }
+function draw() {
+  // 針: 上がるときはすぐ、下がるときはゆっくり
+  display = eng.speed > display ? eng.speed : Math.max(eng.speed, display - 0.25);
+  const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + s.v, 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, s.v), 0);
+  drawOverlay();
+  if (ui === 'a') drawGauge(last, avg, best, D.length);
+  else if (ui === 'b') drawBars(last, avg, best, D);
+  else { $('bigN').textContent = last ? last.v.toFixed(1) : '--'; $('bigS').textContent = `いま ${eng.speed.toFixed(1)} ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)`; }
+}
+function vidRect() { // 映像が実際に映っている場所(object-fit: contain)
+  const W = ov.width, H = ov.height, ar = (v.videoWidth || 16) / (v.videoHeight || 9); let w = W, h = W / ar; if (h > H) { h = H; w = H * ar; }
+  return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+}
+function drawOverlay() {
+  oc.clearRect(0, 0, ov.width, ov.height); if (!eng.H) return;
+  const r = vidRect(), k = r.w / eng.W, P = (p) => [r.x + p[0] * k, r.y + p[1] * k];
+  if ($('dbg').value === 'on' && eng.debug && eng.debug.mask) {
+    const d = eng.debug; oc.fillStyle = 'rgba(0,255,90,.55)';
+    for (let i = 0; i < d.mask.length; i += 1) if (d.mask[i]) oc.fillRect(r.x + (i % d.W) * k, r.y + ((i / d.W) | 0) * k, k, k);
+    if (d.hand) { const h = P(d.hand); oc.fillStyle = '#4dc3ff'; oc.beginPath(); oc.arc(h[0], h[1], 8, 0, 7); oc.fill(); }
+  }
+  // 剣先の軌跡(0.5秒ぶん)。色は速さ
+  const S = eng.samples, tEnd = S.length ? S[S.length - 1].t : 0; let prev = null, prevT = null;
+  oc.lineWidth = Math.max(3, ov.width / 200); oc.lineCap = 'round';
+  for (const s of S) {
+    if (!s.tip || tEnd - s.t > 0.5) { prev = null; continue; }
+    const p = P(s.tip);
+    if (prev && Math.hypot(s.tip[0] - prev[0], s.tip[1] - prev[1]) > eng.W * 0.25) prev = null; // 大きく飛んだら線をつながない
+    if (prev) { const sp = Math.hypot(s.tip[0] - prev[0], s.tip[1] - prev[1]) / Math.max(1e-3, s.t - prevT) * (eng.lenPx ? eng.effM / eng.lenPx : 0); const q = P(prev); oc.strokeStyle = colorOf(sp); oc.globalAlpha = 1 - (tEnd - s.t) / 0.5; oc.beginPath(); oc.moveTo(q[0], q[1]); oc.lineTo(p[0], p[1]); oc.stroke(); }
+    prev = s.tip; prevT = s.t;
+  }
+  oc.globalAlpha = 1;
+}
+function drawGauge(last, avg, best, n) {
+  const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
+  const R = Math.min(W * 0.36, H * 0.42), cx = W / 2, cy = H * 0.5, MAX = 20, a0 = Math.PI * 0.85, a1 = Math.PI * 2.15, A = (s) => a0 + (a1 - a0) * Math.min(1, s / MAX);
+  g.lineWidth = R * 0.14; g.lineCap = 'butt';
+  g.strokeStyle = '#1b264d'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();
+  const grd = g.createLinearGradient(cx - R, 0, cx + R, 0); grd.addColorStop(0, '#2f7bff'); grd.addColorStop(0.6, '#ffd23f'); grd.addColorStop(1, '#ff4a40');
+  g.strokeStyle = grd; g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();
+  g.fillStyle = '#9aa5c8'; g.font = `${R * 0.09}px system-ui`; g.textAlign = 'center';
+  for (let s = 0; s <= MAX; s += 5) { const a = A(s); g.fillText(s, cx + Math.cos(a) * R * 1.2, cy + Math.sin(a) * R * 1.2 + R * 0.03); }
+  if (best) { const a = A(best); g.strokeStyle = '#ff4a40'; g.lineWidth = 4; g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86); g.lineTo(cx + Math.cos(a) * R * 1.12, cy + Math.sin(a) * R * 1.12); g.stroke(); }
+  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(4, R * 0.03); g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * R * 0.95, cy + Math.sin(an) * R * 0.95); g.stroke();
+  g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, R * 0.06, 0, 7); g.fill();
+  g.font = `900 ${R * 0.42}px system-ui`; g.fillText(last ? last.v.toFixed(1) : '--', cx, cy + R * 0.5);
+  g.font = `700 ${R * 0.1}px system-ui`; g.fillStyle = '#9aa5c8'; g.fillText(`今の1本 m/秒 ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${n}本)`, cx, cy + R * 0.68);
+}
+function drawBars(last, avg, best, D) {
+  const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
+  g.textAlign = 'center'; g.fillStyle = last ? colorOf(last.v) : '#fff'; g.font = `900 ${Math.min(W * 0.28, H * 0.36)}px system-ui`;
+  g.fillText(last ? last.v.toFixed(1) : '--', W / 2, H * 0.38);
+  g.fillStyle = '#9aa5c8'; g.font = `700 ${Math.min(W * 0.04, H * 0.05)}px system-ui`; g.fillText(`m/秒(今の1本)  いま ${eng.speed.toFixed(1)}`, W / 2, H * 0.47);
+  const B = D.slice(-12), x0 = W * 0.06, x1 = W * 0.94, y0 = H * 0.56, y1 = H * 0.92, MAX = Math.max(16, best * 1.1), bw = (x1 - x0) / 12;
+  g.strokeStyle = '#2a3354'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.stroke();
+  B.forEach((s, i) => { const h = (y1 - y0) * s.v / MAX; g.fillStyle = i === B.length - 1 ? colorOf(s.v) : '#3a4a80'; g.fillRect(x0 + i * bw + bw * 0.15, y1 - h, bw * 0.7, h); g.fillStyle = '#c8d0e6'; g.font = `${bw * 0.28}px system-ui`; g.fillText(s.v.toFixed(1), x0 + i * bw + bw / 2, y1 - h - 6); });
+  if (avg) { const y = y1 - (y1 - y0) * avg / MAX; g.strokeStyle = '#ffd23f'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([]); g.fillStyle = '#ffd23f'; g.textAlign = 'left'; g.fillText(`平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)`, x0, y0 - 8); }
+}
+// 試験用(中身の確認)
+window.__speedo = { eng, downs };
+resize();
+</script>
+</body>
+</html>
