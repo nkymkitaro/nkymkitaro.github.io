@@ -218,7 +218,11 @@ const ISO_STEPS = [0, 400, 800, 1600, 3200];
 const TIERS = [[1280, 720], [640, 480], [320, 240]]; // 画質の段。60コマが出ないときは下の段へ(中山さん 2026-11-22「60fps強制」: 画質より60コマ。測るのは幅320の画像なので、320×240でも測れる)
 let camTrack = null, camBase = null, isoLevel = 0, lowSec = 0, camFps = 0, lastPresented = null, tier = 0;
 async function tuneCamera(tr, startTier = 0) {
-  camTrack = tr; lowSec = 0; tier = startTier; if (startTier === 0) isoLevel = 0; // 画質を下げるときは、上げたISOはそのまま
+  camTrack = tr; lowSec = 0; tier = startTier;
+  if (startTier === 0) { // 開いたときから、露光時間を1/120秒に固定する(できる端末だけ)。画質を下げるときは、そのまま
+    const c0 = tr.getCapabilities ? tr.getCapabilities() : {};
+    expoManual = !!(c0.exposureMode && c0.exposureMode.includes('manual') && c0.exposureTime && c0.exposureTime.max); isoLevel = expoManual ? 2 : 0;
+  }
   for (; tier < TIERS.length; tier++) { // 60ちょうどを頼める段を上から探す
     const base = { width: { ideal: TIERS[tier][0] }, height: { ideal: TIERS[tier][1] } };
     try { await tr.applyConstraints({ ...base, frameRate: { exact: 60 } }); camBase = { ...base, frameRate: { exact: 60 } }; break; } catch (e) { /* 次の段 */ }
@@ -229,22 +233,34 @@ async function tuneCamera(tr, startTier = 0) {
   }
   await applyExposure();
 }
+// 60コマが出ないのは露光時間が長いから(暗いとカメラが露出を延ばす)。手動の露出で、露光時間を1/120秒に固定して、明るさはISO(感度)で補う
+// (2026-11-23 実機: ISOだけ上げても31コマのまま。自動露出のままでは露光時間が縮まなかった)。1/120秒は、振りのぶれも減る
+const EXPO_TIME = 83; // 単位100マイクロ秒 = 8.3ms = 1/120秒(60コマの1コマ16.7msより十分短い)
+let expoManual = false, lastLuma = 128;
 async function applyExposure() {
   const tr = camTrack; if (!tr || tr.readyState !== 'live') return;
   const caps = tr.getCapabilities ? tr.getCapabilities() : {}, adv = {};
-  if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
-  if (isoLevel > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[isoLevel]));
+  if (expoManual) {
+    adv.exposureMode = 'manual'; adv.exposureTime = Math.max(caps.exposureTime.min, Math.min(caps.exposureTime.max, EXPO_TIME));
+    if (caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[Math.max(1, isoLevel)]));
+  } else {
+    if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
+    if (isoLevel > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[isoLevel]));
+  }
   if (!Object.keys(adv).length) return;
   try { await tr.applyConstraints({ ...camBase, advanced: [adv] }); } catch (e) { /* 対応しない端末(iPhone など)は、そのまま */ }
 }
-function checkCamFps() { // 1秒ごと。カメラのコマ数が50を切るのが2秒続いたら、ISOを1段上げる
+function checkCamFps() { // 1秒ごと
   if (!camTrack || isFile) return;
-  // 60コマを強く求める(中山さん「60fps強制」): 55コマを切ったら、まずISO(感度)を1秒ごとに上げ、上げきっても足りなければ画質の段を下げる
-  // (先にISO: 暗さで露出が長くなって落ちているなら、画質を下げずに戻せる。ISOで戻らなければ、その画質ではカメラが60を出せない)
-  const low = camFps > 0 && camFps < 55; if (!low) { lowSec = 0; return; }
-  if (++lowSec < 1) return; lowSec = 0;
   const caps = camTrack.getCapabilities ? camTrack.getCapabilities() : {};
-  if (caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); return; }
+  const canManual = caps.exposureMode && caps.exposureMode.includes('manual') && caps.exposureTime && caps.exposureTime.max;
+  // 露光時間を固定したあと、暗ければISOを1段ずつ上げる(コマ数は露光時間で決まるので、ISOでは落ちない)
+  if (expoManual && lastLuma < 60 && caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); }
+  const low = camFps > 0 && camFps < 55; if (!low) { lowSec = 0; return; }
+  if (++lowSec < 2) return; lowSec = 0;
+  // 60コマを強く求める(中山さん「60fps強制」): ①露光時間を1/120秒に固定 ②(手動の露出ができない端末は)ISOを上げる ③それでも足りなければ画質の段を下げる
+  if (canManual && !expoManual) { expoManual = true; if (isoLevel < 2) isoLevel = 2; applyExposure(); return; }
+  if (!canManual && caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); return; }
   if (tier < TIERS.length - 1) tuneCamera(camTrack, tier + 1);
 }
 
@@ -270,7 +286,7 @@ let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt =
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
 function coach(st, vis) {
   if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
-  const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128;
+  const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
   if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
@@ -299,7 +315,7 @@ setInterval(() => {
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
   coach(eng.takeStats(), vis);
-  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${expoManual ? ' 露光1/120' : ''}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 
