@@ -68,6 +68,8 @@
   /* 下の段: 表示の切り替え(名前の帯)と、はじめる・とめる */
   .dock { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px calc(12px + env(safe-area-inset-bottom)); background: var(--n900); }
   .tabs { display: flex; gap: 6px; }
+  .tabs button { white-space: nowrap; }
+  @media (max-width: 380px) { .dock { padding-left: 10px; padding-right: 10px; gap: 4px; } .tabs { gap: 0; } .tabs button { padding: 12px 8px; font-size: .9rem; } .go { min-width: 100px; } }
   .tabs button { position: relative; border: 0; background: transparent; color: var(--soft); font-weight: 900; font-size: 1rem; padding: 12px 14px; min-height: 48px; cursor: pointer; }
   .tabs button::before, .tabs button::after { content: ''; position: absolute; inset: 4px 0; transform: skewX(var(--skew)); z-index: -1; }
   .tabs button { z-index: 0; }
@@ -79,7 +81,7 @@
   .go svg { width: 22px; height: 22px; }
   /* 横向き: 左に映像(上から下まで)、右の列に ロゴ・状態・メーター・切り替え・はじめる(2026-11-23 実機「横画面クソすぎ」: 映像もメーターも小さく、上下の段で高さを取られていた) */
   @media (orientation: landscape) {
-    body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 42vw, 440px); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 48vw, 560px); grid-template-rows: auto auto minmax(0, 1fr) auto; }
     main { display: contents; }
     .stage { grid-column: 1; grid-row: 1 / -1; width: auto !important; min-width: 0 !important; }
     .top { grid-column: 2; grid-row: 1; padding: 8px 10px 2px; gap: 6px; }
@@ -87,12 +89,16 @@
     .kslogo { height: 34px; }
     .band { font-size: .95rem; padding: 5px 18px 5px 10px; }
     .ib { width: 42px; height: 42px; } .ib svg { width: 21px; height: 21px; }
-    #stat { grid-column: 2; grid-row: 2; font-size: .62rem; padding: 0 10px 2px; }
-    .view { grid-column: 2; grid-row: 3; }
+    #stat { grid-column: 1; grid-row: 1; z-index: 3; align-self: start; font-size: .62rem; padding: 4px 8px; margin: 6px; border-radius: 8px; background: rgba(7,13,34,.6); pointer-events: none; } /* 映像の上に小さく重ねる(右の列はメーターに使う) */
+    .view { grid-row: 2 / 4 !important; }
+    .view { grid-column: 2; }
     .dock { grid-column: 2; grid-row: 4; padding: 6px 10px calc(8px + env(safe-area-inset-bottom)); background: none; }
-    .dock { gap: 4px; } .tabs { gap: 0; } .tabs button { font-size: .8rem; padding: 10px 7px; min-height: 44px; white-space: nowrap; }
+    .dock { gap: 6px; } .tabs { gap: 2px; } .tabs button { font-size: .92rem; padding: 10px 11px; min-height: 44px; white-space: nowrap; }
     .go { flex: none; min-width: 84px; min-height: 52px; font-size: 1rem; padding: 0 10px; }
-    #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - clamp(320px, 42vw, 440px) - 20px); bottom: 10px; }
+    .top, .dock { position: relative; z-index: 4; }
+    body.ui-c .stage { grid-column: 1 / -1; } /* 映像: 画面いっぱいに映像。右の列のボタンは映像の上に重ねる */
+    body.ui-c #stat { grid-row: 4; align-self: end; }
+    #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - clamp(340px, 48vw, 560px) - 20px); bottom: 10px; }
   }
 </style>
 </head>
@@ -379,40 +385,70 @@ function drawOverlay() {
   }
   oc.globalAlpha = 1;
 }
+// メーター: 枠いっぱいに大きく(2026-11-23 実機「メーターちっちゃくない？」)。弧の中に大きい数字、弧の下に「今の1本・平均・最高」を3つ並べる
 function drawGauge(last, avg, best, n) {
   const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
-  const R = Math.min(W * 0.38, H * 0.40), cx = W / 2, cy = H * 0.46, MAX = 20, a0 = Math.PI * 0.8, a1 = Math.PI * 2.2, A = (s) => a0 + (a1 - a0) * Math.min(1, s / MAX);
-  g.lineCap = 'butt'; g.lineWidth = R * 0.13;
+  // 高さ: 目盛りの数字(弧の上 1.2R)から、下の3つの数字(弧の中心の下 1.22R)まで = 2.42R
+  const wide = W / H > 1.45; // 横に長い枠(横向きの右の列)は、3つの数字を弧の右に縦に並べて、弧を大きくする
+  const R = wide ? Math.min(W * 0.3, H / 2.05) : Math.min(W * 0.4, H / 2.5), cx = wide ? W * 0.37 : W / 2, cy = wide ? H / 2 + R * 0.25 : H / 2 - R * 0.01, MAX = 20, a0 = Math.PI * 0.8, a1 = Math.PI * 2.2, A = (sp) => a0 + (a1 - a0) * Math.min(1, sp / MAX);
+  g.lineCap = 'butt'; g.lineWidth = R * 0.14;
   g.strokeStyle = '#1d3170'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();                       // 地: 紺
   g.strokeStyle = colorOf(display); g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();      // いま: 白→赤
-  g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  for (let s = 0; s <= MAX; s += 5) { const a = A(s); g.fillText(s, cx + Math.cos(a) * R * 1.2, cy + Math.sin(a) * R * 1.2); }
-  if (best) { const a = A(best); g.strokeStyle = '#d6231b'; g.lineWidth = Math.max(4, R * 0.035); g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.84, cy + Math.sin(a) * R * 0.84); g.lineTo(cx + Math.cos(a) * R * 1.1, cy + Math.sin(a) * R * 1.1); g.stroke(); }
-  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(4, R * 0.035); g.lineCap = 'round'; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an) * R * 0.92, cy + Math.sin(an) * R * 0.92); g.stroke();
-  g.fillStyle = '#fff'; g.beginPath(); g.arc(cx, cy, R * 0.06, 0, 7); g.fill();
-  bigReadout(g, cx, cy + R * 0.62, R * 0.5, last, avg, best, n);
-}
-// 今の1本の数字(大きく)と、斜めの札「剣先」、その下に平均・最高と3か所の速さ
-function bigReadout(g, cx, y, size, last, avg, best, n) {
-  const W = gauge.width, tag = WHICH[which()];
-  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
-  g.font = `900 ${size * 0.36}px ${FONT}`; const tw = g.measureText(tag).width + size * 0.4, th = size * 0.5, tx = cx - tw / 2, ty = y - size * 1.05;
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = `800 ${R * 0.11}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let sp = 0; sp <= MAX; sp += 5) { const a = A(sp); g.fillText(sp, cx + Math.cos(a) * R * 1.18, cy + Math.sin(a) * R * 1.18); }
+  if (best) { const a = A(best); g.strokeStyle = '#d6231b'; g.lineWidth = Math.max(4, R * 0.04); g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86); g.lineTo(cx + Math.cos(a) * R * 1.1, cy + Math.sin(a) * R * 1.1); g.stroke(); } // 最高の印(赤)
+  // 針: 弧の内側の短い棒(真ん中の数字に重ならない)
+  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(5, R * 0.05); g.lineCap = 'round';
+  g.beginPath(); g.moveTo(cx + Math.cos(an) * R * 0.62, cy + Math.sin(an) * R * 0.62); g.lineTo(cx + Math.cos(an) * R * 0.97, cy + Math.sin(an) * R * 0.97); g.stroke();
+  // 札「剣先」と大きい数字
+  const tag = WHICH[which()], ts = R * 0.13; g.textBaseline = 'alphabetic';
+  g.font = `900 ${ts}px ${FONT}`; const tw = g.measureText(tag).width + ts * 1.2, th = ts * 1.45, tx = cx - tw / 2, ty = cy - R * 0.5;
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
-  g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.75);
-  // 大きい数字 = いまの速さ。下の行 = 今の1本(振り下ろしの最高)・平均・最高
-  g.fillStyle = colorOf(display); g.font = `900 ${size}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, y + size * 0.15);
-  g.fillStyle = 'rgba(255,255,255,.75)'; g.font = `800 ${Math.max(12, size * 0.2)}px ${FONT}`; g.fillText(`m/秒 ・ 今の1本 ${last ? val(last).toFixed(1) : '--'} ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${n}本)`, cx, y + size * 0.48);
-  if (last) { g.font = `500 ${Math.max(11, size * 0.17)}px ${FONT}`; g.fillText(three(last), cx, y + size * 0.74); }
+  g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
+  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, cy + R * 0.22);
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, cy + R * 0.42);
+  if (wide) statsCol(g, W * 0.82, H, R, last, avg, best, n); else statsRow(g, cx, cy + R * 0.92, R, last, avg, best, n);
 }
+// 「今の1本・平均・最高」を横に3つ。y は見出しの高さ、R は大きさの基準
+function statsRow(g, cx, y, R, last, avg, best, n) {
+  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], ['平均', avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  items.forEach(([k, v2], i) => {
+    const x = cx + (i - 1) * R * 0.78;
+    g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.085}px ${FONT}`; g.fillText(k, x, y);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.2}px ${FONT}`; g.fillText(v2, x, y + R * 0.22);
+  });
+}
+function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
+  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], ['平均', avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const step = Math.min(H / 3.3, R * 0.62), y0 = H / 2 - step;
+  items.forEach(([k, v2], i) => {
+    const y = y0 + (i - 0.5) * step + step * 0.25;
+    g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText(k, x, y);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
+  });
+}
+// 数字: 上に大きい数字、まん中に「今の1本・平均・最高」、下に直近12本の棒
 function drawBars(last, avg, best, D) {
   const W = gauge.width, H = gauge.height, g = gc; g.clearRect(0, 0, W, H);
-  bigReadout(g, W / 2, H * 0.42, Math.min(W * 0.26, H * 0.3), last, avg, best, D.length);
-  const B = D.slice(-12), x0 = W * 0.06, x1 = W * 0.94, y0 = H * 0.66, y1 = H * 0.95, MAX = Math.max(16, best * 1.1), bw = (x1 - x0) / 12;
+  const wide = W / H > 1.45; // 横に長い枠: 左に数字、右に棒
+  const R = wide ? Math.min(W * 0.24, H * 0.42) : Math.min(W * 0.4, H * 0.34), cx = wide ? W * 0.25 : W / 2, tag = WHICH[which()], ts = R * 0.13;
+  let y = (wide ? H / 2 - R * 0.9 : H * 0.04) + ts * 1.45; // 札の下の端
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.font = `900 ${ts}px ${FONT}`;
+  const tw = g.measureText(tag).width + ts * 1.2, th = ts * 1.45, tx = cx - tw / 2, ty = y - th;
+  g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
+  g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
+  g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
+  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, y);
+  y += R * 0.17; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, y);
+  y += R * 0.22; statsRow(g, cx, y, R, last, avg, best, D.length);
+  if (last) { g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `500 ${R * 0.08}px ${FONT}`; g.fillText(three(last), cx, y + R * 0.38); }
+  const NB = wide ? 8 : 12, B = D.slice(-NB), x0 = wide ? W * 0.53 : W * 0.06, x1 = W * 0.96, y0 = wide ? H * 0.12 : y + R * 0.55, y1 = wide ? H * 0.88 : H * 0.97, MAX = Math.max(16, best * 1.1), bw = (x1 - x0) / NB;
+  if (y1 - y0 < 30) return;
   g.strokeStyle = 'rgba(255,255,255,.2)'; g.lineWidth = 1; g.beginPath(); g.moveTo(x0, y1); g.lineTo(x1, y1); g.stroke();
-  g.textAlign = 'center';
-  B.forEach((s, i) => { const vv = val(s), h = (y1 - y0) * vv / MAX, isLast = i === B.length - 1; g.fillStyle = isLast ? colorOf(vv) : '#2c4aa0'; g.fillRect(x0 + i * bw + bw * 0.15, y1 - h, bw * 0.7, h); g.fillStyle = 'rgba(255,255,255,.8)'; g.font = `800 ${bw * 0.28}px ${FONT}`; g.fillText(vv.toFixed(1), x0 + i * bw + bw / 2, y1 - h - 6); });
-  if (avg) { const y = y1 - (y1 - y0) * avg / MAX; g.strokeStyle = '#fff'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, y); g.lineTo(x1, y); g.stroke(); g.setLineDash([]); }
+  B.forEach((sw, i) => { const vv = val(sw), h = (y1 - y0 - bw * 0.35) * vv / MAX, isLast = i === B.length - 1; g.fillStyle = isLast ? colorOf(vv) : '#2c4aa0'; g.fillRect(x0 + i * bw + bw * 0.15, y1 - h, bw * 0.7, h); g.fillStyle = 'rgba(255,255,255,.8)'; g.font = `800 ${Math.max(11 * devicePixelRatio, bw * 0.26)}px ${FONT}`; g.fillText(vv.toFixed(1), x0 + i * bw + bw / 2, y1 - h - 6); });
+  if (avg) { const ya = y1 - (y1 - y0 - bw * 0.35) * avg / MAX; g.strokeStyle = 'rgba(255,255,255,.6)'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, ya); g.lineTo(x1, ya); g.stroke(); g.setLineDash([]); }
 }
 // ---- 読み上げ(遠くからでも分かるように。奥さまの案 2026-11-22)。振り下ろしの1本ごとに「12.3」と言う。押すと止める ----
 let voiceOn = true, spoken = new Set();
@@ -442,6 +478,9 @@ function saveDowns() { // 振り下ろしと分かったものだけ(向きの�
   writeLog(a); showLogInfo();
 }
 setInterval(saveDowns, 1000);
+// 見た目の確認用: ?demo=12.3 で、測らずに表示だけ出す
+const DEMO = new URLSearchParams(location.search).get('demo');
+if (DEMO) { running = true; display = parseFloat(DEMO) || 12.3; $('help').style.display = 'none'; resize(); const fake = [11.2, 12.8, 10.9, 13.4, 14.6, 12.1, 13.1].map((x, i) => ({ v: x, mono: x * 0.7, hand: 3.1, sign: 1, t: i })); eng.swings = fake; eng.isDown = () => true; setInterval(() => { display = parseFloat(DEMO) || 12.3; draw(); }, 200); }
 $('btnExport').onclick = () => {
   const a = readLog(); if (!a.length) { $('logInfo').textContent = 'まだ記録がありません'; return; }
   const csv = '日時,道具,剣先(m/秒),物打ち(m/秒),手元(m/秒)\n' + a.map((r) => [new Date(r.at).toLocaleString(), r.tool, r.tip, r.mono, r.hand].join(',')).join('\n');
