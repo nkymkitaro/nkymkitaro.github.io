@@ -30,9 +30,9 @@ export class SwingEngine {
     this.swings = []; // { t, v, sign }
     this._peak = null;
     this.signStats = { 1: [], '-1': [] };
-    this.faceVotes = []; this.torsoHist = []; this.rejects = 0;
+    this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07;
+    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15;
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -45,7 +45,7 @@ export class SwingEngine {
     if (this.lenHist.length < 5) return null;
     const a = this.lenHist.slice(-300).sort((x, y) => x - y); return a[Math.floor(a.length * 0.75)]; // 上から25%の長さ(取り違えの長い値に引っぱられにくい)
   }
-  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.speed = 0; this.speeds = { tip: 0, mono: 0, hand: 0 }; }
+  reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = []; this.speed = 0; this.speeds = { tip: 0, mono: 0, hand: 0 }; }
 
   // 骨格の結果(元の映像の座標)を受け取る。kp: [[x,y,score]×17]
   addPose(t, kp, videoW) {
@@ -192,20 +192,20 @@ export class SwingEngine {
     // 道具のかたまりが取れないコマ(速い振りで、ぶれた竹刀がちぎれ・色が薄くなる)は、手元から道具1本ぶん離れた輪の中の
     // 「背景と違う画素」の向きの山を道具の向きとする(ぶれの扇の真ん中 = 露出の真ん中の向き)。輪は腕・頭より外なので、人の動きは入りにくい
     // (2026-11-22 緑ネットの120コマ答え合わせ: 速い振りの半分以上を「短い」で捨て、メーターが半分の速さしか出ていなかった)
+    let fp = null;
     if (ang == null && this.fanOn && hand && this.lenPx && this.lenHist.length > 30) {
-      const Lp = this.lenPx, r0 = Lp * this.fanR[0], r1 = Lp * this.fanR[1], NB = 72, hist = new Float32Array(NB);
-      const x0 = Math.max(0, Math.floor(hand[0] - r1)), x1 = Math.min(W - 1, Math.ceil(hand[0] + r1)), y0 = Math.max(0, Math.floor(hand[1] - r1)), y1 = Math.min(H - 1, Math.ceil(hand[1] + r1));
-      let tot = 0;
+      // 動く画素を、手元のずれを見込んで広めに取っておく(後で、遅れて届いた骨格の手元で向きを出し直すため)
+      const Lp = this.lenPx, rr1 = Lp * (this.fanR[1] + 0.4), rr0 = Math.max(0, Lp * (this.fanR[0] - 0.4));
+      const x0 = Math.max(0, Math.floor(hand[0] - rr1)), x1 = Math.min(W - 1, Math.ceil(hand[0] + rr1)), y0 = Math.max(0, Math.floor(hand[1] - rr1)), y1 = Math.min(H - 1, Math.ceil(hand[1] + rr1));
+      const buf = [];
       for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-        if (!mov[y * W + x]) continue; const dx = x - hand[0], dy = y - hand[1], rr = dx * dx + dy * dy;
-        if (rr < r0 * r0 || rr > r1 * r1) continue;
-        hist[((Math.round(Math.atan2(dy, dx) / (2 * Math.PI) * NB) % NB) + NB) % NB]++; tot++;
+        if (!mov[y * W + x]) continue; const dx = x - hand[0], dy = y - hand[1], q = dx * dx + dy * dy;
+        if (q < rr0 * rr0 || q > rr1 * rr1) continue; buf.push(x, y);
       }
-      let bi = 0, bs = -1; for (let k = 0; k < NB; k++) { const s3 = hist[(k + NB - 1) % NB] + hist[k] + hist[(k + 1) % NB]; if (s3 > bs) { bs = s3; bi = k; } }
-      let sx = 0, sy = 0, inn = 0; for (let k = -6; k <= 6; k++) { const w = hist[(bi + k + NB) % NB], a2 = (bi + k) / NB * 2 * Math.PI; sx += w * Math.cos(a2); sy += w * Math.sin(a2); inn += w; }
-      const R = this.why || (this.why = {}); 
-      if (inn >= Lp * 0.25 && inn >= tot * 0.6) {
-        let a = Math.atan2(sy, sx), jump = false;
+      fp = Int16Array.from(buf);
+      const R = this.why || (this.why = {});
+      let a = this._fanAngle(fp, hand, Lp), jump = false;
+      if (a != null) {
         if (this.lastAng != null) {
           const d2 = Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng)), dt = Math.max(0.008, t - (this.lastAngT != null ? this.lastAngT : t - 0.017));
           if (Math.abs(d2) > (3000 * dt + 25) * Math.PI / 180 && this.rejects < 3) { jump = true; this.rejects++; } else { this.rejects = 0; a = this.lastAng + d2; }
@@ -231,9 +231,10 @@ export class SwingEngine {
       }
     }
     this.seenN = (this.seenN || 0) + (ang != null ? 1 : 0); this.allN = (this.allN || 0) + 1; // 道具が見えたコマの数(画面の「道具 ○%」)
-    this.samples.push({ t, ang, len, edge, hand, tip: tipPt, fan: fanUsed }); if (this.samples.length > 240) this.samples.shift();
+    this.samples.push({ t, ang, len, edge, hand, tip: tipPt, fan: fanUsed, fp }); if (this.samples.length > 240) this.samples.shift();
     if (keepDebug) this.debug = { mask, W, H, p0, p1, ang, hand };
     this._update();
+    this._flush(t);
     return { ang, len, edge };
   }
 
@@ -264,16 +265,7 @@ export class SwingEngine {
     for (let k = -m; k <= m; k++) { const s = S[c + k]; win.push(s); sk2 += (s.t - t0) * (s.t - t0); }
     // 手元の速さ(骨格があるとき)。骨格の結果そのもの(前後0.2秒)に直線を当てる。画素→mは道具の見えた長さから
     // (コマの時刻で手元を補うと、骨格は遅れて届くので最新のコマで手元が取れず、いつも0になっていた)
-    let vhx = 0, vhy = 0; const Lp = this.lenPx;
-    if (Lp && this.lenHist.length > 30) {
-      const mpp = this.effM / Lp, P = this.pose.filter((q) => Math.abs(q.t - t0) <= 0.2);
-      if (P.length >= 2) {
-        const tm = P.reduce((a2, q) => a2 + q.t, 0) / P.length, xm = P.reduce((a2, q) => a2 + q.hand[0], 0) / P.length, ym = P.reduce((a2, q) => a2 + q.hand[1], 0) / P.length;
-        let stt = 0, stx = 0, sty = 0; for (const q of P) { const dt = q.t - tm; stt += dt * dt; stx += dt * (q.hand[0] - xm); sty += dt * (q.hand[1] - ym); }
-        if (stt > 1e-6) { vhx = stx / stt * mpp; vhy = sty / stt * mpp; }
-        const hv = Math.hypot(vhx, vhy); if (hv > 4) { vhx *= 4 / hv; vhy *= 4 / hv; } // 手元は速くても毎秒3m前後。骨格のゆれで大きく出たときは抑える(メーターが振り切れたままになっていた)
-      }
-    }
+    const [vhx, vhy] = this._handVel(t0);
     // 3か所の速さ: 剣先(両手の真ん中から 全長−13cm)、物打ち(柄頭から全長の3/4。剣先から1/4)、手元(両手の真ん中)
     const a = a0, L = this.effM, Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100);
     const at = (r) => Math.min(30, Math.hypot(vhx - omega * r * Math.sin(a), vhy + omega * r * Math.cos(a)));
@@ -287,8 +279,21 @@ export class SwingEngine {
       else if (v < this._peak.v * 0.6) this._finishPeak();
     }
   }
+  // 1本の区切りが来たら、すぐには決めずに待つ。後から届く骨格で手元を「はさんで」計算し直してから決める(_flush)
+  // (骨格は1秒10回ほどで、遅れて届く。区切りの時点の手元は古く、速い振りでは向きがずれて約1.2〜1.3倍に出すぎていた。2026-11-22 試験台で、遅れ0なら1.1倍以下)
   _finishPeak() {
     const pk = this._peak; this._peak = null; if (!pk) return;
+    pk.pending = true; this.pending.push(pk);
+  }
+  _flush(t) {
+    const P = this.pose, lastPose = P.length ? P[P.length - 1].t : -1e9;
+    while (this.pending.length) {
+      const pk = this.pending[0];
+      if (!(lastPose >= pk.t + this.recalcWait || t - pk.t > this.recalcMax)) break;
+      this.pending.shift(); if (this.recalcOn) this._recalc(pk); delete pk.pending; this._commit(pk);
+    }
+  }
+  _commit(pk) {
     // 道具かどうかは見つける段階で確かめている(手元から始まる・胴の1〜3倍の長さ・細い)。ここでは遅すぎる動き(4m/秒未満)と、始めの背景づくりの間を除く
     // 同じ向きの山が0.15秒以内に続いたら、1本の振りが割れたもの。速いほうだけ残す(割れた後半の小さい山を1本と数えていた。2026-11-22 答え合わせ)
     const last = this.swings[this.swings.length - 1];
@@ -297,6 +302,79 @@ export class SwingEngine {
       return;
     }
     if (pk.v >= 4 && this.frames > 30) { this.signStats[pk.sign].push(pk.v); this.swings.push(pk); if (this.swings.length > 200) this.swings.shift(); if (this.onSwing) this.onSwing(pk); }
+  }
+  // 動く画素(x,y の並び)から、手元を中心にした輪の中の向きの山を出す。山がはっきりしなければ null
+  _fanAngle(fp, hand, Lp) {
+    const r0 = Lp * this.fanR[0], r1 = Lp * this.fanR[1], NB = 72, hist = new Float32Array(NB); let tot = 0;
+    for (let q = 0; q < fp.length; q += 2) {
+      const dx = fp[q] - hand[0], dy = fp[q + 1] - hand[1], rr = dx * dx + dy * dy;
+      if (rr < r0 * r0 || rr > r1 * r1) continue;
+      hist[((Math.round(Math.atan2(dy, dx) / (2 * Math.PI) * NB) % NB) + NB) % NB]++; tot++;
+    }
+    let bi = 0, bs = -1; for (let k = 0; k < NB; k++) { const s3 = hist[(k + NB - 1) % NB] + hist[k] + hist[(k + 1) % NB]; if (s3 > bs) { bs = s3; bi = k; } }
+    let sx = 0, sy = 0, inn = 0; for (let k = -6; k <= 6; k++) { const w = hist[(bi + k + NB) % NB], a2 = (bi + k) / NB * 2 * Math.PI; sx += w * Math.cos(a2); sy += w * Math.sin(a2); inn += w; }
+    return inn >= Lp * 0.25 && inn >= tot * 0.6 ? Math.atan2(sy, sx) : null;
+  }
+  // 手元の速さ(m/秒の x,y)。骨格の結果そのもの(前後0.2秒)に直線を当てる
+  _handVel(t0) {
+    let vhx = 0, vhy = 0; const Lp = this.lenPx;
+    if (Lp && this.lenHist.length > 30) {
+      const mpp = this.effM / Lp, P = this.pose.filter((q) => Math.abs(q.t - t0) <= 0.2);
+      if (P.length >= 2) {
+        const tm = P.reduce((a2, q) => a2 + q.t, 0) / P.length, xm = P.reduce((a2, q) => a2 + q.hand[0], 0) / P.length, ym = P.reduce((a2, q) => a2 + q.hand[1], 0) / P.length;
+        let stt = 0, stx = 0, sty = 0; for (const q of P) { const dt = q.t - tm; stt += dt * dt; stx += dt * (q.hand[0] - xm); sty += dt * (q.hand[1] - ym); }
+        if (stt > 1e-6) { vhx = stx / stt * mpp; vhy = sty / stt * mpp; }
+        const hv = Math.hypot(vhx, vhy); if (hv > 4) { vhx *= 4 / hv; vhy *= 4 / hv; }
+      }
+    }
+    return [vhx, vhy];
+  }
+  // 1本の最高を、後から届いた骨格の手元(前後をはさんだ位置)で計算し直す
+  _recalc(pk) {
+    const S = this.samples.filter((s) => s.t >= pk.t - 0.3 && s.t <= pk.t + 0.25), Lp = this.lenPx; if (S.length < 8 || !Lp) return;
+    const A = new Array(S.length).fill(null); let last = null, lastT = null;
+    for (let i = 0; i < S.length; i++) {
+      const s = S[i]; let a = null;
+      if (s.fp) { const h = this.handAt(s.t) || s.hand; if (h) a = this._fanAngle(s.fp, h, Lp); }
+      else if (s.ang != null) a = s.ang;
+      if (a == null) continue;
+      if (last != null) {
+        const d = Math.atan2(Math.sin(a - last), Math.cos(a - last)), dt = Math.max(0.008, s.t - lastT);
+        if (Math.abs(d) > (3000 * dt + 25) * Math.PI / 180) continue;
+        a = last + d;
+      }
+      A[i] = a; last = a; lastT = s.t;
+    }
+    const dts = []; for (let i = 1; i < S.length; i++) dts.push(S[i].t - S[i - 1].t);
+    const dtm = dts.sort((x, y) => x - y)[dts.length >> 1] || 1 / 60, m = Math.max(2, Math.min(4, Math.round(this.winSec / dtm)));
+    const L = this.effM, Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100); let best = null;
+    const put = (t0, omega, a, vh) => {
+      if (Math.sign(omega) !== pk.sign || Math.abs(t0 - pk.t) > this.recalcSpan) return; // 同じ向き・近い時刻だけ(前後の振りかぶりを拾わない)
+      const at = (r) => Math.min(30, Math.hypot(vh[0] - omega * r * Math.sin(a), vh[1] + omega * r * Math.cos(a)));
+      const v = at(L); if (!best || v > best.v) best = { v, mono: at(Lm), hand: Math.min(30, Math.hypot(vh[0], vh[1])), t: t0, sign: Math.sign(omega), vx: vh[0] - omega * L * Math.sin(a) };
+    };
+    // ①なめらかに当てはめた速さ(_update と同じ2次の式)
+    for (let c = m; c < S.length - m; c++) {
+      const t0 = S[c].t, pts = []; for (let k = -m; k <= m; k++) if (A[c + k] != null) pts.push([S[c + k].t - t0, A[c + k]]);
+      const left = pts.filter((q) => q[0] < 0).length, right = pts.filter((q) => q[0] > 0).length;
+      if (pts.length < Math.max(4, Math.ceil((2 * m + 1) * 0.6)) || !left || !right) continue;
+      let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, y0 = 0, y1 = 0, y2 = 0;
+      for (const [x, y] of pts) { const x2 = x * x; s0++; s1 += x; s2 += x2; s3 += x2 * x; s4 += x2 * x2; y0 += y; y1 += x * y; y2 += x2 * y; }
+      const det3 = (a, b, cc, d, e, f, g, h, i) => a * (e * i - f * h) - b * (d * i - f * g) + cc * (d * h - e * g);
+      const D = det3(s0, s1, s2, s1, s2, s3, s2, s3, s4); if (Math.abs(D) < 1e-18) continue;
+      put(t0, det3(s0, y0, s2, s1, y1, s3, s2, y2, s4) / D, det3(y0, s1, s2, y1, s2, s3, y2, s3, s4) / D, this._handVel(t0));
+    }
+    // ②見えないコマをはさんだ2つの向きの差(その間の平均の速さ)
+    let pj = -1;
+    for (let i = 0; i < S.length; i++) {
+      if (A[i] == null) continue;
+      if (pj >= 0 && i - pj > 1) {
+        const gap = S[i].t - S[pj].t;
+        if (gap >= this.gapMin && gap < 0.13) { const w = (A[i] - A[pj]) / gap * this.recalcGapScale, tm = (S[i].t + S[pj].t) / 2; put(tm, w, (A[i] + A[pj]) / 2, this.recalcGapHand ? this._handVel(tm) : [0, 0]); }
+      }
+      pj = i;
+    }
+    if (best && best.sign) { pk.pre = pk.v; Object.assign(pk, best, { recalc: true }); }
   }
   // 振り下ろしの回る向き: 速いほうの向き(直近10本ずつの平均)
   downSign() {

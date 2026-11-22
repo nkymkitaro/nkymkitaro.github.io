@@ -138,13 +138,13 @@ addEventListener('resize', resize);
 
 // ---- 骨格(別の処理)。1秒10回まで。前の結果のまわりを切り出して読む ----
 const pcv = document.createElement('canvas'), pcx = pcv.getContext('2d'); let poseScale = 1;
-let worker = null, poseBusy = false, poseLast = 0, prevBox = null, poseN = 0, poseT0 = performance.now();
+let worker = null, poseBusy = false, poseLast = 0, prevBox = null, poseN = 0, poseT0 = performance.now(), poseSentAt = 0, poseLat = []; // poseLat: 送ってから結果が届くまで(ms)。手元の遅れの目安
 function startWorker() {
   if (worker) return;
   try { worker = new Worker('./js/pose-worker.js'); } catch (e) { worker = null; return; }
   worker.onmessage = (ev) => {
     const d = ev.data; if (d.ready || d.error) { if (d.error) stat.textContent = '骨格の読み込みに失敗(道具だけで測ります)'; return; }
-    poseBusy = false; poseN++;
+    poseBusy = false; poseN++; if (poseSentAt) { poseLat.push(performance.now() - poseSentAt); if (poseLat.length > 30) poseLat.shift(); }
     if (d.kp) { eng.addPose(d.t, d.kp, pcv.width); prevBox = d.box; } else prevBox = null; // 座標は縮めた画像のもの
   };
 }
@@ -158,7 +158,7 @@ async function maybePose(t) {
   pcx.drawImage(v, 0, 0, pcv.width, pcv.height); poseScale = ps;
   let crop = null;
   if (prevBox) { const VW = pcv.width, VH = pcv.height, bw = prevBox[2] - prevBox[0], bh = prevBox[3] - prevBox[1], cx = (prevBox[0] + prevBox[2]) / 2, w2 = Math.max(bw * 2, bh * 1.2), y0 = Math.max(0, prevBox[1] - bh * 0.6), y1 = Math.min(VH, prevBox[3] + bh * 0.15), x0 = Math.max(0, cx - w2 / 2); crop = [x0, y0, Math.min(VW, cx + w2 / 2) - x0, y1 - y0]; }
-  try { const bm = await createImageBitmap(pcv); worker.postMessage({ bitmap: bm, t, crop }, [bm]); } catch (e) { poseBusy = false; }
+  try { const bm = await createImageBitmap(pcv); poseSentAt = performance.now(); worker.postMessage({ bitmap: bm, t, crop }, [bm]); } catch (e) { poseBusy = false; }
 }
 
 // ---- 入力 ----
@@ -275,7 +275,7 @@ setInterval(() => {
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
   coach(eng.takeStats(), vis);
-  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒 ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 
