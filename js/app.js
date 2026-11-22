@@ -648,10 +648,11 @@ function watchLoad() {
     loadWatch.frames = 0; loadWatch.frameMs = 0; loadWatch.last = 0;
     const area = document.getElementById('monitorArea');
     const busy = document.visibilityState !== 'visible' || !area || area.classList.contains('lab-recording') || area.classList.contains('replaying');
-    if (varSettings.qualityKey !== 'max' || busy) { if (busy) loadWatch.heavySec = 0; return; }
     const heavy = (tries >= 5 && skipped / tries >= 0.5) || encAvg >= 150 || rafAvg >= 60;
+    // 診断には、画質に関係なく毎秒出す(「高」に下がったあとも、基準を合わせるために見たい)
+    if (diagOn) diagSet('重さ(飛ばし/圧縮ms/描き直しms/続いた秒)', `${skipped}/${tries} ${Math.round(encAvg)} ${Math.round(rafAvg)} ${heavy ? loadWatch.heavySec + 1 : 0}${busy ? ' 数えない' : ''}`);
+    if (varSettings.qualityKey !== 'max' || busy) { loadWatch.heavySec = 0; return; }
     loadWatch.heavySec = heavy ? loadWatch.heavySec + 1 : 0;
-    if (diagOn) diagSet('重さ(飛ばし/圧縮ms/描き直しms/続いた秒)', `${skipped}/${tries} ${Math.round(encAvg)} ${Math.round(rafAvg)} ${loadWatch.heavySec}`);
     if (loadWatch.heavySec >= LOAD_HEAVY_SEC) {
       loadWatch.heavySec = 0;
       selectQuality('high', { auto: true });
@@ -703,6 +704,10 @@ if (btnFlipCam && navigator.mediaDevices && navigator.mediaDevices.enumerateDevi
 // 親機のカメラの取り込みの大きさを替える。映像の流れは作り直さず、いまの流れに指示する
 async function applyCaptureSize([w, h]) {
   try {
+    // 欲しい短い辺(画質で決まる)を覚えておく。撮影画面(モードホイール)は、形(縦4:3・横16:9など)とこの短い辺をまとめて頼む。
+    // 別々に頼むと、起動直後に「形の頼み」が640×480のまま後から上書きし、「最大」でも480×640のままになっていた(2026-11-22 中山さんの実機の診断)
+    cameraLink.wantShort = Math.min(w, h);
+    if (cameraLink.onCaptureSize) { await cameraLink.onCaptureSize(); return; }
     const st = cameraLink.localMonitorVideo && cameraLink.localMonitorVideo.srcObject;
     const track = st && st.getVideoTracks()[0];
     if (track) await track.applyConstraints({ width: { ideal: w }, height: { ideal: h } });
@@ -1301,7 +1306,6 @@ document.addEventListener('keydown', (e) => {
 
 // ?diag=1 のとき: カメラの取り込みの大きさと、端末の情報を数字に出す(js/diag.js)
 if (diagOn) {
-  diagSet('画質', varSettings.qualityKey);
   diagSet('端末', navigator.userAgent.slice(0, 80));
   setInterval(() => {
     const v = cameraLink.localMonitorVideo;
@@ -1313,6 +1317,8 @@ if (diagOn) {
         const st = t.getSettings(); const cp = t.getCapabilities ? t.getCapabilities() : {};
         diagSet('カメラ名', t.label || '不明');
         diagSet('カメラの向き', st.facingMode || '不明');
+        // 取り込みが小さいときの切り分け用(2026-11-22): なめらか(60コマちょうど)の有無・コマ数・頼んだ短い辺・カメラが出せる最大
+        diagSet('なめらか/コマ数/頼んだ短い辺/最大', `${isSmooth60() ? 'オン' : 'オフ'} / ${st.frameRate ? Math.round(st.frameRate) : '?'} / ${cameraLink.wantShort || '?'} / ${cp.width && cp.height ? `${cp.width.max}x${cp.height.max}` : '?'}`);
         diagSet('いまのズーム', st.zoom != null ? Number(st.zoom).toFixed(2) : 'なし');
         diagSet('ズームの範囲', cp.zoom ? `${cp.zoom.min}〜${cp.zoom.max} 刻み${cp.zoom.step}` : 'なし');
         diagSet('カメラが対応している項目', Object.keys(cp).join(','));

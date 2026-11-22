@@ -47,7 +47,7 @@ if (ON) {
   box.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;margin:0;padding:6px 8px;max-width:70vw;max-height:60vh;overflow:auto;background:rgba(0,0,0,.78);color:#9fffa0;font:11px/1.35 monospace;white-space:pre-wrap;pointer-events:none;';
   const btn = document.createElement('button');
   btn.textContent = 'コピー';
-  btn.style.cssText = 'position:fixed;right:8px;top:8px;z-index:99999;min-height:48px;min-width:72px;font:16px sans-serif;';
+  btn.style.cssText = 'position:fixed;right:8px;top:40%;z-index:99999;min-height:48px;min-width:72px;font:16px sans-serif;';
   btn.addEventListener('click', async () => {
     const text = `前回の最後:\n${prev}\n\n履歴(1秒ごと):\n${hist.map((h) => JSON.stringify(h)).join('\n')}`;
     try { await navigator.clipboard.writeText(text); btn.textContent = 'コピーした'; } catch (e) { btn.textContent = '失敗'; }

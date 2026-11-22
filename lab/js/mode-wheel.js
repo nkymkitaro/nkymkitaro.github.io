@@ -348,19 +348,26 @@ function init() {
     // 親機のカメラの取り込みの形を、画面の向きに合わせる(2026-11-14 直し)。
     // 縦向きは 4:3(縦持ちで3:4。センサーそのままの形で、映像が横幅いっぱいに入る)、横向きは画面に合わせて 16:9 か 4:3。
     // 短い辺の画素数(画質の設定で決まる: 標準480・高720・最大1440)はそのままにして、形だけ替える
-    if (askAspect.busy) return;
+    askAspect.last = ar;
+    if (askAspect.busy) { askAspect.again = true; return; } // 頼んでいる途中なら、終わってからもう一度(後から来た頼みを捨てない)
     try {
       const v = app.cameraLink.localMonitorVideo; const tr = v && v.srcObject && v.srcObject.getVideoTracks()[0];
       if (!tr) return; // カメラの準備ができていない。次の fit() でもう一度
-      // 自撮りに切り替えるとカメラが新しくなり、形が元(16:9など)に戻って映像が小さくなっていた(2026-11-15)。カメラが替わったら、もう一度頼む
-      if (ar === wantAr && tr.id === askAspect.trackId) return;
-      askAspect.trackId = tr.id;
-      const g = tr.getSettings(); wantAr = ar;
-      const short = Math.min(g.width || 0, g.height || 0) || 480;
+      // 短い辺は、画質の設定で決まる値(js/app.js の applyCaptureSize が覚える)。無ければ今の大きさ
+      const g = tr.getSettings();
+      const short = app.cameraLink.wantShort || Math.min(g.width || 0, g.height || 0) || 480;
+      // 自撮りに切り替えるとカメラが新しくなり、形が元(16:9など)に戻って映像が小さくなっていた(2026-11-15)。カメラ・形・画質が替わったら、もう一度頼む
+      if (ar === wantAr && tr.id === askAspect.trackId && short === askAspect.short) return;
+      askAspect.trackId = tr.id; askAspect.short = short; wantAr = ar;
       askAspect.busy = true;
       await tr.applyConstraints({ width: { ideal: Math.round(short * ar) }, height: { ideal: short } });
-    } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally { askAspect.busy = false; }
+    } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally {
+      askAspect.busy = false;
+      if (askAspect.again) { askAspect.again = false; askAspect(askAspect.last); }
+    }
   }
+  // 画質を替えたとき(起動時を含む)は、今の形のまま、短い辺だけ替えて頼み直す
+  app.cameraLink.onCaptureSize = () => askAspect(askAspect.last || (innerWidth > innerHeight ? 16 / 9 : 4 / 3));
   const camBtn = $('#btnAddCamera'); const backBtn = $('#btnBackStart');
   [camBtn, backBtn, stage, secs, flip].forEach((b) => { if (b) b.dataset.mwFixed = '1'; });
   const logo = q('.mw-logo'); const LOGO_H = 18; // マーク(18px)+文字(13px)を1枚にしたロゴ(icons/logo-mitori-onscreen.png。元のロゴのままだと文字が潰れるため、文字を大きめに組み直した。2026-11-07)
