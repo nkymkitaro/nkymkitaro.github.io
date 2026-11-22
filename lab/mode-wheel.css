@@ -106,8 +106,6 @@ body.mode-monitor #monitorArea:not(.replaying) .back-start { position: static; }
 .state-band[data-state="rec"] .state-band-text::after { content: 'LIVE'; font-size: 1.5rem; }
 @media (max-height: 420px) { .state-band[data-state="rec"] .state-band-text::after { font-size: 1.2rem; } }
 #stateSubBand[data-rec] { display: none !important; }
-/* ディレイの帯「ディレイ:10秒おくれ」の後ろ半分は約75%(太さは同じ) */
-.state-band .mw-band-sm { font-size: .75em; font-weight: inherit; }
 
 /* 縦向き: 映像は、下のホイールの帯(250px)の上の余白に収める。縦長の映像(3:4)でも、菱形・札と重ならないようにする */
 @media not all and (orientation: landscape) and (max-height: 540px) {

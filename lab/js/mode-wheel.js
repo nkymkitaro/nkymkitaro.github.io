@@ -94,22 +94,17 @@ function init() {
   const fmt = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
   function showNote(t) { note.textContent = t; note.classList.add('show'); clearTimeout(showNote.t); showNote.t = setTimeout(() => note.classList.remove('show'), 1800); }
 
-  // ---- 帯の言葉: LIVE / ディレイ:10秒おくれ / VAR 15秒前(RECの帯は出さない) ----
-  // ディレイは「ディレイ:」を今の大きさ、「10秒おくれ」を約75%で出す(中山さん 2026-11-21。依頼 2026-11-21-to-coder-delay-band-wording.md)。準備中も同じ言葉
+  // ---- 帯の言葉: LIVE / VAR 15秒前(RECの帯は出さない) ----
+  // ディレイの帯「10秒前の映像」は js/app.js(updateDelayBand)が出す(中山さん 2026-11-22「シンプルに」。11-21 の「ディレイ:10秒おくれ」から変更)
   const band = $('#stateBand');
   function fixBand() {
     if (!band) return;
     const t = band.querySelector('.state-band-text'); if (!t) return;
     const s = band.dataset.state;
-    let want = null; let small = null;
+    let want = null;
     if (s === 'live') want = 'LIVE';
     else if (s === 'replay') want = `VAR ${rewindSec()}秒前`;
-    else if (s === 'delay' || s === 'delayWait') { small = `${delaySec()}秒おくれ`; want = `ディレイ:${small}`; }
-    if (!want) return;
-    if (small) {
-      // js/app.js が毎秒、帯の文字を書き換えるので、言葉か小さい文字の部分が崩れていたら作り直す
-      if (t.textContent !== want || !t.querySelector('.mw-band-sm')) t.innerHTML = `ディレイ:<span class="mw-band-sm">${small}</span>`;
-    } else if (t.textContent !== want) t.textContent = want;
+    if (want && t.textContent !== want) t.textContent = want;
   }
   // 小さい帯の「REC 0:12」も出さない(文字は書き換えず、印を付けて見た目だけ隠す)
   const subBand = $('#stateSubBand');
@@ -150,7 +145,7 @@ function init() {
   }
   function renderSecs() {
     const k = MODES[cur].k;
-    if (k === 'rec' || (k === 'var' && st.delay) || (k === 'delay' && st.delay)) { secs.innerHTML = ''; return; } // ディレイ中はVARが使えないので、VARの秒数は出さない(左上の帯とも重ならない)
+    if (k === 'rec' || (k === 'var' && st.delay)) { secs.innerHTML = ''; return; } // ディレイ中はVARの秒数は出さない(左上の帯とも重ならない)。ディレイの秒数は、ディレイ中も出して、押せば止めずに切り替える(2026-11-22)
     const opts = k === 'var' ? rewindBtns().map(secOf) : delayOpts();
     if (!opts.length) { secs.innerHTML = ''; return; }
     const curV = k === 'var' ? rewindSec() : delaySec();
@@ -160,8 +155,9 @@ function init() {
       ev.stopPropagation();
       if (!st.open) { st.open = true; renderSecs(); return; }
       const v = Number(b.dataset.v);
-      if (k === 'var') { const t = rewindBtns().find((x) => secOf(x) === v); if (t) t.click(); } else st.delaySec = v;
-      st.open = false; renderSecs(); fixBand(); updateSlots();
+      if (k === 'var') { const t = rewindBtns().find((x) => secOf(x) === v); if (t) t.click(); }
+      else { st.delaySec = v; if (st.delay) { const t = delayBtns().find((x) => secOf(x) === v); if (t) t.click(); } } // ディレイ中は、元の秒数のボタンを押す(js/app.js が止めずに切り替える)
+      st.open = false; renderShape(); renderSecs(); fixBand(); updateSlots();
     }; });
   }
   // カメラにそろえる(案A。中山さん 2026-11-15): モードは下の名前で切り替え、始める・止めるは真ん中だけ。

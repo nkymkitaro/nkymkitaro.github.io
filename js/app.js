@@ -1165,6 +1165,7 @@ initSmooth60({
 });
 let delayStarting = false;
 async function startDelayDisplay(sec) {
+  if (player.delayMode && !player.isReplay) { changeDelaySec(sec); return; } // ディレイ中に秒数を選んだら、止めずに切り替える(2026-11-22)
   if (player.isReplay || player.delayMode || delayStarting) return;
   delayStarting = true;
   diagSet('ディレイ秒', sec);
@@ -1176,28 +1177,52 @@ async function startDelayDisplay(sec) {
   delayStarting = false;
   if (player.isReplay || player.delayMode) return;
   if (!codec) diagSet('ディレイ方式', '写真');
-  const bandText = document.querySelector('#stateBand .state-band-text');
   let delayStartSent = false; // 始めるごとに1回だけ(VARから戻ったときの出し直しでは送らない)
   player.startDelay(sec, {
     codec,
     varSec: varSettings.rewindSeconds,
-    onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3); },
+    keepSec: delayKeepSec(),
+    onFallback: () => { recorder.setSuspended(false); recorder.setDurationSec(Math.max(delayKeepSec(), varSettings.rewindSeconds) + 3); },
     onCodecLive: () => recorder.setSuspended(true), // 動画がN秒たまって動画に切り替わったら、写真をためるのを止める(CPUと熱を減らす)
     onState: (ready, remain) => {
       setBandState(ready ? 'delay' : 'delayWait');
       if (!delayStartSent) showDelayCountdown(ready, remain); // 始めてから映るまでのカウントダウン(VARから戻ったときは出さない)
       if (ready && !delayStartSent) { delayStartSent = true; track('delay_start', { delay_sec: sec }); } // ディレイ表示が実際に始まったとき
-      bandText.textContent = ready ? `${sec}秒ディレイ` : `あと${remain}秒`;
+      updateDelayBand();
     },
   });
   // 写真は、ディレイの秒数ぶんまで伸ばしてためる(VAR用にためてある分から、押した瞬間に映し始める。足りない分だけ待つ)。
   // 動画方式は、動画がたまったら写真をやめる(onCodecLive)。写真方式は、このまま写真で映す
-  recorder.setDurationSec(Math.max(sec, varSettings.rewindSeconds) + 3);
+  recorder.setDurationSec(Math.max(delayKeepSec(), varSettings.rewindSeconds) + 3);
   // (写真方式の注: ディレイ中もVARで戻れるよう、VARの秒数ぶんは持つ。いま−N秒より古い写真は要らないので捨てる)
   monitorArea.classList.add('delaying');
   setBandState('delayWait');
   enterBrowserFullscreen();
 }
+// ディレイの途中で秒数を変えられるよう、選べるいちばん長い秒数ぶんを持っておく(動画方式なら30秒でも数十MB)
+function delayKeepSec() { return Math.max(...DELAY_OPTIONS.filter((s) => s <= varSettings.bufferSeconds)); }
+// 帯の言葉: 「10秒前の映像」(中山さん 2026-11-22「シンプルに」)。長くした秒数がたまるまでは「10秒前の映像 → 20秒まで あと8秒」
+let delayBandTimer = null;
+function updateDelayBand() {
+  const t = document.querySelector('#stateBand .state-band-text');
+  if (!t || !player.delayMode) return;
+  const wait = player.delayPendingSec();
+  const want = `${player.delaySec}秒前の映像`;
+  if (t.textContent !== want) t.textContent = want;
+  // 長くした秒数がたまるまでは、下の小さい帯に「あと8秒で20秒に」
+  const sub = wait ? `あと${wait}秒で${player.delayWant}秒に` : '';
+  if (sub) { delaySubShown = sub; showSubBand(sub); }
+  else if (delaySubShown) { if (subBandText() === delaySubShown) hideSubBand(); delaySubShown = ''; }
+}
+let delaySubShown = '';
+function changeDelaySec(sec) {
+  diagSet('ディレイ秒', sec);
+  player.setDelaySec(sec);
+  updateDelayBand();
+  clearInterval(delayBandTimer);
+  delayBandTimer = setInterval(() => { if (!player.delayMode || !player.delayPendingSec()) clearInterval(delayBandTimer); updateDelayBand(); }, 500);
+}
+
 // ディレイを始めてから映るまでの間、画面の真ん中に大きく残り秒数を出す(何も映らないと不安。中山さん 2026-11-18「マリカみたいに」)。
 // 映り始めたら「スタート!」を一瞬出して消す
 const delayCountdown = (() => { const el = document.createElement('div'); el.className = 'delay-countdown'; el.setAttribute('aria-live', 'polite'); el.hidden = true; monitorArea.appendChild(el); return el; })();
@@ -1221,6 +1246,8 @@ function hideDelayCountdown() { clearTimeout(countdownTimer); delayCountdown.hid
 function stopDelayDisplay() {
   if (!player.delayMode) return;
   hideDelayCountdown();
+  clearInterval(delayBandTimer);
+  if (delaySubShown) { if (subBandText() === delaySubShown) hideSubBand(); delaySubShown = ''; }
   const t0 = performance.now();
   player.stopDelay();
   diagTime('ディレイ終了: 止める部分ms', performance.now() - t0);

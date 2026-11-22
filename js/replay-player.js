@@ -562,15 +562,17 @@ export class ReplayPlayer {
   // 新しくためる仕組みは作らず、VARと同じ録画バッファを読む。VARには入らない(isReplay は false のまま)
   // 2026-11-19(中山さん「Aで」): 動画方式でも、動画がたまるまでは、VAR用にためてある写真から映す(押した瞬間から映る。待つのは足りない秒数だけ)。
   // 動画がN秒たまったら動画に切り替え、onCodecLive を呼ぶ(呼ばれた側で写真をためるのを止める)
-  startDelay(sec, { onState, codec = null, onFallback = null, onCodecLive = null, varSec = 0 } = {}) {
+  // keepSec: ディレイの途中で秒数を長くしても、すぐ切り替えられるように、これだけの秒数を持っておく(2026-11-22)
+  startDelay(sec, { onState, codec = null, onFallback = null, onCodecLive = null, varSec = 0, keepSec = 0 } = {}) {
     this.stopDelay();
     this._codec = codec; // 動画方式(js/delay-codec.js)。null なら写真方式
     this._codecLive = false;
     this._delayOnCodecLive = onCodecLive;
     this._delayOnFallback = onFallback;
-    if (codec) codec.start(sec, varSec);
+    if (codec) codec.start(Math.max(sec, keepSec), varSec);
     this.delayMode = true;
     this.delaySec = sec;
+    this.delayWant = sec; // 選ばれた秒数。長くしたときは、たまるまで今の秒数で映し続け、たまったら切り替える
     this._delayReady = null;
     this._delayOnState = onState || null;
     this._delayCache = new Map(); // camId -> { frame, drawable }
@@ -584,6 +586,26 @@ export class ReplayPlayer {
     };
     this._delayRaf = requestAnimationFrame(loop);
   }
+
+  // ディレイの途中で秒数を変える(止めずに)。短くするときはすぐ。長くするときは、その秒数ぶんたまるまで今の秒数のまま映し、たまったら切り替える
+  setDelaySec(sec) {
+    if (!this.delayMode) return;
+    this.delayWant = sec;
+    if (sec <= this.delaySec || !this._delayReady) { this.delaySec = sec; this._delayReady = null; this._delayRemain = null; }
+    else this._delayPromote();
+  }
+  // 長くした秒数まで、映像がたまったか。たまっていれば切り替える。まだなら、あと何秒か(切り替えたら 0)
+  _delayPromote() {
+    if (this.delayWant <= this.delaySec) return 0;
+    const now = performance.now();
+    let oldest = null;
+    if (this._codec && this._codecLive) { const ts = this._codec.ids().map((id) => this._codec.oldestTs(id)).filter((t) => t != null); if (ts.length) oldest = Math.min(...ts); }
+    else { const ts = this.gridCamIds().map((id) => this.recorder.getFrames(id)).filter((f) => f.length).map((f) => f[0].ts); if (ts.length) oldest = Math.min(...ts); }
+    const remain = oldest == null ? this.delayWant : this.delayWant - (now - oldest) / 1000;
+    if (remain <= 0.15) { this.delaySec = this.delayWant; this._delayRemain = null; if (this._delayOnState) this._delayOnState(true, 0); return 0; }
+    return Math.ceil(remain);
+  }
+  delayPendingSec() { return this.delayMode && this.delayWant > this.delaySec ? Math.max(1, this._delayPromote()) : 0; }
 
   // ディレイ中にVARを押せるか(動画方式のときは、押したときに動画から写真を作る)
   delayHasCodec() { return !!this._codec && !this._codec.failed && !!this._codecLive; } // 写真から映している間(動画がたまる前)は写真方式と同じ扱い
@@ -620,6 +642,7 @@ export class ReplayPlayer {
   }
 
   async _delayTick() {
+    if (this.delayWant > this.delaySec) this._delayPromote();
     this._delayBusy = true;
     const token = ++this._delayToken;
     const created = [];
