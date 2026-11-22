@@ -55,6 +55,7 @@
   body.ui-c .big { display: block; }
   .big .tag { display: inline-block; background: #fff; color: var(--n900); font-size: 1rem; padding: 4px 16px 4px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
   .big .n { display: block; font-size: 96px; line-height: 1; } .big .u { font-size: 22px; margin-left: 4px; } .big .s { display: block; font-size: 15px; color: #eee; white-space: pre-line; }
+  #coach { cursor: pointer; } #coach::after { content: '×'; margin-left: auto; opacity: .8; font-size: 1.3rem; }
   #coach { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 5; display: none; align-items: center; gap: 10px; background: var(--red); color: #fff; border-radius: 12px; font-size: 1.15rem; font-weight: 900; line-height: 1.5; padding: 14px 16px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
   #coach::before { content: '!'; flex: none; width: 30px; height: 30px; border-radius: 50%; background: #fff; color: var(--red); display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
   .help { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 1rem; font-weight: 800; line-height: 1.8; padding: 16px; background: rgba(7,13,34,.55); }
@@ -168,6 +169,7 @@ function stopAll() { // とめる: カメラを閉じ、計測を止める(記�
   if (isFile) v.pause();
   camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = '真横から、上半身と、振りかぶった剣先が<br>入るように置いて、「はじめる」を押してください';
 }
+$('coach').onclick = () => { coachMuteUntil = performance.now() + 30000; coachMsg = ''; $('coach').style.display = 'none'; };
 function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : 'はじめる'; b.classList.toggle('stop', on); $('band').dataset.state = on ? 'on' : 'idle'; $('band').textContent = on ? '計測中' : '素振りスピード'; }
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
 async function openCamera() {
@@ -238,6 +240,7 @@ function onFrame(now, md) {
   draw();
   if (!v.ended && !stopped) v.requestVideoFrameCallback(onFrame); else { running = false; if (v.ended) setGo(false); }
 }
+let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0;
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
@@ -248,14 +251,22 @@ function coach(st, vis) {
   let m = '';
   if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
   else if (r('noPerson') > 0.5) m = '体が映っていません。上半身と、振りかぶった剣先が入るように置いてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
-  else if (luma < 55 || (camFps > 0 && camFps < 40 && (!caps.iso || isoLevel >= ISO_STEPS.length - 1))) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
+  // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
+  else if (luma < 45) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
+  else if (camFps > 0 && camFps < 45 && tier >= TIERS.length - 1 && (!caps.iso || isoLevel >= ISO_STEPS.length - 1)) m = `このカメラは1秒${camFps}コマまでです。外カメ(⚙)にすると、速さが正確になります`;
   else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が画面から出ています。もう少し離れてください';
   else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を横に向けてください。スマホに対して真横に立つと測れます';
   else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '道具が見つかりません。⚙の「色」を道具の色に合わせてください';
   else if (meas && vis < 30) m = '道具が見えにくいです。真横から、振りかぶった剣先まで入るように置いてください';
   coachRun = m === coachRun.msg ? { msg: m, n: coachRun.n + 1 } : { msg: m, n: 1 };
-  coachMsg = coachRun.n >= 2 ? m : (m ? coachMsg : '');
-  if (coachMsg && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 10000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
+  // 出しっぱなしにしない(画面が見えなくなった。2026-11-22 実機): 1回に5秒だけ出し、同じ案内は20秒あけて出し直す。押すと30秒出さない
+  const now = performance.now(), want = coachRun.n >= 2 ? m : '';
+  if (!want || now < coachMuteUntil) coachMsg = '';
+  else if (want !== coachShown.msg) { coachShown = { msg: want, at: now }; coachMsg = want; }
+  else if (now - coachShown.at < 5000) coachMsg = want;
+  else if (now - coachShown.at > 25000) { coachShown = { msg: want, at: now }; coachMsg = want; }
+  else coachMsg = '';
+  if (coachMsg && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 20000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
   if (!coachMsg) coachSaid = '';
 }
 setInterval(() => {
@@ -306,6 +317,16 @@ function drawOverlay() {
     for (let i = 0; i < d.mask.length; i += 1) if (d.mask[i]) oc.fillRect(r.x + (i % d.W) * k, r.y + ((i / d.W) | 0) * k, k, k);
     if (d.hand) { const h = P(d.hand); oc.fillStyle = '#4dc3ff'; oc.beginPath(); oc.arc(h[0], h[1], 8, 0, 7); oc.fill(); }
   }
+  // 剣先が画面の端で見切れている(直近0.3秒): その端を赤く太く光らせ、「見切れ」と出す(気づけなかった。2026-11-22 実機)
+  { const S2 = eng.samples, tE = S2.length ? S2[S2.length - 1].t : 0, cutS = S2.filter((q) => q.edge && q.tip && tE - q.t < 0.3);
+    if (cutS.length) {
+      const q = cutS[cutS.length - 1].tip, W2 = eng.W, H2 = eng.H, dl = q[0], dr = W2 - q[0], dt2 = q[1], db = H2 - q[1], mn = Math.min(dl, dr, dt2, db), lw = Math.max(8, ov.width / 60);
+      oc.fillStyle = '#d6231b';
+      if (mn === dt2) oc.fillRect(r.x, r.y, r.w, lw); else if (mn === db) oc.fillRect(r.x, r.y + r.h - lw, r.w, lw); else if (mn === dl) oc.fillRect(r.x, r.y, lw, r.h); else oc.fillRect(r.x + r.w - lw, r.y, lw, r.h);
+      oc.font = `900 ${Math.max(14, ov.width / 22)}px ${FONT}`; oc.textAlign = 'center'; oc.fillStyle = '#fff'; oc.strokeStyle = '#d6231b'; oc.lineWidth = 4;
+      const lx = mn === dl ? r.x + 60 : mn === dr ? r.x + r.w - 60 : r.x + r.w / 2, ly = mn === dt2 ? r.y + lw + 30 : mn === db ? r.y + r.h - lw - 12 : r.y + r.h / 2;
+      oc.strokeText('剣先が見切れ', lx, ly); oc.fillText('剣先が見切れ', lx, ly);
+    } }
   // 剣先の軌跡(0.5秒ぶん)。色は速さ
   const S = eng.samples, tEnd = S.length ? S[S.length - 1].t : 0; let prev = null, prevT = null;
   oc.lineWidth = Math.max(3, ov.width / 200); oc.lineCap = 'round';

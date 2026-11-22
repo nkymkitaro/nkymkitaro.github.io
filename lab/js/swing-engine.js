@@ -134,11 +134,13 @@ export class SwingEngine {
         let lo = 1e9, hi = -1e9; for (let q = 0; q < pts.length; q += 2) { const pr = (pts[q] % W - mx) * ux + (((pts[q] / W) | 0) - my) * uy; if (pr < lo) lo = pr; if (pr > hi) hi = pr; }
         const e0 = [mx + ux * lo, my + uy * lo], e1 = [mx + ux * hi, my + uy * hi], d0 = Math.hypot(e0[0] - hand[0], e0[1] - hand[1]), d1 = Math.hypot(e1[0] - hand[0], e1[1] - hand[1]);
         near = d0 <= d1 ? e0 : e1; const dmin = Math.min(d0, d1); length = hi - lo;
+        const far = d0 <= d1 ? e1 : e0, cut = far[0] < 3 || far[1] < 3 || far[0] > W - 4 || far[1] > H - 4; // 剣先側が画面の端にかかる = 見切れている
         const T = this.torso, Lp = this.lenPx, ref = Lp && this.lenHist.length > 30 ? Lp / 1.8 : T;
         if (ref) {
           const R = this.why || (this.why = { far: 0, short: 0, long: 0, thick: 0, ok: 0 });
           if (dmin > ref * 0.9) { R.far++; continue; }                         // 手元から離れている
-          if (length < ref * (ref === T ? 0.6 : 0.9)) { R.short++; if (dmin < ref * 0.3 && length > ref * 0.25) shortNear = true; continue; }  // 短い(腕・手だけ。正面から撮って道具がカメラを向くと、道具も短く見える)
+          if (!cut && length < ref * (ref === T ? 0.6 : 0.9)) { R.short++; if (dmin < ref * 0.3 && length > ref * 0.25) shortNear = true; continue; }  // 短い(腕・手だけ。正面から撮って道具がカメラを向くと、道具も短く見える)
+          if (cut && length < ref * 0.35) { R.short++; continue; }             // 見切れていても、短すぎるものは道具にしない
           if (length > ref * 3.6) { R.long++; continue; }                      // 長すぎる
           if (n / Math.max(1, length) > ref * 0.3) { R.thick++; continue; }    // 太すぎる(ぶれた道具の扇は通す幅)
           R.ok++;
@@ -169,11 +171,12 @@ export class SwingEngine {
         if (!hand && Math.abs(dd) > 2.8) a = tipFirst ? cand[1] : cand[0];
         const d2 = Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng));
         // 1コマで動ける角度を超える飛び(毎秒2000度+20度より大きい)は取り違えとして使わない。3コマ続いたら新しい向きを信じる
-        const S0 = this.samples[this.samples.length - 1], dt = S0 ? Math.max(0.008, t - S0.t) : 0.017;
-        if (Math.abs(d2) > (2000 * dt + 20) * Math.PI / 180 && this.rejects < 3) { jump = true; this.rejects++; }
+        const dt = Math.max(0.008, t - (this.lastAngT != null ? this.lastAngT : t - 0.017)); // 前に向きが取れたコマからの時間(見えないコマをはさむと長くなる)
+        // 速い振りを取り違えとして捨てないよう、ゆるめにした(毎秒3000度+25度)
+        if (Math.abs(d2) > (3000 * dt + 25) * Math.PI / 180 && this.rejects < 3) { jump = true; this.rejects++; }
         else { this.rejects = 0; a = this.lastAng + d2; }
       }
-      if (!jump) { ang = a; this.lastAng = a; }
+      if (!jump) { ang = a; this.lastAng = a; this.lastAngT = t; }
       const tip = Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - a) > 0 ? p1 : p0; edge = tip[0] < 2 || tip[1] < 2 || tip[0] > W - 3 || tip[1] > H - 3;
       if (edge) ST.edge++;
       // 長さ(画素)は、両手の真ん中から剣先まで。骨格が無いときは、かたまり全体の長さ(手の肌も入るので、少し長めに出る)
@@ -183,6 +186,19 @@ export class SwingEngine {
     let tipPt = null;
     if (ang != null) { const Lp = this.lenPx; tipPt = hand && Lp ? [hand[0] + Lp * Math.cos(ang), hand[1] + Lp * Math.sin(ang)] : (Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - ang) > 0 ? p1 : p0); }
     if (ang != null) ST.seen++; else if (shortNear) ST.short++;
+    // 見えないコマをはさんだ2つの向きの差からも、回る速さを出す(いちばん速い瞬間はぶれて見えないことが多く、ならした速さでは届かない。2026-11-22 実機「速く振っても反映されない」)
+    // 差÷時間は、その間の平均の速さなので、実際の最高より低めになる(多めには出ない)。ならした速さより大きいときだけ、1本の最高に使う
+    if (ang != null) {
+      let k = this.samples.length - 1; while (k >= 0 && this.samples[k].ang == null && t - this.samples[k].t < 0.13) k--;
+      const pv = k >= 0 ? this.samples[k] : null, gap = pv && pv.ang != null ? t - pv.t : 0;
+      if (gap > 0 && gap < 0.13 && k < this.samples.length - 1) {
+        const w = (ang - pv.ang) / gap, vg = Math.min(30, Math.abs(w) * this.effM);
+        if (vg > 3 && (!this._peak || vg > this._peak.v)) {
+          const Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100);
+          this._peak = Object.assign(this._peak || {}, { v: vg, mono: Math.abs(w) * Lm, hand: this._peak ? this._peak.hand : 0, t: t - gap / 2, sign: Math.sign(w), vx: -w * Math.sin((ang + pv.ang) / 2), gapUsed: true });
+        }
+      }
+    }
     this.seenN = (this.seenN || 0) + (ang != null ? 1 : 0); this.allN = (this.allN || 0) + 1; // 道具が見えたコマの数(画面の「道具 ○%」)
     this.samples.push({ t, ang, len, edge, hand, tip: tipPt }); if (this.samples.length > 240) this.samples.shift();
     if (keepDebug) this.debug = { mask, W, H, p0, p1, ang, hand };
