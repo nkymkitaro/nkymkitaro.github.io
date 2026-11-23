@@ -27,7 +27,7 @@
 <body>
 <div class="wrap">
   <h1>カメラ60コマの診断</h1>
-  <p>カメラの頼み方を、自撮り・外カメで順に試して、実際に何コマ出たかを測ります(全部で約1分)。スマホを置いて、いつも振る部屋の明るさのままにしてください(少し暗めの部屋でも試してください)。終わったら「コピー」を押してチャットに貼ってください。</p>
+  <p>カメラの頼み方を、自撮り・外カメで順に試して、実際に何コマ出たかを測ります(全部で約1分半)。スマホを置いて、いつも振る部屋の明るさのままにしてください(少し暗めの部屋でも試してください)。終わったら「コピー」を押してチャットに貼ってください。</p>
   <button id="go">はじめる</button>
   <div id="now"></div>
   <video id="v" playsinline muted></video>
@@ -51,6 +51,9 @@ const PLANS = [
   { id: 'C', name: '補正-1.3', open: HD, steps: comp(-1.33) },
   { id: 'D', name: '補正-2', open: HD, steps: comp(-2) },
   { id: 'E', name: '補正-3', open: HD, steps: comp(-3) },
+  // 2026-11-24: 自撮りは1280×720だと30コマ。小さい大きさなら60が出るかを見る
+  { id: 'F', name: '640×480・60ちょうど', open: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { exact: 60 } }, steps: () => [] },
+  { id: 'G', name: '320×240・60ちょうど', open: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { exact: 60 } }, steps: () => [] },
 ];
 function clamp(x, r) { return Math.max(r.min || 0, Math.min(r.max || x, x)); }
 function stop() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; v.srcObject = null; }
