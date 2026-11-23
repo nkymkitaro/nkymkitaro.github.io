@@ -32,7 +32,7 @@ export class SwingEngine {
     this.signStats = { 1: [], '-1': [] };
     this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true;
+    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -282,6 +282,8 @@ export class SwingEngine {
       }
     }
     this.seenN = (this.seenN || 0) + (ang != null ? 1 : 0); this.allN = (this.allN || 0) + 1; // 道具が見えたコマの数(画面の「道具 ○%」)
+    // 振りかぶった(竹刀が前から上へ55度以上): 面の1本は「振りかぶり→振り下ろし」の組で数える(_finishPeak)
+    if (ang != null) { const f = this.front(); if (f) { const e = Math.atan2(-Math.sin(ang), Math.cos(ang) * f) * 180 / Math.PI; if (e >= this.raiseDeg) this.raisedAt = t; } }
     this.samples.push({ t, ang, len, edge, hand, tip: tipPt, fan: fanUsed, fp }); if (this.samples.length > 240) this.samples.shift();
     if (keepDebug) this.debug = { mask, W, H, p0, p1, ang, hand };
     this._update();
@@ -335,7 +337,23 @@ export class SwingEngine {
   // (骨格は1秒10回ほどで、遅れて届く。区切りの時点の手元は古く、速い振りでは向きがずれて約1.2〜1.3倍に出すぎていた。2026-11-22 試験台で、遅れ0なら1.1倍以下)
   _finishPeak() {
     const pk = this._peak; this._peak = null; if (!pk) return;
+    // 面だけ(中山さん 2026-11-23「今は面だけ」): 振り下ろしの山は、直前2秒以内に振りかぶっていたときだけ1本と数える。数えたら振りかぶりを使い切る
+    // (振りかぶりを見ずに速さの山だけで数えていて、向きの一瞬の飛びや、1本が割れた山を数えていた)
+    if (this.menOnly) {
+      const f = this.front(), ds = this.downSign();
+      if (f && pk.sign === ds) {
+        if (!(this.raisedAt != null && pk.t - this.raisedAt < this.raiseWin)) { const W2 = this.why || (this.why = {}); W2.noRaise = (W2.noRaise || 0) + 1; return; }
+        this.raisedAt = null;
+      }
+    }
     pk.pending = true; this.pending.push(pk);
+  }
+  // 向いている側: +1 = 右、-1 = 左、0 = まだ分からない(鼻と両肩から)
+  front() { const fv = this.faceVotes, fs = fv.reduce((a, b) => a + b, 0); return fv.length >= 8 && Math.abs(fs) >= fv.length * 0.6 ? Math.sign(fs) : 0; }
+  // 今の1本(表示用): 決める前の1本(その場の計算)があれば、それを先に出す。決まったら、計算し直した値に替わる
+  lastDown() {
+    const ds = this.downSign(), P = this.pending.filter((q) => q.sign === ds), S = this.swings.filter((q) => q.sign === ds);
+    const a = P[P.length - 1], b = S[S.length - 1]; return a && (!b || a.t > b.t) ? a : b;
   }
   _flush(t) {
     const P = this.pose, lastPose = P.length ? P[P.length - 1].t : -1e9;

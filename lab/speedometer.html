@@ -341,7 +341,7 @@ function draw() {
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
   const cv = cur(), nowMs = performance.now();
   if (cv >= display) { display = cv; holdUntil = nowMs + 300; } else if (nowMs > holdUntil) display = Math.max(cv, display - 0.3);
-  const D = downs(), last = D[D.length - 1], recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
+  const D = downs(), last = eng.lastDown(), recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
   drawOverlay();
   const hint = coachMsg;
   const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
