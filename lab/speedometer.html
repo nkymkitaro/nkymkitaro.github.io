@@ -142,6 +142,7 @@
     <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
     <h4>記録(この端末の中だけ)</h4>
     <div class="row"><a class="btn" href="kensoku-record.html" style="text-decoration:none">記録を見る</a><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
+    <h4>案内の声</h4><label>声の種類<select id="voiceSel"></select></label>
     <span id="logInfo"></span>
   </div></details>
 </header>
@@ -509,9 +510,18 @@ try { voiceOn = localStorage.getItem('mitori.speedo.voice') !== '0'; } catch (e)
 const vb = $('btnVoice'); const showVoice = () => { vb.classList.toggle('off', !voiceOn); vb.setAttribute('aria-pressed', String(voiceOn)); }; showVoice();
 vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
 function voiceUnlock() { try { if (voiceOn) speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* 読み上げに対応しない端末 */ } } // 押した操作の中で一度呼ぶ(端末によっては、これがないと話さない)
+// 声の選び方(2026-11-24 中山さん「ゆっくりめのお姉さんボイス」): 日本語の声のうち、女性の声として知られる名前を先に選ぶ。合わなければ⚙の「声の種類」で変えられる(選んだ声は覚える)
+const FEMALE = /kyoko|o-?ren|haruka|ayumi|nanami|sayaka|mizuki|female|女性|ja-jp-x-(htm|jab)/i;
+let voiceName = ''; try { voiceName = localStorage.getItem('mitori.speedo.voiceName') || ''; } catch (e) { /* そのまま */ }
+const jaVoices = () => { try { return speechSynthesis.getVoices().filter((x) => /^ja/i.test(x.lang)); } catch (e) { return []; } };
+function pickVoice() { const L = jaVoices(); return L.find((x) => x.name === voiceName) || L.find((x) => FEMALE.test(x.name + ' ' + x.voiceURI)) || L[0] || null; }
+function fillVoices() { const sel = $('voiceSel'), L = jaVoices(), cur = pickVoice(); sel.innerHTML = L.length ? L.map((x, i) => `<option value="${x.name}"${cur && cur.name === x.name ? ' selected' : ''}>${FEMALE.test(x.name + ' ' + x.voiceURI) ? '♀ ' : ''}${x.name.replace(/^Google /, '')}</option>`).join('') : '<option>(この端末の標準の声)</option>'; }
+try { speechSynthesis.onvoiceschanged = fillVoices; } catch (e) { /* 読み上げに対応しない端末 */ }
+fillVoices();
+$('voiceSel').onchange = () => { voiceName = $('voiceSel').value; try { localStorage.setItem('mitori.speedo.voiceName', voiceName); } catch (e) { /* そのまま */ } say('こんにちは。この声で案内しますね'); };
 function say(text, fast) { // 案内は、やさしくゆっくり(2026-11-24 中山さん)。速さの数字だけ、聞き取りやすい速めで
   if (!voiceOn || !('speechSynthesis' in window)) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = fast ? 1.15 : 0.85; u.pitch = fast ? 1 : 1.05; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = fast ? 1.15 : 0.8; u.pitch = fast ? 1 : 1.1; const vo = pickVoice(); if (vo) u.voice = vo; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
 }
 function speakNew() {
   if (prepPhase < 2) return;
