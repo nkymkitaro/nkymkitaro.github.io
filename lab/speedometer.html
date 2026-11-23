@@ -277,6 +277,7 @@ let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0, low60 = 0, no60 = false
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
+const COACH_VOICE = (m) => /コマ数/.test(m) ? 'コマ数が足りないようです。明るい場所だと助かります' : /動いて/.test(m) ? 'スマホが動いているようです。固定してくださいね' : /映っていません/.test(m) ? '体が映っていないようです。少し離れてみてください' : /暗/.test(m) ? '少し暗いようです。明るい場所だと助かります' : /出ています/.test(m) ? '剣先が切れているようです。もう少し離れてみてください' : /横に向けて/.test(m) ? '体を、真横に向けてみてください' : /色/.test(m) ? '道具の色を、設定で合わせてみてください' : /見えにくい|見つかりません/.test(m) ? '竹刀が見えにくいようです。真横から、剣先まで映してみてください' : /1秒\d+コマ/.test(m) ? 'このカメラは、コマ数が少なめです。外カメだと正確になります' : m;
 function coach(st, vis) {
   if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
@@ -300,7 +301,7 @@ function coach(st, vis) {
   else if (now - coachShown.at < 5000) coachMsg = want;
   else if (now - coachShown.at > 25000) { coachShown = { msg: want, at: now }; coachMsg = want; }
   else coachMsg = '';
-  if (coachMsg && (coachRun.n >= 3 || no60) && performance.now() - coachSaidAt > 20000 && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 60000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
+  if (coachMsg && (coachRun.n >= 3 || no60) && performance.now() - coachSaidAt > 20000 && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 60000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(COACH_VOICE(coachMsg)); }
 }
 setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
@@ -327,9 +328,9 @@ setInterval(() => {
 // ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
 // 条件がそろって2秒続いたら次へ進む。声は「次へ進むとき」と「同じ問題が3秒続いたとき」だけ(間違った案内で鬱陶しくならないように)。問題は同じ文を15秒あけて言う
 const PREP = [
-  { say: 'スマホを真横にセットしてください', msg: 'スマホを真横に立てかけて、体と剣先が枠に入るよう離れてください' },
-  { say: 'スマホOK。構えてください', msg: '竹刀を構えてください。剣先まで映れば次へ進みます' },
-  { say: 'OK。素振りをどうぞ', msg: '素振りをどうぞ' },
+  { say: 'スマホを、真横に置いてくださいね', msg: 'スマホを真横に立てかけて、体と剣先が枠に入るよう離れてください' },
+  { say: 'スマホは大丈夫です。構えてください', msg: '竹刀を構えてください。剣先まで映れば次へ進みます' },
+  { say: 'はい、大丈夫です。素振りをどうぞ', msg: '素振りをどうぞ' },
 ];
 let prepPhaseAt = 0, prepSpoken = new Set(), prepPhase = 2, prepOk = 0, prepRun = { msg: '', n: 0 }, prepSaid = { msg: '', at: 0 }, prepDoneAt = 0, prepLast = { items: [], msg: '', warn: false };
 function applyBody() { document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : ''); resize(); }
@@ -361,7 +362,7 @@ function prepTick(st, vis) {
   const c = { fps: camFps >= 25, bright: luma >= 45, still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut };
   const sets = prepPhase === 0 ? [['fps', 'コマ数'], ['bright', '明るさ'], ['still', 'スマホが動かない'], ['person', '体が映る']] : [['person', '体が映る'], ['still', 'スマホが動かない'], ['sword', '剣先まで映る']];
   const bad = sets.find(([k]) => !c[k]);
-  const ISS = { fps: [`コマ数が足りません(いま${camFps}コマ)。明るい場所か外カメで`, 'コマ数が足りません'], bright: ['暗いです。明るい場所に移ってください', '暗いです'], still: ['スマホが動いています。立てかけて固定してください', 'スマホが動いています'], person: ['体が映っていません。真横に立ち、少し離れてください', '体が映っていません'], sword: cut ? ['剣先が画面から出ています。もう少し離れてください', 'もう少し離れてください'] : ['竹刀が見つかりません。真横を向いて構えてください', '竹刀が見つかりません'] };
+  const ISS = { fps: [`コマ数が足りません(いま${camFps}コマ)。明るい場所か外カメで`, 'コマ数が足りないようです。明るい場所で、お願いします'], bright: ['暗いです。明るい場所に移ってください', '少し暗いようです。明るい場所だと助かります'], still: ['スマホが動いています。立てかけて固定してください', 'スマホが動いているようです。固定してくださいね'], person: ['体が映っていません。真横に立ち、少し離れてください', '体が映っていないようです。少し離れてみてください'], sword: cut ? ['剣先が画面から出ています。もう少し離れてください', '剣先が切れているようです。もう少し離れてみてください'] : ['竹刀が見つかりません。真横を向いて構えてください', '竹刀が見つかりません。真横を向いて、構えてくださいね'] };
   const iss = bad && performance.now() - prepPhaseAt > 3500 ? ISS[bad[0]] : null, key // 各段階の最初の3.5秒は、読み込み中の取り違えを出さない
    = iss ? iss[0] : '';
   prepRun = key === prepRun.msg ? { msg: key, n: prepRun.n + 1 } : { msg: key, n: 1 };
@@ -508,14 +509,14 @@ try { voiceOn = localStorage.getItem('mitori.speedo.voice') !== '0'; } catch (e)
 const vb = $('btnVoice'); const showVoice = () => { vb.classList.toggle('off', !voiceOn); vb.setAttribute('aria-pressed', String(voiceOn)); }; showVoice();
 vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
 function voiceUnlock() { try { if (voiceOn) speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* 読み上げに対応しない端末 */ } } // 押した操作の中で一度呼ぶ(端末によっては、これがないと話さない)
-function say(text) {
+function say(text, fast) { // 案内は、やさしくゆっくり(2026-11-24 中山さん)。速さの数字だけ、聞き取りやすい速めで
   if (!voiceOn || !('speechSynthesis' in window)) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.15; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = fast ? 1.15 : 0.85; u.pitch = fast ? 1 : 1.05; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
 }
 function speakNew() {
   if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
-  spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return; say(val(s).toFixed(1));
+  spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return; say(val(s).toFixed(1), true);
 }
 
 // ---- 記録(端末の中だけ。localStorage)。振り下ろしの1本ごとに、日時・道具・剣先・物打ち・手元を残す。書き出しはCSV ----
