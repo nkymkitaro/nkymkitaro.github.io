@@ -7,11 +7,14 @@
 //   (Pixel 9a の実測: ISO を上げると露出時間が短いまま明るさが戻り、57コマが出た。代わりに映像がざらつく)。暗い知らせは出さない
 // - 2026-11-22(中山さん「暗くなったらゲインをあげよう」B): 60コマが出ていても、映像が暗ければ ISO(ゲイン)を1段上げ、明るすぎれば1段下げる。
 //   映像の明るさは1秒ごとに 32×18 に縮めて端末の中で測り、すぐ捨てる
+// - 2026-11-23 作り直し: 露出モード・ISOを頼むと、どれでも30コマに落ちると分かった(Pixel 9a・Chrome 157、lab/fps60-test.html の実測。
+//   大きさと60ちょうどだけなら約58コマ、continuous や ISO を足すと29〜38コマ)。そのため露出・ISOには一切触らない。上の ISO・明るさの調整はやめた。
+//   暗い部屋ではカメラが露光を延ばすので15〜30コマになる(ブラウザからは直せない)
 // - 最初はオフ。計測(GA4)には何も送らない
 import { readLocal, writeLocal } from './safe-storage.js';
 
 const KEY = 'kendovar.smooth60';
-export const SMOOTH60_VER = '11-22b'; // 診断に出す版(古いファイルが端末に残っていないかの確認用)
+export const SMOOTH60_VER = '11-23a'; // 診断に出す版(古いファイルが端末に残っていないかの確認用)
 const LOW_FPS = 50;
 const LOW_SECONDS = 3; // 何秒続けて下回ったら、ISO を1段上げるか
 const WARMUP_MS = 3000; // 開いた直後は露出が落ち着かないので数えない
@@ -46,12 +49,7 @@ function withSmooth(t, c) {
   delete next.frameRate; delete next.advanced;
   if (!on) return next;
   next.frameRate = exactOk && !sizeFirst.has(t.id) ? { exact: 60 } : { ideal: 60 };
-  const caps = t.getCapabilities ? t.getCapabilities() : {};
-  // continuous や ISO に対応しない端末(iPhone など)は、60の頼みだけ
-  const adv = {};
-  if (caps.exposureMode && caps.exposureMode.includes('continuous')) adv.exposureMode = 'continuous';
-  if (isoOk && level > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[level]));
-  if (Object.keys(adv).length) next.advanced = [adv];
+  // 露出モード・ISO(advanced)は足さない(足すと30コマに落ちる。2026-11-23 実測)
   return next;
 }
 // 60ちょうどを頼むと、画質が半分より小さくなるカメラ(Pixel 9a の自撮り: 60ちょうどは480×640しか出せず、しかも暗いと30コマ)は、
@@ -141,16 +139,6 @@ export function initSmooth60({ trackGetter, video }) {
     const fps = frames; frames = 0;
     const t = getTrack();
     if (!on || !t || document.hidden || performance.now() - openedAt < WARMUP_MS) { lowSec = 0; return; }
-    lowSec = fps > 0 && fps < LOW_FPS ? lowSec + 1 : 0;
-    const luma = measureLuma();
-    darkSec = luma != null && luma < DARK ? darkSec + 1 : 0;
-    brightSec = luma != null && luma > BRIGHT ? brightSec + 1 : 0;
-    let next = level;
-    if ((lowSec >= LOW_SECONDS || darkSec >= 2) && level < MAX_LEVEL) next = level + 1; // 60が出ない・暗い: ゲインを上げる
-    else if (brightSec >= 3 && level > 0 && fps >= LOW_FPS) next = level - 1;          // 明るすぎ: ゲインを下げる
-    if (next !== level) {
-      level = next; lowSec = 0; darkSec = 0; brightSec = 0; openedAt = performance.now();
-      t.applyConstraints(base.get(t) || {}).catch(() => {});
-    }
+    lowSec = fps > 0 && fps < LOW_FPS ? lowSec + 1 : 0; // 今は数えるだけ(露出・ISOは触らない)
   }, 1000);
 }

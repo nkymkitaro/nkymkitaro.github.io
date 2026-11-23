@@ -27,7 +27,7 @@
 <body>
 <div class="wrap">
   <h1>カメラ60コマの診断</h1>
-  <p>カメラの頼み方を、自撮り・外カメで順に試して、実際に何コマ出たかを測ります(全部で約1分半)。スマホを置いて、いつも振る部屋の明るさのままにしてください。終わったら「コピー」を押してチャットに貼ってください。</p>
+  <p>カメラの頼み方を、自撮り・外カメで順に試して、実際に何コマ出たかを測ります(全部で約1分)。スマホを置いて、いつも振る部屋の明るさのままにしてください(少し暗めの部屋でも試してください)。終わったら「コピー」を押してチャットに貼ってください。</p>
   <button id="go">はじめる</button>
   <div id="now"></div>
   <video id="v" playsinline muted></video>
@@ -41,18 +41,26 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const lines = []; let stream = null;
 const VGA = { width: { ideal: 640 }, height: { ideal: 480 } };
 // 試す頼み方。open = getUserMedia の video、steps = そのあと順に applyConstraints するもの(cap を見て作る)
+// 2026-11-23 2回目: 露出・ISOを頼むと30コマに落ちると分かった(lab/fps60-test.html)。露出補正だけを下げて、少し暗い部屋でも60を保てるかを試す
+const HD = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 } };
+const comp = (ev) => (c) => c.exposureCompensation ? [HD60(c), { ...HD60(c), advanced: [{ exposureCompensation: Math.max(c.exposureCompensation.min, ev) }] }] : null;
+const HD60 = (c) => (c.frameRate && c.frameRate.max >= 60 ? HD : { ...HD, frameRate: { ideal: 60 } });
 const PLANS = [
-  { id: 'A', name: '指定なし(60はできれば)', open: { frameRate: { ideal: 60 } }, steps: () => [] },
-  { id: 'B', name: '640×480・60ちょうど', open: { ...VGA, frameRate: { exact: 60 } }, steps: () => [] },
-  { id: 'C', name: 'B+露出は自動(continuous)', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('continuous') ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous' }] }] : null },
-  { id: 'D', name: 'C+ISO800', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.iso && c.iso.max && c.exposureMode && c.exposureMode.includes('continuous') ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous', iso: clamp(800, c.iso) }] }] : null },
-  { id: 'E', name: 'B+手動露出1/120・ISO800', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('manual') && c.exposureTime ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'manual', exposureTime: clamp(83, c.exposureTime), ...(c.iso && c.iso.max ? { iso: clamp(800, c.iso) } : {}) }] }] : null },
-  { id: 'F', name: '1280×720・60ちょうど+continuous', open: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('continuous') ? [{ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 } }, { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous' }] }] : null },
-  { id: 'G', name: '60だけ(min60)', open: { frameRate: { min: 60 } }, steps: () => [] },
+  { id: 'A', name: '60ちょうどだけ', open: HD, steps: () => [] },
+  { id: 'B', name: '補正-0.7', open: HD, steps: comp(-0.67) },
+  { id: 'C', name: '補正-1.3', open: HD, steps: comp(-1.33) },
+  { id: 'D', name: '補正-2', open: HD, steps: comp(-2) },
+  { id: 'E', name: '補正-3', open: HD, steps: comp(-3) },
 ];
 function clamp(x, r) { return Math.max(r.min || 0, Math.min(r.max || x, x)); }
 function stop() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; v.srcObject = null; }
-async function countFps(ms) { // 画面に出たコマ数(presentedFrames)で数える
+async function countFps(ms, track) { // カメラから届いたコマを直接数える(なければ画面に出たコマ)
+  if (window.MediaStreamTrackProcessor) {
+    const t2 = track.clone(), rd = new MediaStreamTrackProcessor({ track: t2 }).readable.getReader();
+    let n = 0, t0 = null, tl = null;
+    while (true) { const { value: f, done } = await rd.read(); if (done) break; const ts = f.timestamp; f.close(); if (t0 == null) t0 = ts; else { n++; tl = ts; } if (tl != null && tl - t0 >= ms * 1000) break; }
+    rd.cancel(); t2.stop(); return tl ? (n * 1e6) / (tl - t0) : 0;
+  }
   return new Promise((res) => {
     let first = null, last = null, t0 = null;
     const tick = (now, md) => { if (first == null) { first = md.presentedFrames; t0 = now; } last = md.presentedFrames; if (now - t0 < ms) v.requestVideoFrameCallback(tick); else res(((last - first) * 1000) / (now - t0)); };
@@ -67,13 +75,16 @@ function row(cam, p, fps, info) {
 }
 async function runCam(facing, label) {
   let caps = null;
-  for (const p of PLANS) {
+  for (let p of PLANS) {
     $('now').textContent = `${label}: ${p.id} ${p.name} を試しています…`;
     stop(); await sleep(400);
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { exact: facing }, ...p.open } }); }
     catch (e) {
-      if (e.constraint !== 'facingMode') { row(label, p, '開けない', e.name + (e.constraint ? ' ' + e.constraint : '')); continue; }
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, ...p.open } }); } // 向きの指定に未対応の端末用
+      if (e.constraint === 'frameRate') { // 60ちょうどを断るカメラは「できれば60」で測る(断られたことも書く)
+        try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, ...p.open, frameRate: { ideal: 60 } } }); p = { ...p, name: p.name + '(60ちょうどは断られた)' }; }
+        catch (e3) { row(label, p, '開けない', e3.name); continue; }
+      } else if (e.constraint !== 'facingMode') { row(label, p, '開けない', e.name + (e.constraint ? ' ' + e.constraint : '')); continue; } else
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, ...p.open, frameRate: { ideal: 60 } } }); } // 向きの指定に未対応の端末用
       catch (e2) { row(label, p, '開けない', e2.name + (e2.constraint ? ' ' + e2.constraint : '')); continue; }
     }
     v.srcObject = stream; await v.play(); const t = stream.getVideoTracks()[0];
@@ -84,8 +95,8 @@ async function runCam(facing, label) {
     let err = '';
     for (const s of steps) { try { await t.applyConstraints(s); } catch (e) { err = ' 頼み失敗:' + e.name + (e.constraint ? ' ' + e.constraint : ''); } }
     await sleep(1800); // 露出が落ち着くまで
-    const fps = await countFps(3000); const g = t.getSettings();
-    row(label, p, fps, `${g.width}×${g.height} 設定${g.frameRate ? Math.round(g.frameRate) : '?'} ${g.exposureMode || ''}${g.exposureTime ? ' 露光' + Math.round(g.exposureTime) : ''}${g.iso ? ' ISO' + g.iso : ''} 明るさ${luma()}${err}`);
+    const fps = await countFps(3000, t); const g = t.getSettings();
+    row(label, p, fps, `${g.width}×${g.height} 設定${g.frameRate ? Math.round(g.frameRate) : '?'} ${g.exposureMode || ''}${g.exposureTime ? ' 露光' + Math.round(g.exposureTime) : ''}${g.iso ? ' ISO' + g.iso : ''}${g.exposureCompensation != null ? ' 補正' + (+g.exposureCompensation).toFixed(1) : ''} 明るさ${luma()}${err}`);
   }
 }
 $('go').onclick = async () => {
