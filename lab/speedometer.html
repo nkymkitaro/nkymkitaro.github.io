@@ -174,7 +174,7 @@ function startWorker() {
   worker.onmessage = (ev) => {
     const d = ev.data; if (d.ready || d.error) { if (d.error) stat.textContent = '骨格の読み込みに失敗(道具だけで測ります)'; return; }
     poseBusy = false; poseN++; if (poseSentAt) { poseLat.push(performance.now() - poseSentAt); if (poseLat.length > 30) poseLat.shift(); }
-    if (d.kp) { eng.addPose(d.t, d.kp, pcv.width); prevBox = d.box; } else prevBox = null; // 座標は縮めた画像のもの
+    if (d.kp) { eng.addPose(d.t, d.kp, pcv.width, d.box, d.others); prevBox = d.box; } else prevBox = null; // 座標は縮めた画像のもの
   };
 }
 async function maybePose(t) {
@@ -357,7 +357,7 @@ function vidRect() { // 映像が実際に映っている場所(object-fit: cont
 }
 function drawOverlay() {
   oc.clearRect(0, 0, ov.width, ov.height); if (!eng.H) return;
-  const r = vidRect(), k = r.w / eng.W, P = (p) => [r.x + p[0] * k, r.y + p[1] * k];
+  const r0 = vidRect(), R = eng.roi || { x: 0, y: 0, w: 1, h: 1 }, r = { x: r0.x + R.x * r0.w, y: r0.y + R.y * r0.h, w: R.w * r0.w, h: R.h * r0.h }, k = r.w / eng.W, P = (p) => [r.x + p[0] * k, r.y + p[1] * k]; // 測る範囲(roi)の中の座標 → 画面
   if ($('dbg').value === 'on' && eng.debug && eng.debug.mask) {
     const d = eng.debug; oc.fillStyle = 'rgba(0,255,90,.55)';
     for (let i = 0; i < d.mask.length; i += 1) if (d.mask[i]) oc.fillRect(r.x + (i % d.W) * k, r.y + ((i / d.W) | 0) * k, k, k);
@@ -368,9 +368,9 @@ function drawOverlay() {
     if (cutS.length) {
       const q = cutS[cutS.length - 1].tip, W2 = eng.W, H2 = eng.H, dl = q[0], dr = W2 - q[0], dt2 = q[1], db = H2 - q[1], mn = Math.min(dl, dr, dt2, db), lw = Math.max(8, ov.width / 60);
       oc.fillStyle = '#d6231b';
-      if (mn === dt2) oc.fillRect(r.x, r.y, r.w, lw); else if (mn === db) oc.fillRect(r.x, r.y + r.h - lw, r.w, lw); else if (mn === dl) oc.fillRect(r.x, r.y, lw, r.h); else oc.fillRect(r.x + r.w - lw, r.y, lw, r.h);
+      if (mn === dt2) oc.fillRect(r0.x, r0.y, r0.w, lw); else if (mn === db) oc.fillRect(r0.x, r0.y + r0.h - lw, r0.w, lw); else if (mn === dl) oc.fillRect(r0.x, r0.y, lw, r0.h); else oc.fillRect(r0.x + r0.w - lw, r0.y, lw, r0.h);
       oc.font = `900 ${Math.max(14, ov.width / 22)}px ${FONT}`; oc.textAlign = 'center'; oc.fillStyle = '#fff'; oc.strokeStyle = '#d6231b'; oc.lineWidth = 4;
-      const lx = mn === dl ? r.x + 60 : mn === dr ? r.x + r.w - 60 : r.x + r.w / 2, ly = mn === dt2 ? r.y + lw + 30 : mn === db ? r.y + r.h - lw - 12 : r.y + r.h / 2;
+      const lx = mn === dl ? r0.x + 60 : mn === dr ? r0.x + r0.w - 60 : r0.x + r0.w / 2, ly = mn === dt2 ? r0.y + lw + 30 : mn === db ? r0.y + r0.h - lw - 12 : r0.y + r0.h / 2;
       oc.strokeText('剣先が見切れ', lx, ly); oc.fillText('剣先が見切れ', lx, ly);
     } }
   // 剣先の軌跡(0.5秒ぶん)。色は速さ

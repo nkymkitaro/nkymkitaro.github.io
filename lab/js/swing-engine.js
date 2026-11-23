@@ -32,7 +32,7 @@ export class SwingEngine {
     this.signStats = { 1: [], '-1': [] };
     this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15;
+    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true;
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -47,10 +47,47 @@ export class SwingEngine {
   }
   reset() { this.bg = null; this.frames = 0; this.samples = []; this.lenHist = []; this.pose = []; this.lastAng = null; this.swings = []; this._peak = null; this.signStats = { 1: [], '-1': [] }; this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = []; this.speed = 0; this.speeds = { tip: 0, mono: 0, hand: 0 }; }
 
+  // 測る範囲を決める。人の箱(骨格の画素)から: 人の高さが映像の45%未満なら、その人を中心に 横2.4倍・縦1.7倍(振りかぶった竹刀と打ち下ろしが入る)の範囲
+  // 少し動いたくらいでは替えない(替えると背景・長さの学び直しで0.5秒ほど測れない)。人の箱が今の範囲の内側(余白1割)から出たときと、大きさが2割以上変わったときだけ替える
+  _updateRoi(box, videoW, videoH) {
+    const bx0 = box[0] / videoW, by0 = box[1] / videoH, bx1 = box[2] / videoW, by1 = box[3] / videoH, bh = by1 - by0;
+    let want = null;
+    if (bh < 0.45 && bh > 0.05) {
+      const hh = Math.min(1, bh * 1.7), ww = Math.min(1, bh * 2.4 * videoH / videoW), cx = (bx0 + bx1) / 2;
+      want = { x: Math.max(0, Math.min(1 - ww, cx - ww / 2)), y: Math.max(0, Math.min(1 - hh, by0 - bh * 0.6)), w: ww, h: hh };
+    }
+    const cur = this.roi;
+    if (!want && !cur) return;
+    if (want && cur) {
+      const mx = cur.w * 0.1, my = cur.h * 0.1, inside = bx0 > cur.x + mx && bx1 < cur.x + cur.w - mx && by0 - bh * 0.4 > cur.y && by1 < cur.y + cur.h - my * 0.3;
+      if (inside && want.h / cur.h > 0.8 && want.h / cur.h < 1.25) return;
+    }
+    this.setRoi(want);
+  }
+  setRoi(roi) {
+    for (const pk of this.pending) { delete pk.pending; this._commit(pk); } // 決める前の1本は、そのまま決める
+    this.pending = []; this._peak = null;
+    this.roi = roi; this.bg = null;
+    if (this.vw) { const R = roi || { x: 0, y: 0, w: 1, h: 1 }, sw = R.w * this.vw, sh = R.h * this.vh; this.W = Math.max(120, Math.round(Math.sqrt(this.targetPx * sw / sh))); this.H = Math.round(sh * this.W / sw); } else this.H = 0;
+    this.prev = null; this.frames = 0; this.lenHist = []; this.lastAng = null; this.samples = []; this.pose = []; this.torsoHist = []; this.others = null; this.tgtBox = null;
+    this.roiChanges = (this.roiChanges || 0) + 1;
+  }
   // 骨格の結果(元の映像の座標)を受け取る。kp: [[x,y,score]×17]
-  addPose(t, kp, videoW) {
-    if (!kp) return;
-    const k = this.W / videoW, ok = (j) => kp[j][2] > 0.2;
+  addPose(t, kp, videoW, box, others) {
+    if (!kp || !this.vw) return;
+    const videoH = videoW * this.vh / this.vw;
+    if (box && this.roiOn) this._updateRoi(box, videoW, videoH);
+    const R = this.roi || { x: 0, y: 0, w: 1, h: 1 }, W = this.W, H = this.H || Math.round(W * (R.h * this.vh) / (R.w * this.vw));
+    const k = W / (R.w * videoW); // 骨格の画素 → 処理の画素(長さ)
+    const tx = (x) => (x / videoW - R.x) / R.w * W, ty = (y) => (y / videoH - R.y) / R.h * H;
+    kp = kp.map((q) => [tx(q[0]), ty(q[1]), q[2]]); videoW = W; // 以下は処理の座標で計算する(k = 1)
+    if (box) box = [tx(box[0]), ty(box[1]), tx(box[2]), ty(box[3])];
+    if (others) others = others.map((b) => [tx(b[0]), ty(b[1]), tx(b[2]), ty(b[3])]);
+    void k;
+    {
+    const k = 1, ok = (j) => kp[j][2] > 0.2;
+    // ほかの人(測る人より小さく写る人)の場所。その人の竹刀を拾わないよう、この範囲の画素は使わない(中山さん 2026-11-23「一人だけに集中」)
+    if (box) { this.tgtBox = box.map((x) => x * k); this.others = (others || []).map((b) => b.map((x) => x * k)); this.othersT = t; }
     const ws = [9, 10].filter(ok); if (!ws.length) return;
     const hand = [ws.reduce((m, j) => m + kp[j][0], 0) / ws.length * k, ws.reduce((m, j) => m + kp[j][1], 0) / ws.length * k];
     const hips = [11, 12].filter(ok), hipY = hips.length ? hips.reduce((m, j) => m + kp[j][1], 0) / hips.length * k : null;
@@ -62,6 +99,7 @@ export class SwingEngine {
     if (torso) { this.torsoHist.push(torso); if (this.torsoHist.length > 30) this.torsoHist.shift(); }
     this.pose.push({ t, hand, hipY }); if (this.pose.length > 40) this.pose.shift();
     if (faceX != null && Math.abs(faceX) > 0.08) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 60) this.faceVotes.shift(); } // 胴の長さの8%以上ずれているときだけ数える
+    }
   }
   // 人(骨格)が最近見えているか。骨格を使う設定で、0.6秒以上見えていなければ測らない(誰もいない部屋で、家具を道具と取り違えて数えていた。2026-11-22 中山さんの実機)
   get torso() { const a = this.torsoHist.slice().sort((x, y) => x - y); return a.length >= 3 ? a[a.length >> 1] : null; }
@@ -79,12 +117,14 @@ export class SwingEngine {
   process(video, t, { keepDebug = false } = {}) {
     const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return null;
     // 処理する画像の大きさは、画素の数を一定(約5.8万)にそろえる。縦長の映像で幅320のままだと、横長の2.4倍の画素になり重かった(2026-11-22 実機で1コマ32ms)
-    if (this.H && (vw !== this.vw || vh !== this.vh)) { this.H = 0; this.bg = null; this.frames = 0; this.lenHist = []; this.lastAng = null; } // 映像の大きさが変わった(カメラの頼み直し・向きの変更)
+    if (this.H && (vw !== this.vw || vh !== this.vh)) { this.H = 0; this.bg = null; this.frames = 0; this.lenHist = []; this.lastAng = null; this.roi = null; } // 映像の大きさが変わった(カメラの頼み直し・向きの変更)
     this.vw = vw; this.vh = vh;
-    if (!this.H) { this.W = Math.max(120, Math.round(Math.sqrt(this.targetPx * vw / vh))); this.H = Math.round(vh * this.W / vw); }
+    // 測る範囲(roi、映像に対する割合)。人が小さく写るときは、その人のまわりだけを同じ画素数で処理する(遠いと竹刀が1〜2画素の細い線になり、取れなかった。2026-11-23 道場の動画)
+    const R = this.roi || { x: 0, y: 0, w: 1, h: 1 }, sw = R.w * vw, sh = R.h * vh;
+    if (!this.H) { this.W = Math.max(120, Math.round(Math.sqrt(this.targetPx * sw / sh))); this.H = Math.round(sh * this.W / sw); }
     const W = this.W, H = this.H;
-    if (this.cv.width !== W) { this.cv.width = W; this.cv.height = H; }
-    this.cx.drawImage(video, 0, 0, W, H);
+    if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; }
+    this.cx.drawImage(video, R.x * vw, R.y * vh, sw, sh, 0, 0, W, H);
     const px = this.cx.getImageData(0, 0, W, H).data, N = W * H;
     if (!this.bg) { this.bg = new Float32Array(N * 3); for (let i = 0, o = 0; i < N * 4; i += 4) { this.bg[o++] = px[i]; this.bg[o++] = px[i + 1]; this.bg[o++] = px[i + 2]; } }
     const alpha = this.frames < 20 ? 0.15 : 0.04, upd = this.frames < 20 || (this.frames & 1) === 0; this.frames++; // 背景は2コマに1回だけ直す(軽くする)
@@ -117,6 +157,17 @@ export class SwingEngine {
       let cnt = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) cnt += mask[y * W + x]; if (cnt > 20) ST.colorNear++;
     }
     // かたまりに分け、いちばん「細長く大きい」もの(手元に近ければ加点)を道具とする
+    // ほかの人の場所を消す: 箱を上(振りかぶった竹刀)に半分、左右に1/4広げた範囲。ただし測る人の箱の中は消さない
+    if (this.others && this.others.length && this.othersT != null && t - this.othersT < 0.6) {
+      const tb = this.tgtBox;
+      for (const b of this.others) {
+        const bh = b[3] - b[1], x0 = Math.max(0, Math.floor(b[0] - bh * 0.25)), x1 = Math.min(W - 1, Math.ceil(b[2] + bh * 0.25)), y0 = Math.max(0, Math.floor(b[1] - bh * 0.5)), y1 = Math.min(H - 1, Math.ceil(b[3]));
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+          if (tb && x >= tb[0] && x <= tb[2] && y >= tb[1] && y <= tb[3]) continue;
+          const q = y * W + x; mask[q] = 0; mov[q] = 0;
+        }
+      }
+    }
     const lab = new Int32Array(N), stack = new Int32Array(N); let best = null, bestScore = 0, nlab = 0, shortNear = false;
     for (let p0 = 0; p0 < N; p0++) {
       if (!mask[p0] || lab[p0]) continue;
@@ -183,7 +234,7 @@ export class SwingEngine {
         else { this.rejects = 0; a = this.lastAng + d2; }
       }
       if (!jump) { ang = a; this.lastAng = a; this.lastAngT = t; }
-      const tip = Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - a) > 0 ? p1 : p0; edge = tip[0] < 2 || tip[1] < 2 || tip[0] > W - 3 || tip[1] > H - 3;
+      const tip = Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - a) > 0 ? p1 : p0; edge = (tip[0] < 2 && R.x <= 0.001) || (tip[1] < 2 && R.y <= 0.001) || (tip[0] > W - 3 && R.x + R.w >= 0.999) || (tip[1] > H - 3 && R.y + R.h >= 0.999); // 測る範囲の端でなく、映像の端で見切れたときだけ
       if (edge) ST.edge++;
       // 長さ(画素)は、両手の真ん中から剣先まで。骨格が無いときは、かたまり全体の長さ(手の肌も入るので、少し長めに出る)
       len = hand ? Math.hypot(tip[0] - hand[0], tip[1] - hand[1]) : hi - lo;
@@ -246,6 +297,7 @@ export class SwingEngine {
     const S = this.samples, n = S.length; if (n < 8) return;
     const dts = []; for (let k = n - 6; k < n; k++) if (S[k] && S[k - 1]) dts.push(S[k].t - S[k - 1].t);
     const dtm = dts.sort((x, y) => x - y)[dts.length >> 1] || 1 / 60, m = Math.max(2, Math.min(4, Math.round(this.winSec / dtm)));
+    if (n < 2 * m + 2) return;
     const c = n - 1 - m, t0 = S[c].t, pts = [];
     for (let k = -m; k <= m; k++) { const s = S[c + k]; if (s && s.ang != null) pts.push([s.t - t0, s.ang]); }
     const left = pts.filter((q) => q[0] < 0).length, right = pts.filter((q) => q[0] > 0).length, need = Math.ceil((2 * m + 1) * 0.6);
