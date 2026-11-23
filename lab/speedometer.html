@@ -122,7 +122,7 @@
     <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
     <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
     <h4>記録(この端末の中だけ)</h4>
-    <div class="row"><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
+    <div class="row"><a class="btn" href="kensoku-record.html" style="text-decoration:none">記録を見る</a><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
     <span id="logInfo"></span>
   </div></details>
 </header>
@@ -491,7 +491,7 @@ let logged = new Set();
 function saveDowns() { // 振り下ろしと分かったものだけ(向きの判定が後で変わることがあるので、表示のたびに見直して足す)
   if (isFile) return; const D = downs(), add = D.filter((s) => !logged.has(s)); if (!add.length) return;
   const a = readLog(), tool = $('tool').selectedOptions[0].textContent;
-  for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2) }); }
+  for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2), m: 'hit60' }); } // m: 測り方(打つ瞬間=前60度)。変えたら値を新しくする(記録の画面 lab/kensoku-record.html が見る)
   writeLog(a); showLogInfo();
 }
 setInterval(saveDowns, 1000);
@@ -507,7 +507,7 @@ $('btnExport').onclick = () => {
 let clearArm = 0;
 $('btnClearLog').onclick = () => { // 2回押しで消す(1回目は知らせるだけ)
   if (Date.now() - clearArm > 3000) { clearArm = Date.now(); $('logInfo').textContent = 'もう一度押すと、保存した記録を消します'; return; }
-  writeLog([]); logged = new Set(eng.swings); clearArm = 0; showLogInfo();
+  writeLog([]); try { localStorage.removeItem('mitori.kensoku.days'); } catch (e) { /* そのまま */ } logged = new Set(eng.swings); clearArm = 0; showLogInfo(); // 記録の画面の日ごとのまとめも消す
 };
 showLogInfo();
 // 試験用(中身の確認)
