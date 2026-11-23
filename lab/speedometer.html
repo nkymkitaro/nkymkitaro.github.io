@@ -241,7 +241,7 @@ async function tuneCamera(tr, startTier = 0) {
 }
 // 60コマが出ないのは露光時間が長いから(暗いとカメラが露出を延ばす)。手動の露出で、露光時間を1/120秒に固定して、明るさはISO(感度)で補う
 // (2026-11-23 実機: ISOだけ上げても31コマのまま。自動露出のままでは露光時間が縮まなかった)。1/120秒は、振りのぶれも減る
-const EXPO_TIME = 83; // 単位100マイクロ秒 = 8.3ms = 1/120秒(60コマの1コマ16.7msより十分短い)
+let EXPO_TIME = 83; // 単位100マイクロ秒 = 8.3ms = 1/120秒(60コマの1コマ16.7msより十分短い)。それでも60が出ないときは1/240秒(42)に
 let expoManual = false, lastLuma = 128;
 async function applyExposure() {
   const tr = camTrack; if (!tr || tr.readyState !== 'live') return;
@@ -254,6 +254,8 @@ async function applyExposure() {
     if (isoLevel > 0 && caps.iso && caps.iso.max) adv.iso = Math.max(caps.iso.min, Math.min(caps.iso.max, ISO_STEPS[isoLevel]));
   }
   if (!Object.keys(adv).length) return;
+  // 2回に分けて頼む: ①大きさ・60コマだけ ②露出も(Chrome は advanced を含む頼みでは大きさ・コマ数の変更を無視する。1回で頼むと60コマが外れることがあった)
+  try { await tr.applyConstraints({ ...camBase }); } catch (e) { /* そのまま */ }
   try { await tr.applyConstraints({ ...camBase, advanced: [adv] }); } catch (e) { /* 対応しない端末(iPhone など)は、そのまま */ }
 }
 function checkCamFps() { // 1秒ごと
@@ -267,7 +269,8 @@ function checkCamFps() { // 1秒ごと
   // 60コマを強く求める(中山さん「60fps強制」): ①露光時間を1/120秒に固定 ②(手動の露出ができない端末は)ISOを上げる ③それでも足りなければ画質の段を下げる
   if (canManual && !expoManual) { expoManual = true; if (isoLevel < 2) isoLevel = 2; applyExposure(); return; }
   if (!canManual && caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); return; }
-  if (tier < TIERS.length - 1) tuneCamera(camTrack, tier + 1);
+  if (tier < TIERS.length - 1) { tuneCamera(camTrack, tier + 1); return; }
+  if (canManual && expoManual && EXPO_TIME > 42) { EXPO_TIME = 42; applyExposure(); } // 最後の手: 露光1/240秒
 }
 
 function begin() {
@@ -286,7 +289,7 @@ function onFrame(now, md) {
   draw();
   if (!v.ended && !stopped) v.requestVideoFrameCallback(onFrame); else { running = false; if (v.ended) setGo(false); }
 }
-let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0;
+let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0, low60 = 0, no60 = false;
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
@@ -295,7 +298,8 @@ function coach(st, vis) {
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
+  if (no60) m = `60コマが出ていません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(⚙)で`;
+  else if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
   else if (r('noPerson') > 0.5) m = '体が映っていません。上半身と、振りかぶった剣先が入るように置いてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
   else if (luma < 45) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
@@ -306,7 +310,7 @@ function coach(st, vis) {
   else if (meas && vis < 30) m = '道具が見えにくいです。真横から、振りかぶった剣先まで入るように置いてください';
   coachRun = m === coachRun.msg ? { msg: m, n: coachRun.n + 1 } : { msg: m, n: 1 };
   // 出しっぱなしにしない(画面が見えなくなった。2026-11-22 実機): 1回に5秒だけ出し、同じ案内は20秒あけて出し直す。押すと30秒出さない
-  const now = performance.now(), want = coachRun.n >= 2 ? m : '';
+  const now = performance.now(), want = coachRun.n >= 2 || no60 ? m : '';
   if (!want || now < coachMuteUntil) coachMsg = '';
   else if (want !== coachShown.msg) { coachShown = { msg: want, at: now }; coachMsg = want; }
   else if (now - coachShown.at < 5000) coachMsg = want;
@@ -317,11 +321,18 @@ function coach(st, vis) {
 }
 setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
+  // 60コマの見張り(中山さん 2026-11-23「必ず60fps。強制。絶対」): カメラが57コマ未満、または処理が追いつかず55コマ未満が2秒続いたら、数えるのを止めて知らせる
+  if (running && !isFile && camFps > 0) {
+    low60 = (camFps < 57 || frames < 55) ? low60 + 1 : 0; no60 = low60 >= 2;
+    // 処理が重くて落としているときは、処理する画素を2割ずつ減らす(最小2万)
+    if (camFps >= 57 && frames < 55 && procMs > 12 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
+  } else no60 = false;
+  eng.blockCount = no60;
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
   coach(eng.takeStats(), vis);
-  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${expoManual ? ' 露光1/120' : ''}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${expoManual ? ` 露光1/${EXPO_TIME > 60 ? 120 : 240}` : ''}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 
@@ -339,7 +350,7 @@ const FONT = '"Murecho", system-ui, sans-serif';
 function draw() {
   // 針: 上がるときはすぐ、下がるときはゆっくり
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
-  const cv = cur(), nowMs = performance.now();
+  const cv = no60 ? 0 : cur(), nowMs = performance.now();
   if (cv >= display) { display = cv; holdUntil = nowMs + 300; } else if (nowMs > holdUntil) display = Math.max(cv, display - 0.3);
   const D = downs(), last = eng.lastDown(), recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
   drawOverlay();

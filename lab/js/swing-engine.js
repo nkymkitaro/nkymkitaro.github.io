@@ -32,7 +32,7 @@ export class SwingEngine {
     this.signStats = { 1: [], '-1': [] };
     this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
+    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; this.speedAt = 'peak'; this.hitDeg = 20; // 'hit' にすると、振り下ろしで竹刀が前 hitDeg 度まで下りた時刻の速さ // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -337,6 +337,7 @@ export class SwingEngine {
   // (骨格は1秒10回ほどで、遅れて届く。区切りの時点の手元は古く、速い振りでは向きがずれて約1.2〜1.3倍に出すぎていた。2026-11-22 試験台で、遅れ0なら1.1倍以下)
   _finishPeak() {
     const pk = this._peak; this._peak = null; if (!pk) return;
+    if (this.blockCount) return; // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
     // 面だけ(中山さん 2026-11-23「今は面だけ」): 振り下ろしの山は、直前2秒以内に振りかぶっていたときだけ1本と数える。数えたら振りかぶりを使い切る
     // (振りかぶりを見ずに速さの山だけで数えていて、向きの一瞬の飛びや、1本が割れた山を数えていた)
     if (this.menOnly) {
@@ -346,6 +347,7 @@ export class SwingEngine {
         this.raisedAt = null;
       }
     }
+    if (this.recalcOn) this._recalc(pk); // その場の手元で一度計算(すぐ出す数字)。後から届いた骨格で、もう一度計算し直す
     pk.pending = true; this.pending.push(pk);
   }
   // 向いている側: +1 = 右、-1 = 左、0 = まだ分からない(鼻と両肩から)
@@ -418,10 +420,12 @@ export class SwingEngine {
     const dts = []; for (let i = 1; i < S.length; i++) dts.push(S[i].t - S[i - 1].t);
     const dtm = dts.sort((x, y) => x - y)[dts.length >> 1] || 1 / 60, m = Math.max(2, Math.min(4, Math.round(this.winSec / dtm)));
     const L = this.effM, Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100); let best = null;
+    const cands = [];
     const put = (t0, omega, a, vh) => {
-      if (Math.sign(omega) !== pk.sign || Math.abs(t0 - pk.t) > this.recalcSpan) return; // 同じ向き・近い時刻だけ(前後の振りかぶりを拾わない)
+      if (Math.sign(omega) !== pk.sign || Math.abs(t0 - pk.t) > 0.3) return; // 同じ向き・近い時刻だけ(前後の振りかぶりを拾わない)
       const at = (r) => Math.min(30, Math.hypot(vh[0] - omega * r * Math.sin(a), vh[1] + omega * r * Math.cos(a)));
-      const v = at(L); if (!best || v > best.v) best = { v, mono: at(Lm), hand: Math.min(30, Math.hypot(vh[0], vh[1])), t: t0, sign: Math.sign(omega), vx: vh[0] - omega * L * Math.sin(a) };
+      const c = { v: at(L), mono: at(Lm), hand: Math.min(30, Math.hypot(vh[0], vh[1])), t: t0, sign: Math.sign(omega), vx: vh[0] - omega * L * Math.sin(a) };
+      cands.push(c); if (Math.abs(t0 - pk.t) <= this.recalcSpan && (!best || c.v > best.v)) best = c;
     };
     // ①なめらかに当てはめた速さ(_update と同じ2次の式)
     for (let c = m; c < S.length - m; c++) {
@@ -443,6 +447,19 @@ export class SwingEngine {
         if (gap >= this.gapMin && gap < 0.13) { const w = (A[i] - A[pj]) / gap * this.recalcGapScale, tm = (S[i].t + S[pj].t) / 2; put(tm, w, (A[i] + A[pj]) / 2, this.recalcGapHand ? this._handVel(tm) : [0, 0]); }
       }
       pj = i;
+    }
+    // 打った瞬間の速さ(中山さん 2026-11-23「振り下ろしたところでスピードを取って」): 振り下ろしで、竹刀が前で水平から hitDeg 度の高さまで下りてきた時刻の速さ
+    // (打突は竹刀が前でほぼ水平のとき。いちばん速い瞬間は、その少し前の振り下ろしの途中に来る)
+    const f = this.front(), ds = this.downSign();
+    if (this.speedAt === 'hit' && f && pk.sign === ds && cands.length) {
+      const el = (a) => Math.atan2(-Math.sin(a), Math.cos(a) * f) * 180 / Math.PI;
+      let tHit = null, pj2 = -1;
+      for (let i = 0; i < S.length; i++) {
+        if (A[i] == null) continue;
+        if (pj2 >= 0 && S[i].t > pk.t - 0.2) { const e0 = el(A[pj2]), e1 = el(A[i]); if (e0 > this.hitDeg && e1 <= this.hitDeg && e0 < 150) { tHit = S[pj2].t + (S[i].t - S[pj2].t) * (e0 - this.hitDeg) / Math.max(1e-6, e0 - e1); break; } }
+        pj2 = i;
+      }
+      if (tHit != null) { let h = null; for (const c of cands) if (Math.abs(c.t - tHit) <= 0.04 && (!h || Math.abs(c.t - tHit) < Math.abs(h.t - tHit))) h = c; if (h) { best = Object.assign({}, h, { peak: best ? best.v : h.v, hitT: tHit }); } }
     }
     if (best && best.sign) { pk.pre = pk.v; Object.assign(pk, best, { recalc: true }); }
   }
