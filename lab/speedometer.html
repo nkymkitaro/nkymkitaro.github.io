@@ -119,6 +119,10 @@
   .pchk li.ok { color: #fff; }
   .pskip { display: block; margin: 4px 0 0 auto; min-height: 48px; padding: 0 6px; background: none; border: 0; color: var(--soft); font-weight: 800; font-size: .95rem; cursor: pointer; }
   @media (orientation: landscape) { body.prep .stage { grid-column: 1 / -1; } .pcard { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .psteps { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .pguide { left: 3%; right: calc(clamp(340px, 48vw, 560px) + 12px); top: 18%; bottom: 40%; } }
+  /* 表示は「メーター」の1種類(2026-11-24 中山さん「モード切替は要る?1種類でよくね」)。はじめる/とめるを大きく真ん中に */
+  .dock { justify-content: center; }
+  .go { flex: 1; max-width: 460px; }
+  .help div div { text-wrap: balance; }
 </style>
 </head>
 <body class="ui-a">
@@ -159,14 +163,13 @@
   <div id="coach" role="status" aria-live="polite"></div>
 </main>
 <footer class="dock">
-  <div class="tabs"><button data-ui="a" class="on" type="button">メーター</button><button data-ui="b" type="button">数字</button><button data-ui="c" type="button">映像</button></div>
   <button class="go" id="btnCam" type="button">はじめる</button>
 </footer>
 <script type="module">
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
 const DEV = new URLSearchParams(location.search).has('dev'); // 開発用の数字の行は ?dev=1 のときだけ出す
-const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押すと、<b>画面の案内</b>で準備できます</div></div>';
+const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押すと<br><b>画面の案内</b>で準備できます</div></div>';
 $('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
 const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
