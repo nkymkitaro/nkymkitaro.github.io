@@ -100,6 +100,25 @@
     body.ui-c #stat { grid-row: 4; align-self: end; }
     #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - clamp(340px, 48vw, 560px) - 20px); bottom: 10px; }
   }
+
+  /* 準備の案内(2026-11-24 中山さん「画面全体を大きく使い、スマホセット→構え→素振り開始を気持ちよく」): 準備中は映像を画面いっぱいに */
+  body.prep .view { display: none; }
+  body.prep .stage, body.prep.ui-a .stage, body.prep.ui-b .stage { flex: 1; width: auto; height: auto; margin: 0; border-radius: 0; }
+  .prepov { position: absolute; inset: 0; z-index: 3; display: none; pointer-events: none; }
+  .psteps { position: absolute; top: 8px; left: 8px; right: 8px; margin: 0; padding: 0; list-style: none; display: flex; gap: 6px; }
+  .psteps li { flex: 1; text-align: center; font-weight: 900; font-size: .85rem; padding: 8px 4px; border-radius: 10px; background: rgba(7,13,34,.72); color: var(--soft); white-space: nowrap; }
+  .psteps li i { font-style: normal; display: inline-block; width: 1.5em; height: 1.5em; line-height: 1.5em; border-radius: 50%; background: rgba(255,255,255,.22); margin-right: 4px; }
+  .psteps li.done { color: #fff; } .psteps li.done i { background: #fff; color: var(--n900); }
+  .psteps li.now { background: #fff; color: var(--n900); } .psteps li.now i { background: var(--red); color: #fff; }
+  .pguide { position: absolute; left: 8%; right: 8%; top: 17%; bottom: 36%; border: 3px dashed rgba(255,255,255,.8); border-radius: 16px; display: none; }
+  .pguide span { position: absolute; left: 0; right: 0; top: 8px; text-align: center; font-weight: 800; font-size: .85rem; text-shadow: 0 1px 6px #000; }
+  .pcard { position: absolute; left: 8px; right: 8px; bottom: 8px; background: rgba(7,13,34,.85); border-radius: 14px; padding: 12px 14px 8px; pointer-events: auto; display: none; }
+  .pcard.warn { background: var(--red); }
+  .pmain { font-size: 1.25rem; font-weight: 900; line-height: 1.5; }
+  .pchk { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 800; font-size: .95rem; color: var(--soft); }
+  .pchk li.ok { color: #fff; }
+  .pskip { display: block; margin: 4px 0 0 auto; min-height: 48px; padding: 0 6px; background: none; border: 0; color: var(--soft); font-weight: 800; font-size: .95rem; cursor: pointer; }
+  @media (orientation: landscape) { body.prep .stage { grid-column: 1 / -1; } .pcard { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .psteps { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .pguide { left: 3%; right: calc(clamp(340px, 48vw, 560px) + 12px); top: 18%; bottom: 40%; } }
 </style>
 </head>
 <body class="ui-a">
@@ -132,6 +151,7 @@
     <video id="v" playsinline muted></video>
     <canvas id="ov"></canvas>
     <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
+    <div class="prepov" id="prep"><ol class="psteps"><li><i>1</i>スマホをセット</li><li><i>2</i>構える</li><li><i>3</i>素振り</li></ol><div class="pguide" id="pGuide"><span>体と、振りかぶった剣先がこの枠に入る位置へ</span></div><div class="pcard" id="pCard"><div class="pmain" id="pMain"></div><ul class="pchk" id="pChk"></ul><button class="pskip" id="pSkip" type="button">準備をとばして測る ›</button></div></div>
     <div class="help" id="help"><ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol></div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
@@ -144,6 +164,9 @@
 <script type="module">
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
+const DEV = new URLSearchParams(location.search).has('dev'); // 開発用の数字の行は ?dev=1 のときだけ出す
+const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押すと、<b>画面の案内</b>で準備できます</div></div>';
+$('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
 const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
 let holdUntil = 0;
@@ -151,7 +174,7 @@ let ui = 'a', running = false, isFile = false, frames = 0, procMs = 0, display =
 
 // ---- 設定 ----
 document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
-  ui = b.dataset.ui; document.body.className = 'ui-' + ui;
+  ui = b.dataset.ui; applyBody();
   document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('on', x === b)); resize();
 });
 $('tool').onchange = () => eng.setLength(parseFloat($('tool').value));
@@ -196,7 +219,7 @@ function stopAll() { // とめる: カメラを閉じ、計測を止める(記�
   stopped = true; running = false;
   if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
   if (isFile) v.pause();
-  camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = '<ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol>';
+  camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = HELP_HTML; prepPhase = 2; prepDoneAt = 0; $('prep').style.display = 'none'; applyBody();
 }
 $('coach').onclick = () => { coachMuteUntil = performance.now() + 30000; coachMsg = ''; $('coach').style.display = 'none'; };
 const KSLOGO = $('band').innerHTML; // ロゴ「ケンソク！」(案A 一太刀: 「！」が振り下ろした剣、点が剣先)
@@ -204,7 +227,7 @@ function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : '
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
 async function openCamera() {
   try {
-    voiceUnlock();
+    voiceUnlock(); stat.textContent = '';
     if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
     // まず高い画質(1280×720)で60コマを頼み、60が出なければ640×480に下げる(中山さん 2026-11-22「Bで」)。測るのは小さい画像なので、速さの精度は変わらない
     const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
@@ -235,8 +258,9 @@ function checkCamFps() { /* 露出は触らない(上の説明)。見張りと�
 
 function begin() {
   stopped = false; setGo(true);
-  $('help').style.display = 'none'; eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
+  $('help').style.display = 'none'; startPrep(); eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
+  applyBody();
 }
 
 // ---- 1コマごと ----
@@ -276,8 +300,7 @@ function coach(st, vis) {
   else if (now - coachShown.at < 5000) coachMsg = want;
   else if (now - coachShown.at > 25000) { coachShown = { msg: want, at: now }; coachMsg = want; }
   else coachMsg = '';
-  if (coachMsg && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 20000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
-  if (!coachMsg) coachSaid = '';
+  if (coachMsg && (coachRun.n >= 3 || no60) && performance.now() - coachSaidAt > 20000 && (coachMsg !== coachSaid || performance.now() - coachSaidAt > 60000)) { coachSaid = coachMsg; coachSaidAt = performance.now(); say(coachMsg); }
 }
 setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
@@ -293,11 +316,62 @@ setInterval(() => {
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
-  coach(eng.takeStats(), vis);
+  const stt = eng.takeStats();
+  if (prepPhase < 2) { prepTick(stt, vis); coachMsg = ''; } else { coach(stt, vis); prepRender(); }
   const cp0 = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
-  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${cp0.frameRate && cp0.frameRate.max ? `(最大${Math.round(cp0.frameRate.max)})` : ''}${isFile ? '' : `(${st.width || '?'}×${st.height || '?'})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  if (DEV) stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${cp0.frameRate && cp0.frameRate.max ? `(最大${Math.round(cp0.frameRate.max)})` : ''}${isFile ? '' : `(${st.width || '?'}×${st.height || '?'})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
+
+
+// ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
+// 条件がそろって2秒続いたら次へ進む。声は「次へ進むとき」と「同じ問題が3秒続いたとき」だけ(間違った案内で鬱陶しくならないように)。問題は同じ文を15秒あけて言う
+const PREP = [
+  { say: 'スマホを真横にセットしてください', msg: 'スマホを真横に立てかけて、体と剣先が枠に入るよう離れてください' },
+  { say: 'スマホOK。構えてください', msg: '竹刀を構えてください。剣先まで映れば次へ進みます' },
+  { say: 'OK。素振りをどうぞ', msg: '素振りをどうぞ' },
+];
+let prepPhaseAt = 0, prepSpoken = new Set(), prepPhase = 2, prepOk = 0, prepRun = { msg: '', n: 0 }, prepSaid = { msg: '', at: 0 }, prepDoneAt = 0, prepLast = { items: [], msg: '', warn: false };
+function applyBody() { document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : ''); resize(); }
+function prepRender(items, msg, warn) {
+  if (items) prepLast = { items, msg, warn };
+  const P = $('prep'), L = prepLast;
+  if (prepPhase >= 2 && (!prepDoneAt || performance.now() - prepDoneAt > 2500)) { P.style.display = 'none'; return; }
+  P.style.display = 'block';
+  P.querySelectorAll('.psteps li').forEach((li, i) => { li.className = i < prepPhase ? 'done' : i === prepPhase ? 'now' : ''; });
+  $('pCard').style.display = prepPhase < 2 ? 'block' : 'none'; $('pGuide').style.display = prepPhase < 2 ? 'block' : 'none';
+  if (prepPhase < 2) { $('pMain').textContent = L.msg; $('pCard').classList.toggle('warn', !!L.warn); $('pChk').innerHTML = L.items.map(([l, ok]) => `<li class="${ok ? 'ok' : ''}">${ok ? '✔' : '○'} ${l}</li>`).join(''); }
+}
+function startPrep() {
+  if (isFile) { prepPhase = 2; prepDoneAt = 0; $('prep').style.display = 'none'; applyBody(); return; }
+  prepPhase = 0; prepOk = 0; prepSpoken = new Set(); prepPhaseAt = performance.now(); prepRun = { msg: '', n: 0 }; prepSaid = { msg: '', at: performance.now() };
+  applyBody(); prepRender([], PREP[0].msg, false); say(PREP[0].say);
+}
+function prepNext(skip) {
+  prepOk = 0; prepRun = { msg: '', n: 0 }; prepSaid = { msg: '', at: performance.now() }; prepSpoken = new Set(); prepPhaseAt = performance.now();
+  prepPhase = skip ? 2 : prepPhase + 1;
+  if (prepPhase >= 2) { prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
+  if (!skip) say(PREP[prepPhase].say);
+  applyBody(); prepRender([], PREP[prepPhase].msg, false);
+}
+$('pSkip').onclick = () => prepNext(true);
+function prepTick(st, vis) {
+  if (!st || !st.n) return;
+  const r = (k) => (st[k] || 0) / st.n, luma = st.lumaN ? st.luma / st.lumaN : 128, cut = !!(st.seen && st.edge / st.seen > 0.3);
+  const c = { fps: camFps >= 25, bright: luma >= 45, still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut };
+  const sets = prepPhase === 0 ? [['fps', 'コマ数'], ['bright', '明るさ'], ['still', 'スマホが動かない'], ['person', '体が映る']] : [['person', '体が映る'], ['still', 'スマホが動かない'], ['sword', '剣先まで映る']];
+  const bad = sets.find(([k]) => !c[k]);
+  const ISS = { fps: [`コマ数が足りません(いま${camFps}コマ)。明るい場所か外カメで`, 'コマ数が足りません'], bright: ['暗いです。明るい場所に移ってください', '暗いです'], still: ['スマホが動いています。立てかけて固定してください', 'スマホが動いています'], person: ['体が映っていません。真横に立ち、少し離れてください', '体が映っていません'], sword: cut ? ['剣先が画面から出ています。もう少し離れてください', 'もう少し離れてください'] : ['竹刀が見つかりません。真横を向いて構えてください', '竹刀が見つかりません'] };
+  const iss = bad && performance.now() - prepPhaseAt > 3500 ? ISS[bad[0]] : null, key // 各段階の最初の3.5秒は、読み込み中の取り違えを出さない
+   = iss ? iss[0] : '';
+  prepRun = key === prepRun.msg ? { msg: key, n: prepRun.n + 1 } : { msg: key, n: 1 };
+  prepOk = bad ? 0 : prepOk + 1;
+  const now = performance.now();
+  if (iss && prepRun.n >= 3 && !prepSpoken.has(bad[0])) { prepSpoken.add(bad[0]); say(iss[1]); } // 同じ問題は、その段階で1回だけ(画面には出し続ける)
+  if (prepOk >= 2) { prepNext(false); return; }
+  const warn = !!(iss && prepRun.n >= 2);
+  prepRender(sets.map(([k, l]) => [l, c[k]]), warn ? iss[0] : PREP[prepPhase].msg, warn);
+}
 
 // ---- 表示 ----
 const downs = () => eng.swings.filter((s) => eng.isDown(s));
@@ -439,6 +513,7 @@ function say(text) {
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = 1.15; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
 }
 function speakNew() {
+  if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
   spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return; say(val(s).toFixed(1));
 }
@@ -449,13 +524,16 @@ const readLog = () => { try { return JSON.parse(localStorage.getItem(LOG_KEY) ||
 const writeLog = (a) => { try { localStorage.setItem(LOG_KEY, JSON.stringify(a.slice(-5000))); } catch (e) { /* 残せなくても測るのは続ける */ } };
 const showLogInfo = () => { $('logInfo').textContent = `保存した記録 ${readLog().length}本`; };
 let logged = new Set();
-function saveDowns() { // 振り下ろしと分かったものだけ(向きの判定が後で変わることがあるので、表示のたびに見直して足す)
+function saveDowns() {
+  if (prepPhase < 2) return; // 準備中の素振りは数えない
+  // 振り下ろしと分かったものだけ(向きの判定が後で変わることがあるので、表示のたびに見直して足す)
   if (isFile) return; const D = downs(), add = D.filter((s) => !logged.has(s)); if (!add.length) return;
   const a = readLog(), tool = $('tool').selectedOptions[0].textContent;
   for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2), m: 'hit60' }); } // m: 測り方(打つ瞬間=前60度)。3次の曲線を入れたら 'hit60c' にする。変えたら値を新しくする(記録の画面 lab/kensoku-record.html が見る)
   writeLog(a); showLogInfo();
 }
 setInterval(saveDowns, 1000);
+applyBody(); // 起動直後(まだ測っていない)も、映像の場所を大きくとる
 // 見た目の確認用: ?demo=12.3 で、測らずに表示だけ出す
 const DEMO = new URLSearchParams(location.search).get('demo');
 if (DEMO) { running = true; display = parseFloat(DEMO) || 12.3; $('help').style.display = 'none'; resize(); const fake = [11.2, 12.8, 10.9, 13.4, 14.6, 12.1, 13.1].map((x, i) => ({ v: x, mono: x * 0.7, hand: 3.1, sign: 1, t: i })); eng.swings = fake; eng.isDown = () => true; setInterval(() => { display = parseFloat(DEMO) || 12.3; draw(); }, 200); }
