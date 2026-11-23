@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja" data-lab>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<!-- 試作: カメラ60コマの診断(中山さん 2026-11-23「まだ60fpsでない」)。カメラの頼み方を順に試し、実際に出たコマ数を表にしてコピーできるようにする。
+     映像は端末の外に出さない(数字だけを画面に出す)。計測の出来事(GA4)は送らない -->
+<title>カメラ60コマの診断(MITORI 試作)</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; background: #0c1636; color: #fff; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 12px; }
+  h1 { font-size: 1.15rem; margin: 6px 0 8px; }
+  p { font-size: .9rem; line-height: 1.6; color: #c9d0e6; margin: 0 0 10px; }
+  button { font: inherit; font-weight: 800; font-size: 1.05rem; min-height: 54px; width: 100%; border-radius: 12px; border: 0; background: #fff; color: #0c1636; margin: 6px 0; }
+  button.sub { background: transparent; color: #fff; border: 2px solid #fff; }
+  video { width: 100%; max-height: 30vh; background: #000; object-fit: contain; display: block; }
+  #now { font-weight: 800; margin: 8px 0; min-height: 1.4em; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+  th, td { padding: 5px 3px; border-bottom: 1px solid rgba(255,255,255,.15); text-align: left; vertical-align: top; }
+  td.f { font-weight: 900; font-size: 1rem; }
+  td.ok { color: #7dff9a; } td.ng { color: #ff7a72; }
+  textarea { width: 100%; height: 110px; font-size: 11px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>カメラ60コマの診断</h1>
+  <p>カメラの頼み方を、自撮り・外カメで順に試して、実際に何コマ出たかを測ります(全部で約1分半)。スマホを置いて、いつも振る部屋の明るさのままにしてください。終わったら「コピー」を押してチャットに貼ってください。</p>
+  <button id="go">はじめる</button>
+  <div id="now"></div>
+  <video id="v" playsinline muted></video>
+  <table><thead><tr><th>カメラ・頼み方</th><th>コマ</th><th>実際の設定</th></tr></thead><tbody id="tb"></tbody></table>
+  <button id="copy" class="sub" style="display:none">コピー</button>
+  <textarea id="out" readonly style="display:none"></textarea>
+</div>
+<script>
+const $ = (id) => document.getElementById(id); const v = $('v');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const lines = []; let stream = null;
+const VGA = { width: { ideal: 640 }, height: { ideal: 480 } };
+// 試す頼み方。open = getUserMedia の video、steps = そのあと順に applyConstraints するもの(cap を見て作る)
+const PLANS = [
+  { id: 'A', name: '指定なし(60はできれば)', open: { frameRate: { ideal: 60 } }, steps: () => [] },
+  { id: 'B', name: '640×480・60ちょうど', open: { ...VGA, frameRate: { exact: 60 } }, steps: () => [] },
+  { id: 'C', name: 'B+露出は自動(continuous)', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('continuous') ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous' }] }] : null },
+  { id: 'D', name: 'C+ISO800', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.iso && c.iso.max && c.exposureMode && c.exposureMode.includes('continuous') ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous', iso: clamp(800, c.iso) }] }] : null },
+  { id: 'E', name: 'B+手動露出1/120・ISO800', open: { ...VGA, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('manual') && c.exposureTime ? [{ ...VGA, frameRate: { exact: 60 } }, { ...VGA, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'manual', exposureTime: clamp(83, c.exposureTime), ...(c.iso && c.iso.max ? { iso: clamp(800, c.iso) } : {}) }] }] : null },
+  { id: 'F', name: '1280×720・60ちょうど+continuous', open: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 } }, steps: (c) => c.exposureMode && c.exposureMode.includes('continuous') ? [{ width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 } }, { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { exact: 60 }, advanced: [{ exposureMode: 'continuous' }] }] : null },
+  { id: 'G', name: '60だけ(min60)', open: { frameRate: { min: 60 } }, steps: () => [] },
+];
+function clamp(x, r) { return Math.max(r.min || 0, Math.min(r.max || x, x)); }
+function stop() { if (stream) stream.getTracks().forEach((t) => t.stop()); stream = null; v.srcObject = null; }
+async function countFps(ms) { // 画面に出たコマ数(presentedFrames)で数える
+  return new Promise((res) => {
+    let first = null, last = null, t0 = null;
+    const tick = (now, md) => { if (first == null) { first = md.presentedFrames; t0 = now; } last = md.presentedFrames; if (now - t0 < ms) v.requestVideoFrameCallback(tick); else res(((last - first) * 1000) / (now - t0)); };
+    v.requestVideoFrameCallback(tick);
+  });
+}
+function luma() { try { const c = document.createElement('canvas'); c.width = 32; c.height = 18; const x = c.getContext('2d'); x.drawImage(v, 0, 0, 32, 18); const d = x.getImageData(0, 0, 32, 18).data; let s = 0; for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; return Math.round(s / (d.length / 4)); } catch (e) { return '?'; } }
+function row(cam, p, fps, info) {
+  const tr = document.createElement('tr'); const f = typeof fps === 'number' ? fps.toFixed(0) : fps;
+  tr.innerHTML = `<td>${cam} ${p.id} ${p.name}</td><td class="f ${typeof fps === 'number' ? (fps >= 55 ? 'ok' : 'ng') : 'ng'}">${f}</td><td>${info}</td>`; $('tb').appendChild(tr);
+  lines.push(`${cam}${p.id} ${f} | ${info}`);
+}
+async function runCam(facing, label) {
+  let caps = null;
+  for (const p of PLANS) {
+    $('now').textContent = `${label}: ${p.id} ${p.name} を試しています…`;
+    stop(); await sleep(400);
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { exact: facing }, ...p.open } }); }
+    catch (e) {
+      if (e.constraint !== 'facingMode') { row(label, p, '開けない', e.name + (e.constraint ? ' ' + e.constraint : '')); continue; }
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: facing, ...p.open } }); } // 向きの指定に未対応の端末用
+      catch (e2) { row(label, p, '開けない', e2.name + (e2.constraint ? ' ' + e2.constraint : '')); continue; }
+    }
+    v.srcObject = stream; await v.play(); const t = stream.getVideoTracks()[0];
+    const c = t.getCapabilities ? t.getCapabilities() : {};
+    if (!caps) { caps = c; lines.push(`${label}能力 fps〜${c.frameRate && c.frameRate.max} 露出${(c.exposureMode || []).join('/')} 露光${c.exposureTime ? c.exposureTime.min + '〜' + c.exposureTime.max : 'なし'} ISO${c.iso ? c.iso.min + '〜' + c.iso.max : 'なし'} 最大${c.width && c.width.max}×${c.height && c.height.max}`); }
+    const steps = p.steps(c);
+    if (steps == null) { row(label, p, '対象外', 'この端末はその指定に対応しない'); continue; }
+    let err = '';
+    for (const s of steps) { try { await t.applyConstraints(s); } catch (e) { err = ' 頼み失敗:' + e.name + (e.constraint ? ' ' + e.constraint : ''); } }
+    await sleep(1800); // 露出が落ち着くまで
+    const fps = await countFps(3000); const g = t.getSettings();
+    row(label, p, fps, `${g.width}×${g.height} 設定${g.frameRate ? Math.round(g.frameRate) : '?'} ${g.exposureMode || ''}${g.exposureTime ? ' 露光' + Math.round(g.exposureTime) : ''}${g.iso ? ' ISO' + g.iso : ''} 明るさ${luma()}${err}`);
+  }
+}
+$('go').onclick = async () => {
+  $('go').disabled = true; $('tb').innerHTML = ''; lines.length = 0;
+  lines.push(`診断 ${new Date().toLocaleString('ja-JP')} ${navigator.userAgent.replace(/^.*?\(([^)]*)\).*?(Chrome\/[\d.]+).*$/, '$1 $2')}`);
+  await runCam('user', '自撮り'); await runCam('environment', '外カメ'); stop();
+  $('now').textContent = 'おわりです。「コピー」を押してチャットに貼ってください。';
+  $('out').value = lines.join('\n'); $('out').style.display = 'block'; $('copy').style.display = 'block'; $('go').disabled = false; $('go').textContent = 'もう一度';
+};
+$('copy').onclick = async () => { try { await navigator.clipboard.writeText($('out').value); $('copy').textContent = 'コピーしました'; } catch (e) { $('out').select(); document.execCommand('copy'); $('copy').textContent = 'コピーしました'; } };
+</script>
+</body>
+</html>
