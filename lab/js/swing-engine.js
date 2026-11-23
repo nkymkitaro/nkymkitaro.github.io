@@ -19,7 +19,7 @@ export function isToolColor(r, g, b, mode) {
 
 export class SwingEngine {
   constructor({ lengthCm = 101.5, color = 'wood', width = 320 } = {}) {
-    this.W = width; this.H = 0; this.targetPx = width * Math.round(width * 9 / 16); this.lengthCm = lengthCm; this.color = color;
+    this.W = width; this.H = 0; this.targetPx = 30000; this.lengthCm = lengthCm; this.color = color; // targetPx: 処理する画素の数(約230×130)。5.8万では実機で1コマ28msかかり60コマに間に合わなかった。答え合わせで3万でも精度は同じ(2026-11-23)
     this.cv = document.createElement('canvas'); this.cx = this.cv.getContext('2d', { willReadFrequently: true });
     this.bg = null; this.frames = 0;
     this.samples = []; // { t, ang, len, edge, hand, ok }

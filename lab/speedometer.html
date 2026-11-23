@@ -225,9 +225,12 @@ const TIERS = [[1280, 720], [640, 480], [320, 240]]; // 画質の段。60コマ�
 let camTrack = null, camBase = null, isoLevel = 0, lowSec = 0, camFps = 0, lastPresented = null, tier = 0;
 async function tuneCamera(tr, startTier = 0) {
   camTrack = tr; lowSec = 0; tier = startTier;
-  if (startTier === 0) { // 開いたときから、露光時間を1/120秒に固定する(できる端末だけ)。画質を下げるときは、そのまま
-    const c0 = tr.getCapabilities ? tr.getCapabilities() : {};
-    expoManual = !!(c0.exposureMode && c0.exposureMode.includes('manual') && c0.exposureTime && c0.exposureTime.max); isoLevel = expoManual ? 2 : 0;
+  if (startTier === 0) {
+    // 露出は、まず「自動(continuous)をはっきり指定」(Pixel 9a の実測で60コマが出た、本体の「なめらか」と同じやり方)。足りなければISO→露光固定の順
+    expoManual = false; isoLevel = 0; EXPO_TIME = 83;
+    // 自撮りのカメラは、60コマを640×480でしか出せない(Pixel 9a の実測。2026-11-22 本体の診断)。最初からその段にする
+    const fm = (tr.getSettings ? tr.getSettings() : {}).facingMode || $('facing').value;
+    if (fm === 'user') tier = startTier = 1;
   }
   for (; tier < TIERS.length; tier++) { // 60ちょうどを頼める段を上から探す
     const base = { width: { ideal: TIERS[tier][0] }, height: { ideal: TIERS[tier][1] } };
@@ -266,7 +269,8 @@ function checkCamFps() { // 1秒ごと
   if (expoManual && lastLuma < 60 && caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); }
   const low = camFps > 0 && camFps < 55; if (!low) { lowSec = 0; return; }
   if (++lowSec < 2) return; lowSec = 0;
-  // 60コマを強く求める(中山さん「60fps強制」): ①露光時間を1/120秒に固定 ②(手動の露出ができない端末は)ISOを上げる ③それでも足りなければ画質の段を下げる
+  // 60コマを強く求める(中山さん「60fps強制」): ①自動露出のままISOを上げる ②露光時間を1/120秒に固定 ③画質の段を下げる ④露光1/240秒
+  if (!expoManual && caps.iso && caps.iso.max && isoLevel < 2) { isoLevel++; applyExposure(); return; }
   if (canManual && !expoManual) { expoManual = true; if (isoLevel < 2) isoLevel = 2; applyExposure(); return; }
   if (!canManual && caps.iso && caps.iso.max && isoLevel < ISO_STEPS.length - 1) { isoLevel++; applyExposure(); return; }
   if (tier < TIERS.length - 1) { tuneCamera(camTrack, tier + 1); return; }
@@ -325,14 +329,16 @@ setInterval(() => {
   if (running && !isFile && camFps > 0) {
     low60 = (camFps < 57 || frames < 55) ? low60 + 1 : 0; no60 = low60 >= 2;
     // 処理が重くて落としているときは、処理する画素を2割ずつ減らす(最小2万)
-    if (camFps >= 57 && frames < 55 && procMs > 12 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
+    // 1コマの処理が11msを超えたら(60コマに間に合わない)、カメラのコマ数に関係なく処理する画素を減らす
+    if (procMs > 11 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
   } else no60 = false;
   eng.blockCount = no60;
   const el = (performance.now() - poseT0) / 1000; poseFps = poseN / el; poseN = 0; poseT0 = performance.now();
   const st = camTrack && camTrack.getSettings ? camTrack.getSettings() : {};
   const vis = eng.allN ? Math.round(eng.seenN / eng.allN * 100) : 0; eng.seenN = 0; eng.allN = 0; visPct = vis;
   coach(eng.takeStats(), vis);
-  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${expoManual ? ` 露光1/${EXPO_TIME > 60 ? 120 : 240}` : ''}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
+  const cp0 = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
+  stat.textContent = `道具が見えた ${vis}% ・ カメラ ${camFps}コマ/秒${cp0.frameRate && cp0.frameRate.max ? `(最大${Math.round(cp0.frameRate.max)})` : ''}${isFile ? '' : `(${st.width || '?'}×${st.height || '?'}${expoManual ? ` 露光1/${EXPO_TIME > 60 ? 120 : 240}` : ''}${isoLevel ? ` ISO${ISO_STEPS[isoLevel]}` : ''})`} ・ 測った ${frames}コマ/秒 ・ 処理 ${procMs.toFixed(1)}ms ・ 骨格 ${poseFps.toFixed(1)}回/秒${poseLat.length ? `(遅れ${Math.round(poseLat.slice().sort((a, b) => a - b)[poseLat.length >> 1])}ms)` : ''} ・ 長さ ${eng.lenPx ? Math.round(eng.lenPx) + '画素' : '測定中'}`;
   frames = 0;
 }, 1000);
 
