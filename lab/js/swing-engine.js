@@ -32,7 +32,7 @@ export class SwingEngine {
     this.signStats = { 1: [], '-1': [] };
     this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; this.speedAt = 'hit'; this.hitDeg = 60; // 打つ瞬間 = 振り下ろしで竹刀が前60度まで下りた時刻の速さ(中山さん 2026-11-23)。'peak' で最速 // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
+    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; this.speedAt = 'hit'; this.hitDeg = 60; this.cubicOn = false; // cubicOn: 3次の曲線(試験台では1.16〜1.20倍に出すぎた。2026-11-24。直すまで切る) // 打つ瞬間 = 振り下ろしで竹刀が前60度まで下りた時刻の速さ(中山さん 2026-11-23)。'peak' で最速 // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -459,9 +459,31 @@ export class SwingEngine {
         if (pj2 >= 0 && S[i].t > pk.t - 0.2) { const e0 = el(A[pj2]), e1 = el(A[i]); if (e0 > this.hitDeg && e1 <= this.hitDeg && e0 < 150) { tHit = S[pj2].t + (S[i].t - S[pj2].t) * (e0 - this.hitDeg) / Math.max(1e-6, e0 - e1); break; } }
         pj2 = i;
       }
-      if (tHit != null) { let h = null; for (const c of cands) if (Math.abs(c.t - tHit) <= 0.04 && (!h || Math.abs(c.t - tHit) < Math.abs(h.t - tHit))) h = c; if (h) { best = Object.assign({}, h, { peak: best ? best.v : h.v, hitT: tHit }); } }
+      if (tHit != null) {
+        // 打つ瞬間の向きの変わり方を、前後のコマ(±3.5コマ)に3次の曲線を当てて、その時刻で直接求める(2026-11-24)
+        // 30コマの試算(緑ネット240コマの正解から間引き): 前後の平均を使う形は0.90倍、この形は1.00倍・ばらつき4%。60コマでも1.03倍・2%
+        let h = this.cubicOn ? this._cubicAt(S, A, tHit, dtm) : null;
+        if (h) cands.push(h);
+        else for (const c of cands) if (Math.abs(c.t - tHit) <= 0.04 && (!h || Math.abs(c.t - tHit) < Math.abs(h.t - tHit))) h = c;
+        if (h) { best = Object.assign({}, h, { peak: best ? best.v : h.v, hitT: tHit }); }
+      }
     }
     if (best && best.sign) { pk.pre = pk.v; Object.assign(pk, best, { recalc: true }); }
+  }
+  // 時刻 t0 の向きと回る速さを、前後 ±3.5コマの点に当てた3次の曲線(最小二乗)から出し、剣先・物打ち・手元の速さにする
+  _cubicAt(S, A, t0, dtm) {
+    const pts = []; for (let i = 0; i < S.length; i++) if (A[i] != null && Math.abs(S[i].t - t0) <= 3.5 * dtm) pts.push([S[i].t - t0, A[i]]);
+    if (pts.length < 4 || !pts.some((q) => q[0] < 0) || !pts.some((q) => q[0] > 0)) return null;
+    const M = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
+    for (const [x, y] of pts) { const xs = [1, x, x * x, x * x * x]; for (let r = 0; r < 4; r++) { for (let c = 0; c < 4; c++) M[r][c] += xs[r] * xs[c]; M[r][4] += xs[r] * y; } }
+    for (let c = 0; c < 4; c++) { // ガウスの消去法
+      let pv = c; for (let r = c + 1; r < 4; r++) if (Math.abs(M[r][c]) > Math.abs(M[pv][c])) pv = r;
+      if (Math.abs(M[pv][c]) < 1e-18) return null; [M[c], M[pv]] = [M[pv], M[c]];
+      for (let r = 0; r < 4; r++) if (r !== c) { const k = M[r][c] / M[c][c]; for (let q = c; q < 5; q++) M[r][q] -= k * M[c][q]; }
+    }
+    const a = M[0][4] / M[0][0], omega = M[1][4] / M[1][1], vh = this._handVel(t0), L = this.effM, Lm = Math.max(0.1, (this.lengthCm * 0.75 - 13) / 100);
+    const at = (r) => Math.min(30, Math.hypot(vh[0] - omega * r * Math.sin(a), vh[1] + omega * r * Math.cos(a)));
+    return { v: at(L), mono: at(Lm), hand: Math.min(30, Math.hypot(vh[0], vh[1])), t: t0, sign: Math.sign(omega), vx: vh[0] - omega * L * Math.sin(a), cubic: true };
   }
   // 振り下ろしの回る向き: 速いほうの向き(直近10本ずつの平均)
   downSign() {

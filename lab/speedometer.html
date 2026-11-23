@@ -258,7 +258,7 @@ function coach(st, vis) {
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (no60) m = `60コマが出ていません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(⚙)で`;
+  if (no60) m = `コマ数が足りません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(⚙)で`;
   else if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
   else if (r('noPerson') > 0.5) m = '体が映っていません。上半身と、振りかぶった剣先が入るように置いてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
@@ -283,7 +283,8 @@ setInterval(() => {
   camFps = lastPresented == null ? 0 : presentedNow - lastPresented; lastPresented = presentedNow; checkCamFps();
   // 60コマの見張り(中山さん 2026-11-23「必ず60fps。強制。絶対」): カメラが54コマ未満、または処理が追いつかず52コマ未満が2秒続いたら、数えるのを止めて知らせる
   if (running && !isFile && camFps > 0) {
-    low60 = (camFps < 54 || frames < 52) ? low60 + 1 : 0; // この端末がブラウザに出せる上限は56〜59コマ(2026-11-23 実機) no60 = low60 >= 2;
+    // 2026-11-24 中山さん「30でもよくね?」: 30コマでも、打つ瞬間を3次の曲線で求めれば1.00倍(試算)。止めるのは25コマ未満だけ
+    low60 = (camFps < 25 || frames < 24) ? low60 + 1 : 0; no60 = low60 >= 2;
     // 処理が重くて落としているときは、処理する画素を2割ずつ減らす(最小2万)
     // 1コマの処理が11msを超えたら(60コマに間に合わない)、カメラのコマ数に関係なく処理する画素を減らす
     if (procMs > 11 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
@@ -304,6 +305,10 @@ const downs = () => eng.swings.filter((s) => eng.isDown(s));
 const WHICH = { tip: '剣先', mono: '物打ち', hand: '手元' };
 const which = () => $('which').value;
 const val = (s) => (which() === 'tip' ? s.v : s[which()]) || 0;
+// 平均(2026-11-24 中山さん「30本以上振ろう」): 1本ごとのぶれは平均で薄まる(30コマで1本±4%、30本なら±1%弱)。外れに強いよう、上下1割を除く
+const SET_N = 30;
+function trimMean(a) { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1), c = b.slice(k, b.length - k); return c.reduce((x, y) => x + y, 0) / c.length; }
+const avgLabel = (n) => (n < SET_N ? `平均(あと${SET_N - n}本)` : `平均(${n}本)`);
 const cur = () => (eng.speeds ? eng.speeds[which()] : eng.speed) || 0;
 const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0).toFixed(1)} ・ 手元 ${(s.hand || 0).toFixed(1)}` : '';
 // 速さの色: 遅い=白 → 速い=赤(MITORIの赤 #d6231b)
@@ -314,7 +319,7 @@ function draw() {
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
   const cv = no60 ? 0 : cur(), nowMs = performance.now();
   if (cv >= display) { display = cv; holdUntil = nowMs + 300; } else if (nowMs > holdUntil) display = Math.max(cv, display - 0.3);
-  const D = downs(), last = eng.lastDown(), recent = D.slice(-10), avg = recent.length ? recent.reduce((a, s) => a + val(s), 0) / recent.length : 0, best = D.reduce((m, s) => Math.max(m, val(s)), 0);
+  const D = downs(), last = eng.lastDown(), avg = trimMean(D.map(val)), best = D.reduce((m, s) => Math.max(m, val(s)), 0);
   drawOverlay();
   const hint = coachMsg;
   const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
@@ -322,7 +327,7 @@ function draw() {
   $('bigTag').textContent = WHICH[which()];
   if (ui === 'a') drawGauge(last, avg, best, D.length);
   else if (ui === 'b') drawBars(last, avg, best, D);
-  else { $('bigN').innerHTML = (running ? display.toFixed(1) : '--') + '<span class="u">m/秒</span>'; $('bigN').style.color = colorOf(display); $('bigS').textContent = `今の1本 ${last ? val(last).toFixed(1) : '--'} ・ 平均 ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)\n${three(last)}`; }
+  else { $('bigN').innerHTML = (running ? display.toFixed(1) : '--') + '<span class="u">m/秒</span>'; $('bigN').style.color = colorOf(display); $('bigS').textContent = `今の1本 ${last ? val(last).toFixed(1) : '--'} ・ ${avgLabel(D.length)} ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)\n${three(last)}`; }
 }
 function vidRect() { // 映像が実際に映っている場所(object-fit: contain)
   const W = ov.width, H = ov.height, ar = (v.videoWidth || 16) / (v.videoHeight || 9); let w = W, h = W / ar; if (h > H) { h = H; w = H * ar; }
@@ -385,7 +390,7 @@ function drawGauge(last, avg, best, n) {
 }
 // 「今の1本・平均・最高」を横に3つ。y は見出しの高さ、R は大きさの基準
 function statsRow(g, cx, y, R, last, avg, best, n) {
-  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], ['平均', avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], [avgLabel(n), avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   items.forEach(([k, v2], i) => {
     const x = cx + (i - 1) * R * 0.78;
@@ -394,7 +399,7 @@ function statsRow(g, cx, y, R, last, avg, best, n) {
   });
 }
 function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
-  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], ['平均', avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], [avgLabel(n), avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const step = Math.min(H / 3.3, R * 0.62), y0 = H / 2 - step;
   items.forEach(([k, v2], i) => {
     const y = y0 + (i - 0.5) * step + step * 0.25;
@@ -447,7 +452,7 @@ let logged = new Set();
 function saveDowns() { // 振り下ろしと分かったものだけ(向きの判定が後で変わることがあるので、表示のたびに見直して足す)
   if (isFile) return; const D = downs(), add = D.filter((s) => !logged.has(s)); if (!add.length) return;
   const a = readLog(), tool = $('tool').selectedOptions[0].textContent;
-  for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2), m: 'hit60' }); } // m: 測り方(打つ瞬間=前60度)。変えたら値を新しくする(記録の画面 lab/kensoku-record.html が見る)
+  for (const s of add) { logged.add(s); a.push({ at: new Date().toISOString(), tool, tip: +s.v.toFixed(2), mono: +(s.mono || 0).toFixed(2), hand: +(s.hand || 0).toFixed(2), m: 'hit60' }); } // m: 測り方(打つ瞬間=前60度)。3次の曲線を入れたら 'hit60c' にする。変えたら値を新しくする(記録の画面 lab/kensoku-record.html が見る)
   writeLog(a); showLogInfo();
 }
 setInterval(saveDowns, 1000);
