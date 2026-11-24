@@ -564,9 +564,9 @@ function drawCount(n) {
 function draw() {
   // 針: 上がるときはすぐ、下がるときはゆっくり
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
-  const cv = no60 ? 0 : cur(), nowMs = performance.now();
-  if (cv >= display) { display = cv; holdUntil = nowMs + 300; } else if (nowMs > holdUntil) display = Math.max(cv, display - 0.3);
+  // メーターは「その時の平均」(中山さん 2026-11-24。1本ごとは30コマだとぶれるので、平均を主役に)。1本数えるたびに針がなめらかに動く
   const D = downs(), last = eng.lastDown(), avg = trimMean(D.map(val)), best = D.reduce((m, s) => Math.max(m, val(s)), 0);
+  display += ((D.length ? avg : 0) - display) * 0.12; if (Math.abs(display - avg) < 0.02 && D.length) display = avg;
   drawOverlay();
   const hint = coachMsg;
   const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
@@ -627,32 +627,32 @@ function drawGauge(last, avg, best, n) {
   const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(5, R * 0.05); g.lineCap = 'round';
   g.beginPath(); g.moveTo(cx + Math.cos(an) * R * 0.62, cy + Math.sin(an) * R * 0.62); g.lineTo(cx + Math.cos(an) * R * 0.97, cy + Math.sin(an) * R * 0.97); g.stroke();
   // 札「剣先」と大きい数字
-  const pbOn = performance.now() < pbUntil, tag = pbOn ? '自己ベスト' : WHICH[which()], ts = R * 0.13; g.textBaseline = 'alphabetic';
+  const pbOn = performance.now() < pbUntil, tag = pbOn ? '自己ベスト' : WHICH[which()] + 'の平均', ts = R * 0.13; g.textBaseline = 'alphabetic';
   g.font = `900 ${ts}px ${FONT}`; const tw = g.measureText(tag).width + ts * 1.2, th = ts * 1.45, tx = cx - tw / 2, ty = cy - R * 0.5;
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = pbOn ? '#d6231b' : '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = pbOn ? '#fff' : '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? fmtSw(display) : '--', cx, cy + R * 0.22);
+  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && n ? fmtAvg(display, n) : '--', cx, cy + R * 0.22);
   g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, cy + R * 0.42);
   if (wide) statsCol(g, W * 0.82, H, R, last, avg, best, n); else statsRow(g, cx, cy + R * 0.92, R, last, avg, best, n);
 }
 // 「今の1本・平均・最高」を横に3つ。y は見出しの高さ、R は大きさの基準
 function statsRow(g, cx, y, R, last, avg, best, n) {
-  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], [avgLabel(n), avg ? fmtAvg(avg, n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
+  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], ['本数', n ? String(n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   items.forEach(([k, v2], i) => {
     const x = cx + (i - 1) * R * 0.78;
     g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
-    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${i === 1 ? R * 0.34 : R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.28); // 主役は平均
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.28);
   });
 }
 function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
-  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], [avgLabel(n), avg ? fmtAvg(avg, n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
+  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], ['本数', n ? String(n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const step = Math.min(H / 3.3, R * 0.62), y0 = H / 2 - step;
   items.forEach(([k, v2], i) => {
     const y = y0 + (i - 0.5) * step + step * 0.25;
     g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
-    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${i === 1 ? R * 0.32 : R * 0.22}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.22}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
   });
 }
 // 数字: 上に大きい数字、まん中に「今の1本・平均・最高」、下に直近12本の棒
@@ -666,7 +666,7 @@ function drawBars(last, avg, best, D) {
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? fmtSw(display) : '--', cx, y);
+  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && D.length ? fmtAvg(display, D.length) : '--', cx, y);
   y += R * 0.17; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, y);
   y += R * 0.22; statsRow(g, cx, y, R, last, avg, best, D.length);
   if (last) { g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `500 ${R * 0.08}px ${FONT}`; g.fillText(three(last), cx, y + R * 0.38); }
@@ -705,12 +705,12 @@ function speakNew() {
   if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
   spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return;
-  const vv = val(s), now = performance.now(); display = Math.max(display, vv); holdUntil = now + 1800; // 確かな1本の数字を、2秒近く読めるように止める
-  let txt = fmtSw(vv), isPB = false; lastSwingAt = now;
-  if (pbBase >= 10 && vv > pbBest) { pbBest = vv; pbUntil = now + 3000; sessionPB = true; isPB = true; txt += '。自己ベストです'; }
+  const vv = val(s), now = performance.now();   let txt = '', isPB = false; lastSwingAt = now; // 声は時々(中山さん 2026-11-24): 5本ごとに平均、自己ベストと30本目は必ず
+  if (D.length % 5 === 0) txt = `${D.length}本、平均${fmtAvg(trimMean(D.map(val)), D.length)}`;
+  if (pbBase >= 10 && vv > pbBest) { pbBest = vv; pbUntil = now + 3000; sessionPB = true; isPB = true; txt = (txt ? txt + '。' : '') + `${fmtSw(vv)}、自己ベストです`; }
   showPop(vv, isPB); // 記録が10本以上あるときだけ(最初の数本で毎回ベストにならないように)
-  if (D.length === SET_N && !setSaid) { setSaid = true; txt += `。${SET_N}本、平均${fmtAvg(trimMean(D.map(val)), D.length)}です`; }
-  say(txt, true);
+  if (D.length === SET_N) setSaid = true; // 30本目は5本ごとの声に含まれる
+  if (txt) say(txt, true);
 }
 
 // ---- 記録(端末の中だけ。localStorage)。振り下ろしの1本ごとに、日時・道具・剣先・物打ち・手元を残す。書き出しはCSV ----
