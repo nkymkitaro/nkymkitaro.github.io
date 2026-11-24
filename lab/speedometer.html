@@ -123,6 +123,7 @@
   .dock { justify-content: center; }
   .go { flex: 1; max-width: 460px; }
   .help div div { text-wrap: balance; }
+  .savebtn { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 4; min-height: 52px; border-radius: 14px; border: 0; background: #fff; color: var(--n900); font-weight: 900; font-size: 1rem; display: none; cursor: pointer; }
   .flip { flex: none; min-width: 72px; min-height: 64px; border-radius: 18px; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-weight: 800; font-size: .72rem; cursor: pointer; padding: 0 8px; }
   .flip svg { width: 26px; height: 26px; }
   .go { max-width: 360px; }
@@ -150,6 +151,7 @@
     <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
     <h4>記録(この端末の中だけ)</h4>
     <div class="row"><a class="btn" href="kensoku-record.html" style="text-decoration:none">記録を見る</a><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
+    <h4>録画</h4><label>素振りの録画 <select id="recSel"><option value="on">する</option><option value="off">しない</option></select></label>
     <h4>案内の声</h4><label>声の種類<select id="voiceSel"></select></label>
     <span id="logInfo"></span>
   </div></details>
@@ -161,6 +163,7 @@
     <canvas id="ov"></canvas>
     <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
     <div class="prepov" id="prep"><ol class="psteps"><li><i>1</i>スマホをセット</li><li><i>2</i>構える</li><li><i>3</i>素振り</li></ol><div class="pguide" id="pGuide"><span>全身と剣先が、枠に入るように</span></div><div class="pcard" id="pCard"><div class="pmain" id="pMain"></div><ul class="pchk" id="pChk"></ul><button class="pskip" id="pSkip" type="button">準備をとばす ›</button></div></div>
+    <button class="savebtn" id="btnSave" type="button"></button>
     <div class="help" id="help"><ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol></div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
@@ -229,7 +232,7 @@ async function maybePose(t) {
 // ---- 入力 ----
 let stopped = false;
 function stopAll() { // とめる: カメラを閉じ、計測を止める(記録はそのまま)
-  stopped = true; running = false;
+  stopRec(); stopped = true; running = false;
   if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
   if (isFile) v.pause();
   camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = HELP_HTML; prepPhase = 2; prepDoneAt = 0; $('prep').style.display = 'none'; applyBody();
@@ -240,7 +243,7 @@ function setGo(on) { const b = $('btnCam'); b.textContent = on ? 'とめる' : '
 $('btnCam').onclick = () => { if (running) stopAll(); else openCamera(); };
 async function openCamera() {
   try {
-    voiceUnlock(); stat.textContent = '';
+    voiceUnlock(); stat.textContent = ''; discardRec();
     if (v.srcObject) v.srcObject.getTracks().forEach((tr) => tr.stop());
     // まず高い画質(1280×720)で60コマを頼み、60が出なければ640×480に下げる(中山さん 2026-11-22「Bで」)。測るのは小さい画像なので、速さの精度は変わらない
     const st = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: $('facing').value }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } } });
@@ -338,6 +341,37 @@ setInterval(() => {
 }, 1000);
 
 
+// ---- 録画(2026-11-24 中山さん「録画できてる方がよさそう」): 素振りの間(準備のあと〜とめるまで)カメラの映像を端末の中に録り、とめたあとに「録画を保存」で書き出す。外には送らない ----
+let rec = null, recChunks = [], recBytes = 0, recUrl = '', recT0 = 0, recDur = 0, recMime = '';
+const REC_MAX = 150e6; // 約5分(4Mbps)。超えたら録画だけ止める(測るのは続く)
+try { if (localStorage.getItem('mitori.speedo.rec') === 'off') $('recSel').value = 'off'; } catch (e) { /* そのまま */ }
+$('recSel').onchange = () => { try { localStorage.setItem('mitori.speedo.rec', $('recSel').value); } catch (e) { /* そのまま */ } };
+function pickMime() { if (typeof MediaRecorder === 'undefined') return null; for (const m of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* 次へ */ } } return ''; }
+function discardRec() { rec = null; recChunks = []; recBytes = 0; if (recUrl) { URL.revokeObjectURL(recUrl); recUrl = ''; } $('btnSave').style.display = 'none'; }
+function startRec() {
+  if (rec || isFile || $('recSel').value !== 'on' || !v.srcObject) return;
+  const m = pickMime(); if (m === null) return;
+  discardRec();
+  try { recMime = m; rec = new MediaRecorder(v.srcObject, m ? { mimeType: m, videoBitsPerSecond: 4e6 } : { videoBitsPerSecond: 4e6 }); } catch (e) { rec = null; return; }
+  const r = rec;
+  r.ondataavailable = (e) => { if (e.data && e.data.size) { recChunks.push(e.data); recBytes += e.data.size; if (recBytes > REC_MAX && r.state === 'recording') { try { r.stop(); } catch (x) { /* そのまま */ } } } };
+  r.onstop = () => { if (rec === r) rec = null; recDur = Math.round((performance.now() - recT0) / 1000); showSave(); };
+  recT0 = performance.now(); try { r.start(2000); } catch (e) { rec = null; }
+}
+function stopRec() { if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* そのまま */ } } }
+function showSave() {
+  if (!recChunks.length) return;
+  const blob = new Blob(recChunks, { type: (recMime || 'video/webm').split(';')[0] });
+  if (recUrl) URL.revokeObjectURL(recUrl); recUrl = URL.createObjectURL(blob);
+  $('btnSave').textContent = `録画を保存(${Math.floor(recDur / 60)}分${recDur % 60}秒・${Math.round(blob.size / 1e6)}MB)`;
+  if (!running) $('btnSave').style.display = 'block';
+}
+$('btnSave').onclick = () => {
+  if (!recUrl) return; const d = new Date(), z = (n) => String(n).padStart(2, '0'), a = document.createElement('a');
+  a.href = recUrl; a.download = `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`;
+  document.body.appendChild(a); a.click(); a.remove();
+};
+
 // ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
 // 条件がそろって2秒続いたら次へ進む。声は「次へ進むとき」と「同じ問題が3秒続いたとき」だけ(間違った案内で鬱陶しくならないように)。問題は同じ文を15秒あけて言う
 const PREP = [
@@ -364,7 +398,7 @@ function startPrep() {
 function prepNext(skip) {
   prepOk = 0; prepRun = { msg: '', n: 0 }; prepSaid = { msg: '', at: performance.now() }; prepSpoken = new Set(); prepPhaseAt = performance.now();
   prepPhase = skip ? 2 : prepPhase + 1;
-  if (prepPhase >= 2) { prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
+  if (prepPhase >= 2) { startRec(); prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
   if (!skip) say(PREP[prepPhase].say);
   applyBody(); prepRender([], PREP[prepPhase].msg, false);
 }
