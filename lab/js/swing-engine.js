@@ -268,6 +268,8 @@ export class SwingEngine {
         if (!jump) { ang = a; this.lastAng = a; this.lastAngT = t; R.fan = (R.fan || 0) + 1; fanUsed = true; }
       } else R.fanNo = (R.fanNo || 0) + 1;
     }
+    // 自前の剣先モデルの向き(外から1コマごとに this.aiAng に入れる。2026-11-25 試験)。あれば、色や扇の向きより優先する
+    if (this.aiAng != null) { let a = this.aiAng; if (this.lastAng != null) a = this.lastAng + Math.atan2(Math.sin(a - this.lastAng), Math.cos(a - this.lastAng)); ang = a; this.lastAng = a; this.lastAngT = t; fanUsed = false; this.rejects = 0; }
     let tipPt = null;
     if (ang != null) { const Lp = this.lenPx; tipPt = hand && Lp ? [hand[0] + Lp * Math.cos(ang), hand[1] + Lp * Math.sin(ang)] : (Math.cos(Math.atan2(p1[1] - p0[1], p1[0] - p0[0]) - ang) > 0 ? p1 : p0); }
     if (ang != null) ST.seen++; else if (shortNear) ST.short++;
