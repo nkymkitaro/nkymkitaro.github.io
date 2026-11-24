@@ -160,7 +160,7 @@
     <video id="v" playsinline muted></video>
     <canvas id="ov"></canvas>
     <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
-    <div class="prepov" id="prep"><ol class="psteps"><li><i>1</i>スマホをセット</li><li><i>2</i>構える</li><li><i>3</i>素振り</li></ol><div class="pguide" id="pGuide"><span>体と、振りかぶった剣先がこの枠に入る位置へ</span></div><div class="pcard" id="pCard"><div class="pmain" id="pMain"></div><ul class="pchk" id="pChk"></ul><button class="pskip" id="pSkip" type="button">準備をとばして測る ›</button></div></div>
+    <div class="prepov" id="prep"><ol class="psteps"><li><i>1</i>スマホをセット</li><li><i>2</i>構える</li><li><i>3</i>素振り</li></ol><div class="pguide" id="pGuide"><span>全身と剣先が、枠に入るように</span></div><div class="pcard" id="pCard"><div class="pmain" id="pMain"></div><ul class="pchk" id="pChk"></ul><button class="pskip" id="pSkip" type="button">準備をとばす ›</button></div></div>
     <div class="help" id="help"><ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol></div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
@@ -174,7 +174,7 @@
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
 const DEV = new URLSearchParams(location.search).has('dev'); // 開発用の数字の行は ?dev=1 のときだけ出す
-const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押すと<br><b>画面の案内</b>で準備できます</div></div>';
+const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押してください</div></div>';
 $('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
 const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
@@ -290,22 +290,22 @@ let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0, low60 = 0, no60 = false
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
-const COACH_VOICE = (m) => /コマ数/.test(m) ? 'コマ数が足りないようです。明るい場所だと助かります' : /動いて/.test(m) ? 'スマホが動いているようです。固定してくださいね' : /映っていません/.test(m) ? '体が映っていないようです。少し離れてみてください' : /暗/.test(m) ? '少し暗いようです。明るい場所だと助かります' : /出ています/.test(m) ? '剣先が切れているようです。もう少し離れてみてください' : /横に向けて/.test(m) ? '体を、真横に向けてみてください' : /色/.test(m) ? '道具の色を、設定で合わせてみてください' : /見えにくい|見つかりません/.test(m) ? '竹刀が見えにくいようです。真横から、剣先まで映してみてください' : /1秒\d+コマ/.test(m) ? 'このカメラは、コマ数が少なめです。外カメだと正確になります' : m;
+const COACH_VOICE = (m) => /足りません/.test(m) ? '映像が足りないようです。明るい場所へお願いします' : /固定/.test(m) ? 'スマホを固定してください' : /切れて/.test(m) ? '剣先が切れています。もう少し離れてください' : /離れて/.test(m) ? '体が映るように、離れてください' : /暗い/.test(m) ? '少し暗いようです。明るい場所へお願いします' : /1秒/.test(m) ? 'このカメラは映像が少なめです。外カメだと正確です' : /真横に向けて/.test(m) ? '体を真横に向けてください' : /色/.test(m) ? '設定で、色を合わせてください' : /見えにくい/.test(m) ? '竹刀を、真横から映してください' : m;
 function coach(st, vis) {
   if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (no60) m = `コマ数が足りません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(左下のボタン)で`;
-  else if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
-  else if (r('noPerson') > 0.5) m = '体が映っていません。上半身と、振りかぶった剣先が入るように置いてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
+  if (no60) m = `映像が足りません(いま${Math.min(camFps, frames)}コマ)。明るい場所へお願いします`;
+  else if (r('shaky') > 0.3) m = 'スマホを固定してください';
+  else if (r('noPerson') > 0.5) m = '体と剣先が入るよう、離れてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
-  else if (luma < 45) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
-  else if (camFps > 0 && camFps < 45) m = `このカメラは1秒${camFps}コマまでです。外カメ(左下のボタン)にすると、速さが正確になります`;
-  else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が画面から出ています。もう少し離れてください';
-  else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を横に向けてください。スマホに対して真横に立つと測れます';
-  else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '道具が見つかりません。⚙の「色」を道具の色に合わせてください';
-  else if (meas && vis < 30) m = '道具が見えにくいです。真横から、振りかぶった剣先まで入るように置いてください';
+  else if (luma < 45) m = '暗いようです。明るい場所へお願いします';
+  else if (camFps > 0 && camFps < 45) m = `このカメラは1秒${camFps}コマです。外カメだと正確です`;
+  else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が切れています。離れてください';
+  else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を真横に向けてください';
+  else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '⚙の「色」を道具に合わせてください';
+  else if (meas && vis < 30) m = '竹刀が見えにくいです。真横から映してください';
   coachRun = m === coachRun.msg ? { msg: m, n: coachRun.n + 1 } : { msg: m, n: 1 };
   // 出しっぱなしにしない(画面が見えなくなった。2026-11-22 実機): 1回に5秒だけ出し、同じ案内は20秒あけて出し直す。押すと30秒出さない
   const now = performance.now(), want = coachRun.n >= 2 || no60 ? m : '';
@@ -341,9 +341,9 @@ setInterval(() => {
 // ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
 // 条件がそろって2秒続いたら次へ進む。声は「次へ進むとき」と「同じ問題が3秒続いたとき」だけ(間違った案内で鬱陶しくならないように)。問題は同じ文を15秒あけて言う
 const PREP = [
-  { say: 'スマホを、真横に置いてくださいね', msg: 'スマホを真横に立てかけて、体と剣先が枠に入るよう離れてください' },
-  { say: 'スマホは大丈夫です。構えてください', msg: '竹刀を構えてください。剣先まで映れば次へ進みます' },
-  { say: 'はい、大丈夫です。素振りをどうぞ', msg: '素振りをどうぞ' },
+  { say: 'スマホを、真横に置いてください', msg: 'スマホを真横に置いてください' },
+  { say: 'では、構えてください', msg: '構えてください' },
+  { say: '準備できました。どうぞ', msg: 'どうぞ振ってください' },
 ];
 let prepPhaseAt = 0, prepSpoken = new Set(), prepPhase = 2, prepOk = 0, prepRun = { msg: '', n: 0 }, prepSaid = { msg: '', at: 0 }, prepDoneAt = 0, prepLast = { items: [], msg: '', warn: false };
 function applyBody() { document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : ''); resize(); }
@@ -373,9 +373,9 @@ function prepTick(st, vis) {
   if (!st || !st.n) return;
   const r = (k) => (st[k] || 0) / st.n, luma = st.lumaN ? st.luma / st.lumaN : 128, cut = !!(st.seen && st.edge / st.seen > 0.3);
   const c = { fps: camFps >= 25, bright: luma >= 45, still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut };
-  const sets = prepPhase === 0 ? [['fps', 'コマ数'], ['bright', '明るさ'], ['still', 'スマホが動かない'], ['person', '体が映る']] : [['person', '体が映る'], ['still', 'スマホが動かない'], ['sword', '剣先まで映る']];
+  const sets = prepPhase === 0 ? [['fps', '映像'], ['bright', '明るさ'], ['still', '固定'], ['person', '体']] : [['person', '体'], ['still', '固定'], ['sword', '剣先']];
   const bad = sets.find(([k]) => !c[k]);
-  const ISS = { fps: [`コマ数が足りません(いま${camFps}コマ)。明るい場所か外カメで`, 'コマ数が足りないようです。明るい場所で、お願いします'], bright: ['暗いです。明るい場所に移ってください', '少し暗いようです。明るい場所だと助かります'], still: ['スマホが動いています。立てかけて固定してください', 'スマホが動いているようです。固定してくださいね'], person: ['体が映っていません。真横に立ち、少し離れてください', '体が映っていないようです。少し離れてみてください'], sword: cut ? ['剣先が画面から出ています。もう少し離れてください', '剣先が切れているようです。もう少し離れてみてください'] : ['竹刀が見つかりません。真横を向いて構えてください', '竹刀が見つかりません。真横を向いて、構えてくださいね'] };
+  const ISS = { fps: ['映像が重いようです。明るい場所へお願いします', '映像が重いようです。明るい場所へお願いします'], bright: ['明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'], still: ['スマホを固定してください', 'スマホを固定してください'], person: ['体が映るよう、離れてください', '体が映るように、離れてください'], sword: cut ? ['もう少し離れてください', '剣先が切れています。もう少し離れてください'] : ['竹刀を構えてください', '竹刀を、構えてください'] };
   const iss = bad && performance.now() - prepPhaseAt > 3500 ? ISS[bad[0]] : null, key // 各段階の最初の3.5秒は、読み込み中の取り違えを出さない
    = iss ? iss[0] : '';
   prepRun = key === prepRun.msg ? { msg: key, n: prepRun.n + 1 } : { msg: key, n: 1 };
