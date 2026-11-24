@@ -539,7 +539,7 @@ let faceHist = [];
 const downs = () => eng.swings.filter((s) => eng.isDown(s));
 // 出す速さ(剣先・物打ち・手元)。1本の記録 s は、剣先 v・物打ち mono・手元 hand を持つ
 // 振り下ろし中の最大(打突の瞬間より少し前に来る)。打突の瞬間より小さくならないようにする
-const pkOf = (s) => { if (!s) return 0; const m = { tip: s.pv ?? s.pre ?? s.v, mono: s.pm ?? s.mono, hand: s.ph ?? s.hand }[which()]; return Math.max(m || 0, val(s)); };
+const pkOf = (s) => { if (!s) return 0; const m = { tip: s.pv ?? s.pre ?? s.v, mono: s.pm ?? s.mono, hand: s.ph ?? s.hand }[which()]; return Math.max(Math.min(m || 0, val(s) * 1.4), val(s)); }; // 打突の1.4倍までに抑える(骨格の遅れで23m/秒のような外れが出ることがあった)
 const WHICH = { tip: '剣先', mono: '物打ち', hand: '手元' };
 const which = () => $('which').value;
 const val = (s) => (which() === 'tip' ? s.v : s[which()]) || 0;
@@ -732,6 +732,7 @@ function showPop(vv, pb, pkv) { clearTimeout(popT); document.body.classList.add(
 function speakNew() {
   if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
+  if (s.at && performance.now() - s.at < 450) return; // 0.45秒待つ: 1本が2つの山に割れたとき、速いほうに替わってから出す(小さい山の数字を先に出していた)
   spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return;
   const vv = val(s), now = performance.now();   let txt = '', isPB = false; lastSwingAt = now; // 声は時々(中山さん 2026-11-24): 5本ごとに平均、自己ベストと30本目は必ず
   if (D.length % 5 === 0) txt = `${D.length}本、平均${fmtAvg(trimMean(D.map(val)), D.length)}、最高${fmtSw(D.reduce((m, x) => Math.max(m, pkOf(x)), 0))}`;

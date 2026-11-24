@@ -49,20 +49,23 @@ export class SwingEngine {
 
   // 測る範囲を決める。人の箱(骨格の画素)から: 人の高さが映像の45%未満なら、その人を中心に 横2.4倍・縦1.7倍(振りかぶった竹刀と打ち下ろしが入る)の範囲
   // 少し動いたくらいでは替えない(替えると背景・長さの学び直しで0.5秒ほど測れない)。人の箱が今の範囲の内側(余白1割)から出たときと、大きさが2割以上変わったときだけ替える
-  _updateRoi(box, videoW, videoH) {
+  _updateRoi(box, videoW, videoH, t) {
     const bx0 = box[0] / videoW, by0 = box[1] / videoH, bx1 = box[2] / videoW, by1 = box[3] / videoH, bh = by1 - by0;
-    let want = null;
-    if (bh < 0.45 && bh > 0.05) {
+    const cur = this.roi; let want = null;
+    // 入るのは人の高さが40%未満、出るのは58%以上(45%の境目で行き来して、毎秒8回ほど学び直しになり、本数が0になっていた。2026-11-24 30コマの動画で確認)
+    if (bh > 0.05 && (bh < 0.32 || (cur && bh < 0.45))) {
       const hh = Math.min(1, bh * 1.7), ww = Math.min(1, bh * 2.4 * videoH / videoW), cx = (bx0 + bx1) / 2;
       want = { x: Math.max(0, Math.min(1 - ww, cx - ww / 2)), y: Math.max(0, Math.min(1 - hh, by0 - bh * 0.6)), w: ww, h: hh };
     }
-    const cur = this.roi;
     if (!want && !cur) return;
+    if (this._roiT != null && t >= this._roiT && t - this._roiT < 3) return; // 替えるのは3秒に1回まで(替えるたびに背景と長さの学び直し)
     if (want && cur) {
-      const mx = cur.w * 0.1, my = cur.h * 0.1, inside = bx0 > cur.x + mx && bx1 < cur.x + cur.w - mx && by0 - bh * 0.4 > cur.y && by1 < cur.y + cur.h - my * 0.3;
+      const mx = -cur.w * 0.05, my = -cur.h * 0.05, // 箱が範囲から少しはみ出すまでは替えない(腕を振って箱が少し動くたびに替えて、その直後の1本を数え損ねていた)
+         E = 0.002, // 範囲が映像の端にぴったりのとき、その側は「内側」とみなす(足が画面の下に切れていると、毎回「はみ出た」と取り違えて学び直していた)
+        inside = (bx0 > cur.x + mx || cur.x < E) && (bx1 < cur.x + cur.w - mx || cur.x + cur.w > 1 - E) && (by0 - bh * 0.4 > cur.y || cur.y < E) && (by1 < cur.y + cur.h - my * 0.3 || cur.y + cur.h > 1 - E);
       if (inside && want.h / cur.h > 0.8 && want.h / cur.h < 1.25) return;
     }
-    this.setRoi(want);
+    this._roiT = t; this.setRoi(want);
   }
   setRoi(roi) {
     for (const pk of this.pending) { delete pk.pending; this._commit(pk); } // 決める前の1本は、そのまま決める
@@ -76,7 +79,7 @@ export class SwingEngine {
   addPose(t, kp, videoW, box, others) {
     if (!kp || !this.vw) return;
     const videoH = videoW * this.vh / this.vw;
-    if (box && this.roiOn) this._updateRoi(box, videoW, videoH);
+    if (box && this.roiOn) this._updateRoi(box, videoW, videoH, t);
     const R = this.roi || { x: 0, y: 0, w: 1, h: 1 }, W = this.W, H = this.H || Math.round(W * (R.h * this.vh) / (R.w * this.vw));
     const k = W / (R.w * videoW); // 骨格の画素 → 処理の画素(長さ)
     const tx = (x) => (x / videoW - R.x) / R.w * W, ty = (y) => (y / videoH - R.y) / R.h * H;
@@ -343,6 +346,19 @@ export class SwingEngine {
       dts.sort((x, y) => x - y); const med = dts[dts.length >> 1]; pk.dt = med || 0;
       if (dts.length >= 3 && med > 0.07) { this._rej('lowfps'); return; } } // 中央の間隔が0.07秒超(約14コマ未満)のときだけ、その1本を数えない
     if (this.blockCount) { this._rej('block'); return; } // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
+    // 1本の振り下ろしが、0.45秒以内の2つの山に割れたら、速いほうの1つだけ残す(2026-11-24 30コマの動画の答え合わせ)。
+    // 以前は0.15秒以内だけ。0.2〜0.3秒前の小さい山が先に1本と数えられ(速さも小さく出る)、本物の山は「振りかぶりなし」で捨てられるか、もう1本と数えられていた
+    if (pk.sign === this.downSign()) {
+      const prev = this.pending.concat(this.swings).filter((q) => q.sign === pk.sign && Math.abs(pk.t - q.t) < 0.45).pop();
+      if (prev) {
+        if (pk.v > prev.v) {
+          if (this.recalcOn) this._recalc(pk);
+          const arr = this.signStats[prev.sign], j = arr.lastIndexOf(prev.v); if (j >= 0) arr[j] = pk.v;
+          const pend = prev.pending; Object.assign(prev, pk); if (pend) prev.pending = true; else delete prev.pending;
+        }
+        return;
+      }
+    }
     // 面だけ(中山さん 2026-11-23「今は面だけ」): 振り下ろしの山は、直前2秒以内に振りかぶっていたときだけ1本と数える。数えたら振りかぶりを使い切る
     // (振りかぶりを見ずに速さの山だけで数えていて、向きの一瞬の飛びや、1本が割れた山を数えていた)
     if (this.menOnly) {
