@@ -123,6 +123,10 @@
   .dock { justify-content: center; }
   .go { flex: 1; max-width: 460px; }
   .help div div { text-wrap: balance; }
+  .flip { flex: none; min-width: 72px; min-height: 64px; border-radius: 18px; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-weight: 800; font-size: .72rem; cursor: pointer; padding: 0 8px; }
+  .flip svg { width: 26px; height: 26px; }
+  .go { max-width: 360px; }
+  @media (orientation: landscape) { .flip { min-height: 52px; min-width: 64px; } }
 </style>
 </head>
 <body class="ui-a">
@@ -163,6 +167,7 @@
   <div id="coach" role="status" aria-live="polite"></div>
 </main>
 <footer class="dock">
+  <button class="flip" id="btnFlip" type="button" aria-label="カメラを切り替える"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><path d="M9.5 13.5a2.8 2.8 0 0 1 5 -1.2M14.5 15.5a2.8 2.8 0 0 1-5 1.2"/></svg><span id="flipTxt">インカメ</span></button>
   <button class="go" id="btnCam" type="button">はじめる</button>
 </footer>
 <script type="module">
@@ -183,7 +188,11 @@ document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
 });
 $('tool').onchange = () => eng.setLength(parseFloat($('tool').value));
 $('col').onchange = () => eng.setColor($('col').value);
-$('facing').onchange = () => { if (!isFile && v.srcObject) openCamera(); }; // 開いているときは、すぐ切り替える
+// カメラの切り替え(2026-11-24 中山さん「外カメラも簡単に使えるように」): はじめるの隣のボタンで、インカメ⇄外カメ。選んだカメラは覚える
+try { const f = localStorage.getItem('mitori.speedo.facing'); if (f === 'user' || f === 'environment') $('facing').value = f; } catch (e) { /* そのまま */ }
+const showFlip = () => { $('flipTxt').textContent = $('facing').value === 'environment' ? '外カメ' : 'インカメ'; }; showFlip();
+$('btnFlip').onclick = () => { $('facing').value = $('facing').value === 'environment' ? 'user' : 'environment'; $('facing').onchange(); };
+$('facing').onchange = () => { showFlip(); try { localStorage.setItem('mitori.speedo.facing', $('facing').value); } catch (e) { /* そのまま */ } if (!isFile && v.srcObject) openCamera(); }; // 開いているときは、すぐ切り替える
 $('pose').onchange = () => { eng.needPerson = $('pose').value === 'on'; };
 $('rate').onchange = () => { v.playbackRate = parseFloat($('rate').value); };
 $('btnReset').onclick = () => { eng.swings = []; eng.signStats = { 1: [], '-1': [] }; }; // 画面の表示だけ。保存した記録は消さない
@@ -287,12 +296,12 @@ function coach(st, vis) {
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (no60) m = `コマ数が足りません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(⚙)で`;
+  if (no60) m = `コマ数が足りません(いま${Math.min(camFps, frames)}コマ)。出るまで測りません。明るい場所か、外カメ(左下のボタン)で`;
   else if (r('shaky') > 0.3) m = 'スマホが動いています。立てかけるか、三脚で固定してください';
   else if (r('noPerson') > 0.5) m = '体が映っていません。上半身と、振りかぶった剣先が入るように置いてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
   else if (luma < 45) m = '暗くて速さが正しく出ません。明るい場所で振ってください';
-  else if (camFps > 0 && camFps < 45) m = `このカメラは1秒${camFps}コマまでです。外カメ(⚙)にすると、速さが正確になります`;
+  else if (camFps > 0 && camFps < 45) m = `このカメラは1秒${camFps}コマまでです。外カメ(左下のボタン)にすると、速さが正確になります`;
   else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が画面から出ています。もう少し離れてください';
   else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を横に向けてください。スマホに対して真横に立つと測れます';
   else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '道具が見つかりません。⚙の「色」を道具の色に合わせてください';
