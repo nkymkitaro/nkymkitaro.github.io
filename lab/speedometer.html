@@ -30,6 +30,11 @@
   .ib { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; list-style: none; }
   .ib svg { width: 24px; height: 24px; }
   .ib.off { opacity: .45; }
+  .savebar { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 4; display: none; gap: 8px; }
+  .savebar .savebtn { position: static; display: block !important; flex: 1; }
+  .savebar .share { flex: none; width: 34%; background: var(--red); color: #fff; }
+  .savebar:has(.share:not([style*="none"])) #btnSave { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.6); } /* シェアがあるときは、シェアを主役に */
+  @media (orientation: landscape) { .savebar { right: calc(var(--rc) + 16px); } }
   details.set { position: relative; }
   details.set[open] { z-index: 40; } .top:has(details[open]) { z-index: 40 !important; } /* 設定はいちばん上に(横向きで下のボタンに隠れていた) */
   details.set .setp { max-height: calc(100dvh - 72px) !important; overscroll-behavior: contain; }
@@ -204,7 +209,7 @@
     <canvas id="ov"></canvas>
     <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
     <div class="prepov" id="prep"><div class="pmsg" id="pMain"></div><svg class="ghost" id="pGhost" viewBox="0 0 120 200" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="52" cy="26" r="13"/><path d="M52 40v62M52 102l-12 46-6 40M52 102l14 44 10 42M52 54l22 22 14-4"/><path class="gs" d="M84 74 116 8"/></g></svg><button class="pskip" id="pSkip" type="button">すぐはじめる</button></div><div class="pop" id="pop"><i id="popTag"></i><b id="popN"></b></div>
-    <button class="savebtn" id="btnSave" type="button"></button>
+    <div class="savebar" id="saveBar"><button class="savebtn" id="btnSave" type="button"></button><button class="savebtn share" id="btnShare" type="button">シェア</button></div>
     <div class="help" id="help"><ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol></div>
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
@@ -404,7 +409,7 @@ const REC_MAX = 150e6; // 約5分(4Mbps)。超えたら録画だけ止める(測
 try { if (localStorage.getItem('mitori.speedo.rec') === 'off') $('recSel').value = 'off'; } catch (e) { /* そのまま */ }
 $('recSel').onchange = () => { try { localStorage.setItem('mitori.speedo.rec', $('recSel').value); } catch (e) { /* そのまま */ } };
 function pickMime() { if (typeof MediaRecorder === 'undefined') return null; for (const m of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) { try { if (MediaRecorder.isTypeSupported(m)) return m; } catch (e) { /* 次へ */ } } return ''; }
-function discardRec() { rec = null; recChunks = []; recBytes = 0; if (recUrl) { URL.revokeObjectURL(recUrl); recUrl = ''; } $('btnSave').style.display = 'none'; }
+function discardRec() { rec = null; recChunks = []; recBytes = 0; if (recUrl) { URL.revokeObjectURL(recUrl); recUrl = ''; } $('saveBar').style.display = 'none'; }
 function startRec() {
   if (rec || isFile || $('recSel').value !== 'on' || !v.srcObject) return;
   const m = pickMime(); if (m === null) return;
@@ -421,8 +426,15 @@ function showSave() {
   const blob = new Blob(recChunks, { type: (recMime || 'video/webm').split(';')[0] });
   if (recUrl) URL.revokeObjectURL(recUrl); recUrl = URL.createObjectURL(blob);
   $('btnSave').textContent = `録画を保存(${Math.floor(recDur / 60)}分${recDur % 60}秒・${blob.size < 1e6 ? '1MB未満' : Math.round(blob.size / 1e6) + 'MB'})`;
-  if (!running) $('btnSave').style.display = 'block';
+  recFile = new File([blob], recName(), { type: blob.type });
+  const canShare = !!(navigator.canShare && (() => { try { return navigator.canShare({ files: [recFile] }); } catch (e) { return false; } })());
+  $('btnShare').style.display = canShare ? '' : 'none'; $('btnSave').textContent = canShare ? `保存(${Math.floor(recDur / 60)}:${String(recDur % 60).padStart(2, '0')})` : $('btnSave').textContent;
+  if (!running) $('saveBar').style.display = 'flex';
 }
+let recFile = null;
+function recName() { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`; }
+// シェア(2026-11-24 TikTok世代): 端末のシェア画面に、録画をそのまま渡す。結果の数字を一言そえる
+$('btnShare').onclick = async () => { if (!recFile) return; const D = downs(), b = D.reduce((m, x) => Math.max(m, val(x)), 0); try { await navigator.share({ files: [recFile], text: D.length ? `ケンソク！ ${WHICH[which()]} 最高 ${b.toFixed(1)} m/秒(${D.length}本)` : 'ケンソク！' }); } catch (e) { /* 閉じただけ */ } };
 $('btnSave').onclick = () => {
   if (!recUrl) return; const d = new Date(), z = (n) => String(n).padStart(2, '0'), a = document.createElement('a');
   a.href = recUrl; a.download = `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`;
@@ -457,7 +469,7 @@ addEventListener('resize', fitVideo);
 function prepRender(items, msg, warn) {
   if (items) prepLast = { items, msg, warn };
   const P = $('prep'), L = prepLast;
-  if (prepPhase >= 2 && (!prepDoneAt || performance.now() - prepDoneAt > 1600)) { P.style.display = 'none'; P.classList.remove('ok'); document.body.classList.remove('ready'); return; }
+  if (prepPhase >= 2 && (!prepDoneAt || performance.now() - prepDoneAt > 1400)) { P.style.display = 'none'; P.classList.remove('ok'); document.body.classList.remove('ready'); return; }
   P.style.display = 'block'; P.classList.toggle('ok', prepPhase >= 2 && !!prepDoneAt && prepOkShow); document.body.classList.toggle('ready', prepPhase >= 2 && prepOkShow);
   layoutGuide();
   const m = prepPhase >= 2 ? (prepOkShow ? PREP[2].msg : '') : L.msg; $('pMain').textContent = m; $('pMain').style.display = m ? '' : 'none';
@@ -474,7 +486,7 @@ function startPrep() {
 }
 function prepNext(skip) {
   prepOk = 0; prepRun = { msg: '', n: 0 }; prepSaid = { msg: '', at: performance.now() }; prepSpoken = new Set(); prepPhaseAt = performance.now();
-  prepPhase = 2; prepOkShow = !skip; if (!skip) chime(); // 1段階にまとめた(置く・離れる・構えるを一言で)
+  prepPhase = 2; prepOkShow = !skip; if (!skip) { chime(); setTimeout(() => prepRender(), 1450); } // 1段階にまとめた(置く・離れる・構えるを一言で)
   if (prepPhase >= 2) { startRec(); loadPB(); sessionPB = false; setSaid = false; prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
   if (!skip) setTimeout(() => say(PREP[2].say), 350);
   applyBody(); prepRender([], PREP[prepPhase].msg, false);
@@ -654,7 +666,7 @@ function say(text, fast) { // 案内は、やさしくゆっくり(2026-11-24 �
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; u.rate = fast ? 1.15 : 0.8; u.pitch = fast ? 1 : 1.1; const vo = pickVoice(); if (vo) u.voice = vo; speechSynthesis.speak(u); } catch (e) { /* そのまま */ }
 }
 let lastSwingAt = 0;
-if (DEV) window.__ks = { prepNext: (k) => prepNext(k), showPop: (v2, pb) => showPop(v2, pb) }; // 見た目の確認用(?dev のときだけ)
+if (DEV) window.__ks = { eng, prepNext: (k) => prepNext(k), showPop: (v2, pb) => showPop(v2, pb) }; // 見た目の確認用(?dev のときだけ)
 let popT = 0;
 function showPop(vv, pb) { clearTimeout(popT); document.body.classList.add('popping'); popT = setTimeout(() => document.body.classList.remove('popping'), 1300); const p = $('pop'); p.classList.remove('on', 'pb'); void p.offsetWidth; $('popN').textContent = vv.toFixed(1); $('popN').style.color = colorOf(vv); $('popTag').textContent = pb ? '自己ベスト！' : WHICH[which()]; p.classList.toggle('pb', pb); p.classList.add('on'); }
 function speakNew() {
