@@ -31,6 +31,11 @@
   .ib svg { width: 24px; height: 24px; }
   .ib.off { opacity: .45; }
   details.set { position: relative; }
+  details.set[open] { z-index: 40; } .top:has(details[open]) { z-index: 40 !important; } /* 設定はいちばん上に(横向きで下のボタンに隠れていた) */
+  details.set .setp { max-height: calc(100dvh - 72px) !important; overscroll-behavior: contain; }
+  /* 押したら必ず返事をする: 短い一言を画面の真ん中に */
+  .toast { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 50; background: rgba(7,13,34,.9); color: #fff; font-weight: 900; font-size: 1.05rem; padding: 12px 22px; border-radius: 999px; pointer-events: none; opacity: 0; transition: opacity .2s; white-space: nowrap; }
+  .toast.on { opacity: 1; }
   details.set summary::-webkit-details-marker { display: none; }
   details.set .setp { position: absolute; z-index: 20; top: 56px; right: 0; width: min(86vw, 340px); max-height: 70vh; overflow: auto; background: var(--n900); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
   .setp h4 { margin: 4px 0 0; font-size: .8rem; color: var(--soft); font-weight: 800; }
@@ -204,6 +209,7 @@
   </div>
   <div class="view"><canvas id="gauge"></canvas></div>
   <div id="coach" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </main>
 <footer class="dock">
   <button class="flip" id="btnFlip" type="button" aria-label="カメラを切り替える"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><path d="M9.5 13.5a2.8 2.8 0 0 1 5 -1.2M14.5 15.5a2.8 2.8 0 0 1-5 1.2"/></svg><span id="flipTxt">インカメ</span></button>
@@ -230,7 +236,8 @@ $('col').onchange = () => eng.setColor($('col').value);
 // カメラの切り替え(2026-11-24 中山さん「外カメラも簡単に使えるように」): はじめるの隣のボタンで、インカメ⇄外カメ。選んだカメラは覚える
 try { const f = localStorage.getItem('mitori.speedo.facing'); if (f === 'user' || f === 'environment') $('facing').value = f; } catch (e) { /* そのまま */ }
 const showFlip = () => { $('flipTxt').textContent = $('facing').value === 'environment' ? '外カメ' : 'インカメ'; }; showFlip();
-$('btnFlip').onclick = () => { $('facing').value = $('facing').value === 'environment' ? 'user' : 'environment'; $('facing').onchange(); };
+let toastT = 0; function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.remove('on'), 1400); }
+$('btnFlip').onclick = () => { $('facing').value = $('facing').value === 'environment' ? 'user' : 'environment'; $('facing').onchange(); toast($('facing').value === 'environment' ? '外カメラにしました' : 'インカメラにしました'); };
 $('facing').onchange = () => { showFlip(); try { localStorage.setItem('mitori.speedo.facing', $('facing').value); } catch (e) { /* そのまま */ } if (!isFile && v.srcObject) openCamera(); }; // 開いているときは、すぐ切り替える
 $('pose').onchange = () => { eng.needPerson = $('pose').value === 'on'; };
 $('rate').onchange = () => { v.playbackRate = parseFloat($('rate').value); };
@@ -419,7 +426,7 @@ function showSave() {
 $('btnSave').onclick = () => {
   if (!recUrl) return; const d = new Date(), z = (n) => String(n).padStart(2, '0'), a = document.createElement('a');
   a.href = recUrl; a.download = `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`;
-  document.body.appendChild(a); a.click(); a.remove();
+  document.body.appendChild(a); a.click(); a.remove(); toast('保存しました');
 };
 
 // ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
@@ -439,6 +446,7 @@ function layoutGuide() {
   let x = 0, y = 0, w = W, h = H;
   if (vw && vh) { const sc = (v.style.objectFit === 'cover' ? Math.max : Math.min)(st.width / vw, st.height / vh), cw = vw * sc, ch = vh * sc; x = (getComputedStyle(v).objectPosition.startsWith('0%') ? 0 : (st.width - cw) / 2) - (bx.left - st.left); y = (st.height - ch) / 2 - (bx.top - st.top); w = cw; h = ch; }
   const l = Math.max(x, 0), r = Math.min(x + w, W), t = Math.max(y, 0), b = Math.min(y + h, H);
+  g.style.visibility = vw && vh ? 'visible' : 'hidden'; // カメラの切り替え中(映像の大きさが0)は出さない
   g.style.left = (l + r) / 2 + 'px'; g.style.top = (t + b) / 2 + 'px'; g.style.height = (b - t) * 0.64 + 'px';
   $('pMain').style.left = (l + r) / 2 + 'px'; $('pSkip').style.left = (l + r) / 2 + 'px';
 }
@@ -471,7 +479,7 @@ function prepNext(skip) {
   if (!skip) setTimeout(() => say(PREP[2].say), 350);
   applyBody(); prepRender([], PREP[prepPhase].msg, false);
 }
-$('pSkip').onclick = () => prepNext(true);
+$('pSkip').onclick = () => { prepNext(true); prepDoneAt = 0; prepRender(); }; // すぐ消す(人の影がメーターに重なって残っていた)
 // 全身が映っているか(2026-11-24 中山さんの実機: 顔のアップで「体」に✔が付いた)。腰と膝まで映り、胴(肩〜腰)が画面の高さの6〜30%のときだけ通す
 let bodyHist = []; // 膝が一瞬見えなくなる(竹刀を上げたとき)ので、直近3秒のうち1回でも全身が見えていればよい
 function bodyCheck() { const b = eng.bodyInfo, now = !!b && b.hips && b.knees && b.torsoFrac != null && b.torsoFrac >= 0.06 && b.torsoFrac <= 0.3; bodyHist.push(now); if (bodyHist.length > 3) bodyHist.shift(); return { body: bodyHist.some(Boolean) && !!b && b.torsoFrac != null && b.torsoFrac <= 0.3 }; }
@@ -630,7 +638,7 @@ let voiceOn = true, spoken = new Set(), pbBest = 0, pbBase = 0, pbUntil = 0, ses
 function loadPB() { const tool = $('tool').selectedOptions[0].textContent, k = which(), a = readLog().filter((r) => r.m && r.tool === tool); pbBase = a.length; pbBest = a.reduce((m, r) => Math.max(m, r[k] || 0), 0); }
 try { voiceOn = localStorage.getItem('mitori.speedo.voice') !== '0'; } catch (e) { /* そのまま */ }
 const vb = $('btnVoice'); const showVoice = () => { vb.classList.toggle('off', !voiceOn); vb.setAttribute('aria-pressed', String(voiceOn)); }; showVoice();
-vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
+vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); toast(voiceOn ? '声: オン' : '声: オフ'); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
 function voiceUnlock() { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch (e) { /* 音が出ない端末 */ } try { if (voiceOn) speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch (e) { /* 読み上げに対応しない端末 */ } } // 押した操作の中で一度呼ぶ(端末によっては、これがないと話さない)
 // 声の選び方(2026-11-24 中山さん「ゆっくりめのお姉さんボイス」): 日本語の声のうち、女性の声として知られる名前を先に選ぶ。合わなければ⚙の「声の種類」で変えられる(選んだ声は覚える)
 const FEMALE = /kyoko|o-?ren|haruka|ayumi|nanami|sayaka|mizuki|female|女性|ja-jp-x-(htm|jab)/i;
