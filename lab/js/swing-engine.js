@@ -338,19 +338,20 @@ export class SwingEngine {
   // (骨格は1秒10回ほどで、遅れて届く。区切りの時点の手元は古く、速い振りでは向きがずれて約1.2〜1.3倍に出すぎていた。2026-11-22 試験台で、遅れ0なら1.1倍以下)
   _finishPeak() {
     const pk = this._peak; this._peak = null; if (!pk) return;
-    if (this.blockCount) return; // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
+    if (this.blockCount) { this._rej('block'); return; } // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
     // 面だけ(中山さん 2026-11-23「今は面だけ」): 振り下ろしの山は、直前2秒以内に振りかぶっていたときだけ1本と数える。数えたら振りかぶりを使い切る
     // (振りかぶりを見ずに速さの山だけで数えていて、向きの一瞬の飛びや、1本が割れた山を数えていた)
     if (this.menOnly) {
       const f = this.front(), ds = this.downSign();
       if (f && pk.sign === ds) {
-        if (!(this.raisedAt != null && pk.t - this.raisedAt < this.raiseWin)) { const W2 = this.why || (this.why = {}); W2.noRaise = (W2.noRaise || 0) + 1; return; }
+        if (!(this.raisedAt != null && pk.t - this.raisedAt < this.raiseWin)) { const W2 = this.why || (this.why = {}); W2.noRaise = (W2.noRaise || 0) + 1; this._rej('noRaise'); return; }
         this.raisedAt = null;
       }
     }
     if (this.recalcOn) this._recalc(pk); // その場の手元で一度計算(すぐ出す数字)。後から届いた骨格で、もう一度計算し直す
     pk.pending = true; this.pending.push(pk);
   }
+  _rej(why) { this.lastRej = { at: performance.now(), why }; }
   // 向いている側: +1 = 右、-1 = 左、0 = まだ分からない(鼻と両肩から)
   front() { const fv = this.faceVotes, fs = fv.reduce((a, b) => a + b, 0); return fv.length >= 8 && Math.abs(fs) >= fv.length * 0.6 ? Math.sign(fs) : 0; }
   // 今の1本(表示用): 決める前の1本(その場の計算)があれば、それを先に出す。決まったら、計算し直した値に替わる
@@ -374,6 +375,7 @@ export class SwingEngine {
       if (pk.v > last.v) { const arr = this.signStats[last.sign]; const j = arr.lastIndexOf(last.v); if (j >= 0) arr[j] = pk.v; Object.assign(last, pk); }
       return;
     }
+    if (pk.v < 4 && pk.sign === this.downSign() && this.frames > 30) this._rej('slow'); // 数えなかった理由を画面に出す用
     if (pk.v >= 4 && this.frames > 30) { this.signStats[pk.sign].push(pk.v); this.swings.push(pk); if (this.swings.length > 200) this.swings.shift(); if (this.onSwing) this.onSwing(pk); }
   }
   // 動く画素(x,y の並び)から、手元を中心にした輪の中の向きの山を出す。山がはっきりしなければ null

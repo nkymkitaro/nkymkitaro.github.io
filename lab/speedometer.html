@@ -35,6 +35,12 @@
   .savebar .share { flex: none; width: 34%; background: var(--red); color: #fff; }
   .savebar:has(.share:not([style*="none"])) #btnSave { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.6); } /* シェアがあるときは、シェアを主役に */
   @media (orientation: landscape) { .savebar { right: calc(var(--rc) + 16px); } }
+  /* 数えた本数を、いつも見える所に(2026-11-24 実機「カウントされてるのかわからない」)。数えなかった振りは、理由を一言 */
+  .cnt { position: absolute; left: 12px; top: 12px; z-index: 4; display: none; align-items: baseline; gap: 4px; background: rgba(7,13,34,.72); border-radius: 14px; padding: 4px 14px 6px; pointer-events: none; font-weight: 900; }
+  .cnt b { font-size: 2.6rem; line-height: 1; font-variant-numeric: tabular-nums; } .cnt span { font-size: 1rem; }
+  .cnt.bump { animation: bump .35s ease-out; } @keyframes bump { 0% { transform: scale(1); background: var(--red); } 40% { transform: scale(1.22); background: var(--red); } 100% { transform: scale(1); } }
+  .rej { position: absolute; left: 12px; top: 78px; z-index: 4; display: none; background: rgba(7,13,34,.78); color: #cfd6ee; font-weight: 800; font-size: .95rem; padding: 7px 14px; border-radius: 999px; pointer-events: none; max-width: calc(100% - 24px); }
+  @media (orientation: landscape) { .cnt, .rej { position: fixed; } .cnt { top: 12px; left: 12px; } }
   details.set { position: relative; }
   details.set[open] { z-index: 40; } .top:has(details[open]) { z-index: 40 !important; } /* 設定はいちばん上に(横向きで下のボタンに隠れていた) */
   details.set .setp { max-height: calc(100dvh - 72px) !important; overscroll-behavior: contain; }
@@ -127,6 +133,8 @@
   .ghost .gs { stroke: rgba(255,120,110,.9); }
   .prepov.ok .ghost g { stroke: #fff; stroke-dasharray: none; stroke-width: 5; animation: gl .9s ease-out; }
   .prepov.ok .pmsg { background: var(--red); }
+  .prepov.good .pmsg { background: #fff; color: var(--n900); } /* そろった: 白地に ✓ */
+  .prepov.good .ghost g { stroke: #fff; stroke-dasharray: none; stroke-width: 5; }
   @keyframes gl { 0% { transform: scale(1); opacity: 1; } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
   .ghost g { transform-origin: 60px 100px; }
   .pskip { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); pointer-events: auto; min-height: 44px; padding: 0 16px; background: none; border: 0; color: rgba(255,255,255,.85); font-weight: 800; font-size: .95rem; text-decoration: underline; text-underline-offset: 4px; text-shadow: 0 1px 4px #000; cursor: pointer; }
@@ -139,6 +147,7 @@
     /* 横向きの準備: 空いている右の列に、やることを大きく出す(映像の上は人の影だけ) */
     .pmsg { position: fixed; left: auto !important; right: 0; top: 50%; transform: translateY(-60%); width: var(--rc); max-width: none; padding: 0 22px; background: none !important; font-size: 1.6rem; line-height: 1.45; text-align: center; }
     .prepov.ok .pmsg { color: #fff; font-size: 2.4rem; }
+    .prepov.good .pmsg { color: #fff; font-size: 2rem; } /* そろった: 右の列に白で大きく */
     .savebtn { right: calc(var(--rc) + 16px) !important; }
     body.prep .help { padding-bottom: 76px; }
   }
@@ -215,6 +224,7 @@
   <div class="view"><canvas id="gauge"></canvas></div>
   <div id="coach" role="status" aria-live="polite"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="cnt" id="cnt"><b id="cntN">0</b><span>本</span></div><div class="rej" id="rej"></div>
 </main>
 <footer class="dock">
   <button class="flip" id="btnFlip" type="button" aria-label="カメラを切り替える"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><path d="M9.5 13.5a2.8 2.8 0 0 1 5 -1.2M14.5 15.5a2.8 2.8 0 0 1-5 1.2"/></svg><span id="flipTxt">インカメ</span></button>
@@ -280,6 +290,7 @@ async function maybePose(t) {
 // ---- 入力 ----
 let stopped = false;
 function stopAll() { // とめる: カメラを閉じ、計測を止める(記録はそのまま)
+  $('cnt').style.display = 'none'; $('rej').style.display = 'none'; cntLast = 0;
   stopRec(); keepAwake(false); stopped = true; running = false;
   if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
   if (isFile) v.pause();
@@ -341,13 +352,13 @@ let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0, low60 = 0, no60 = false
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
-const COACH_VOICE = (m) => /明るい場所/.test(m) && !/暗い/.test(m) ? '明るい場所へお願いします' : /固定/.test(m) ? 'スマホを固定してください' : /切れて/.test(m) ? '剣先が切れています。もう少し離れてください' : /離れて/.test(m) ? '体が映るように、離れてください' : /暗い/.test(m) ? '少し暗いようです。明るい場所へお願いします' : /1秒/.test(m) ? 'このカメラは映像が少なめです。外カメだと正確です' : /真横に向けて/.test(m) ? '体を真横に向けてください' : /色/.test(m) ? '設定で、色を合わせてください' : /見えにくい/.test(m) ? '竹刀を、真横から映してください' : m;
+const COACH_VOICE = (m) => /うまく測れません/.test(m) ? 'うまく測れません。ほかのアプリを閉じて、お試しください' : /明るい場所/.test(m) && !/暗い/.test(m) ? '明るい場所へお願いします' : /固定/.test(m) ? 'スマホを固定してください' : /切れて/.test(m) ? '剣先が切れています。もう少し離れてください' : /離れて/.test(m) ? '体が映るように、離れてください' : /暗い/.test(m) ? '少し暗いようです。明るい場所へお願いします' : /1秒/.test(m) ? 'このカメラは映像が少なめです。外カメだと正確です' : /真横に向けて/.test(m) ? '体を真横に向けてください' : /色/.test(m) ? '設定で、色を合わせてください' : /見えにくい/.test(m) ? '竹刀を、真横から映してください' : m;
 function coach(st, vis) {
   if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (no60) m = '明るい場所へお願いします'; // 映像のコマ数が足りないときの、ほとんどの原因は暗さ。専門用語を出さず、やることだけ言う
+  if (no60) m = luma < 45 ? '明るい場所へお願いします' : 'うまく測れません。ほかのアプリを閉じてお試しください'; // コマ数が足りないとき。暗いときだけ「明るく」と言う(明るいのに言っていた)
   else if (r('shaky') > 0.3) m = 'スマホを固定してください';
   else if (r('noPerson') > 0.5) m = '顔と腕と竹刀が映るようにしてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
@@ -372,7 +383,7 @@ setInterval(() => {
   // 60コマの見張り(中山さん 2026-11-23「必ず60fps。強制。絶対」): カメラが54コマ未満、または処理が追いつかず52コマ未満が2秒続いたら、数えるのを止めて知らせる
   if (running && !isFile && camFps > 0) {
     // 2026-11-24 中山さん「30でもよくね?」: 30コマでも、打つ瞬間を3次の曲線で求めれば1.00倍(試算)。止めるのは25コマ未満だけ
-    low60 = (camFps < 25 || frames < 24) ? low60 + 1 : 0; no60 = low60 >= 2;
+    low60 = (camFps < 20 || frames < 18) ? low60 + 1 : 0; // 暫定: 25→20(明るくても数えが止まる、と実機で指摘)。20〜24でも1本の山は曲線で補う no60 = low60 >= 2;
     // 処理が重くて落としているときは、処理する画素を2割ずつ減らす(最小2万)
     // 1コマの処理が11msを超えたら(60コマに間に合わない)、カメラのコマ数に関係なく処理する画素を減らす
     if (procMs > 11 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
@@ -434,7 +445,13 @@ function showSave() {
 let recFile = null;
 function recName() { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`; }
 // シェア(2026-11-24 TikTok世代): 端末のシェア画面に、録画をそのまま渡す。結果の数字を一言そえる
-$('btnShare').onclick = async () => { if (!recFile) return; const D = downs(), b = D.reduce((m, x) => Math.max(m, val(x)), 0); try { await navigator.share({ files: [recFile], text: D.length ? `ケンソク！ ${WHICH[which()]} 最高 ${b.toFixed(1)} m/秒(${D.length}本)` : 'ケンソク！' }); } catch (e) { /* 閉じただけ */ } };
+$('btnShare').onclick = async () => {
+  if (!recFile) return; const D = downs(), b = D.reduce((m, x) => Math.max(m, val(x)), 0), text = D.length ? `ケンソク！ ${WHICH[which()]} 最高 ${b.toFixed(1)} m/秒(${D.length}本)` : 'ケンソク！';
+  toast('シェア画面を開きます…');
+  try { await navigator.share({ files: [recFile], text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.share({ files: [recFile] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+  $('btnSave').click(); toast('シェアできなかったので、保存しました'); // どちらも失敗したら、保存に切り替える
+};
 $('btnSave').onclick = () => {
   if (!recUrl) return; const d = new Date(), z = (n) => String(n).padStart(2, '0'), a = document.createElement('a');
   a.href = recUrl; a.download = `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`;
@@ -470,7 +487,7 @@ function prepRender(items, msg, warn) {
   if (items) prepLast = { items, msg, warn };
   const P = $('prep'), L = prepLast;
   if (prepPhase >= 2 && (!prepDoneAt || performance.now() - prepDoneAt > 1400)) { P.style.display = 'none'; P.classList.remove('ok'); document.body.classList.remove('ready'); return; }
-  P.style.display = 'block'; P.classList.toggle('ok', prepPhase >= 2 && !!prepDoneAt && prepOkShow); document.body.classList.toggle('ready', prepPhase >= 2 && prepOkShow);
+  P.style.display = 'block'; P.classList.toggle('ok', prepPhase >= 2 && !!prepDoneAt && prepOkShow); document.body.classList.toggle('ready', prepPhase >= 2 && prepOkShow); if (prepPhase >= 2) P.classList.remove('good');
   layoutGuide();
   const m = prepPhase >= 2 ? (prepOkShow ? PREP[2].msg : '') : L.msg; $('pMain').textContent = m; $('pMain').style.display = m ? '' : 'none';
 }
@@ -513,7 +530,7 @@ function prepTick(st, vis) {
   prepOk = ok ? prepOk + 1 : 0;
   if (iss && prepRun.n >= 3 && !prepSpoken.has(key)) { prepSpoken.add(key); say(iss[1]); } // 同じことは1回だけ言う
   if (prepOk >= 2) { prepNext(false); return; }
-  prepRender([], iss && prepRun.n >= 2 ? iss[0] : PREP[0].msg, false);
+  prepRender([], ok ? '✓ OK。そのままで' : iss && prepRun.n >= 2 ? iss[0] : PREP[0].msg, false); $('prep').classList.toggle('good', ok);
 }
 let faceHist = [];
 
@@ -532,6 +549,16 @@ const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0)
 // 速さの色: 遅い=白 → 速い=赤(MITORIの赤 #d6231b)
 function colorOf(sp) { const u = Math.max(0, Math.min(1, (sp - 4) / 12)); return `rgb(${Math.round(255 - 41 * u)},${Math.round(255 - 220 * u)},${Math.round(255 - 228 * u)})`; }
 const FONT = '"Murecho", system-ui, sans-serif';
+let cntLast = 0, rejShown = 0, rejHide = 0;
+const REJ = { noRaise: 'もう少し振りかぶると数えます', slow: 'ゆっくりなので数えませんでした' };
+function drawCount(n) {
+  const on = running && prepPhase >= 2 && !isFile, c = $('cnt'); c.style.display = on ? 'flex' : 'none';
+  if (!on) { cntLast = 0; $('rej').style.display = 'none'; return; }
+  $('cntN').textContent = n; if (n > cntLast) { c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); } cntLast = n;
+  const r = eng.lastRej, now = performance.now();
+  if (r && r.at > rejShown && r.at > prepDoneAt && REJ[r.why]) { rejShown = r.at; rejHide = now + 2400; $('rej').textContent = REJ[r.why]; }
+  $('rej').style.display = now < rejHide ? 'block' : 'none';
+}
 function draw() {
   // 針: 上がるときはすぐ、下がるときはゆっくり
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
@@ -541,7 +568,7 @@ function draw() {
   drawOverlay();
   const hint = coachMsg;
   const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
-  speakNew();
+  speakNew(); drawCount(D.length);
   $('bigTag').textContent = WHICH[which()];
   if (ui === 'a') drawGauge(last, avg, best, D.length);
   else if (ui === 'b') drawBars(last, avg, best, D);
