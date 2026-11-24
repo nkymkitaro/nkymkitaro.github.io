@@ -430,13 +430,17 @@ function prepNext(skip) {
   applyBody(); prepRender([], PREP[prepPhase].msg, false);
 }
 $('pSkip').onclick = () => prepNext(true);
+// 全身が映っているか(2026-11-24 中山さんの実機: 顔のアップで「体」に✔が付いた)。腰と膝まで映り、胴(肩〜腰)が画面の高さの6〜30%のときだけ通す
+let bodyHist = []; // 膝が一瞬見えなくなる(竹刀を上げたとき)ので、直近3秒のうち1回でも全身が見えていればよい
+function bodyCheck() { const b = eng.bodyInfo, now = !!b && b.hips && b.knees && b.torsoFrac != null && b.torsoFrac >= 0.06 && b.torsoFrac <= 0.3; bodyHist.push(now); if (bodyHist.length > 3) bodyHist.shift(); return { body: bodyHist.some(Boolean) && !!b && b.torsoFrac != null && b.torsoFrac <= 0.3 }; }
+function bodyIssue() { const b = eng.bodyInfo; if (b && b.torsoFrac != null && b.torsoFrac > 0.3) return ['近すぎます。もっと離れてください', '近すぎます。もっと離れてください']; if (b && b.torsoFrac != null && b.torsoFrac < 0.06) return ['遠すぎます。少し近づいてください', '遠すぎます。少し近づいてください']; return ['全身が映るよう、離れてください', '全身が映るように、離れてください']; }
 function prepTick(st, vis) {
   if (!st || !st.n) return;
   const r = (k) => (st[k] || 0) / st.n, luma = st.lumaN ? st.luma / st.lumaN : 128, cut = !!(st.seen && st.edge / st.seen > 0.3);
-  const c = { fps: camFps >= 25, bright: luma >= 45, still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut };
-  const sets = prepPhase === 0 ? [['fps', '映像'], ['bright', '明るさ'], ['still', '固定'], ['person', '体']] : [['person', '体'], ['still', '固定'], ['sword', '剣先']];
+  const c = { fps: camFps >= 25, bright: luma >= 45, still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut }; c.body = c.person && bodyCheck().body;
+  const sets = prepPhase === 0 ? [['fps', '映像'], ['bright', '明るさ'], ['still', '固定'], ['body', '全身']] : [['person', '体'], ['still', '固定'], ['sword', '剣先']] // 全身の確認は①だけ(竹刀を上げると膝が一瞬消えるので、②で何度も確かめ直さない);
   const bad = sets.find(([k]) => !c[k]);
-  const ISS = { fps: ['映像が重いようです。明るい場所へお願いします', '映像が重いようです。明るい場所へお願いします'], bright: ['明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'], still: ['スマホを固定してください', 'スマホを固定してください'], person: ['体が映るよう、離れてください', '体が映るように、離れてください'], sword: cut ? ['もう少し離れてください', '剣先が切れています。もう少し離れてください'] : ['竹刀を構えてください', '竹刀を、構えてください'] };
+  const ISS = { fps: ['映像が重いようです。明るい場所へお願いします', '映像が重いようです。明るい場所へお願いします'], bright: ['明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'], still: ['スマホを固定してください', 'スマホを固定してください'], body: bodyIssue(), person: ['体が映るよう、離れてください', '体が映るように、離れてください'], sword: cut ? ['もう少し離れてください', '剣先が切れています。もう少し離れてください'] : ['竹刀を構えてください', '竹刀を、構えてください'] };
   const iss = bad && performance.now() - prepPhaseAt > 3500 ? ISS[bad[0]] : null, key // 各段階の最初の3.5秒は、読み込み中の取り違えを出さない
    = iss ? iss[0] : '';
   prepRun = key === prepRun.msg ? { msg: key, n: prepRun.n + 1 } : { msg: key, n: 1 };
