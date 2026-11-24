@@ -81,9 +81,9 @@
   .go svg { width: 22px; height: 22px; }
   /* 横向き: 左に映像(上から下まで)、右の列に ロゴ・状態・メーター・切り替え・はじめる(2026-11-23 実機「横画面クソすぎ」: 映像もメーターも小さく、上下の段で高さを取られていた) */
   @media (orientation: landscape) {
-    body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 48vw, 560px); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+    body { --rc: clamp(300px, 36vw, 420px); display: grid; grid-template-columns: minmax(0, 1fr) var(--rc); grid-template-rows: auto auto minmax(0, 1fr) auto; }
     main { display: contents; }
-    .stage { grid-column: 1; grid-row: 1 / -1; width: auto !important; min-width: 0 !important; }
+    .stage { grid-column: 1 / -1; grid-row: 1 / -1; width: auto !important; min-width: 0 !important; } /* 横向き: 映像は画面いっぱい。右の列(メーター・ボタン)は映像の上に重ねる(2026-11-24 中山さん「メーターは半透明で、盛り上げる役割」) */
     .top { grid-column: 2; grid-row: 1; padding: 8px 10px 2px; gap: 6px; }
     .top .logo { height: 16px; }
     .kslogo { height: 34px; }
@@ -91,14 +91,15 @@
     .ib { width: 42px; height: 42px; } .ib svg { width: 21px; height: 21px; }
     #stat { grid-column: 1; grid-row: 1; z-index: 3; align-self: start; font-size: .62rem; padding: 4px 8px; margin: 6px; border-radius: 8px; background: rgba(7,13,34,.6); pointer-events: none; } /* 映像の上に小さく重ねる(右の列はメーターに使う) */
     .view { grid-row: 2 / 4 !important; }
-    .view { grid-column: 2; }
+    .view { grid-column: 2; z-index: 3; pointer-events: none; background: linear-gradient(to left, rgba(7,13,34,.6) 45%, rgba(7,13,34,0)); }
+    .view canvas { opacity: .9; }
     .dock { grid-column: 2; grid-row: 4; padding: 6px 10px calc(8px + env(safe-area-inset-bottom)); background: none; }
     .dock { gap: 6px; } .tabs { gap: 2px; } .tabs button { font-size: .92rem; padding: 10px 11px; min-height: 44px; white-space: nowrap; }
     .go { flex: none; min-width: 84px; min-height: 52px; font-size: 1rem; padding: 0 10px; }
     .top, .dock { position: relative; z-index: 4; }
     body.ui-c .stage { grid-column: 1 / -1; } /* 映像: 画面いっぱいに映像。右の列のボタンは映像の上に重ねる */
     body.ui-c #stat { grid-row: 4; align-self: end; }
-    #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - clamp(340px, 48vw, 560px) - 20px); bottom: 10px; }
+    #coach { position: fixed; left: 10px; right: auto; width: calc(100vw - var(--rc) - 20px); bottom: 10px; }
   }
 
   /* 準備の案内(2026-11-24 中山さん「画面全体を大きく使い、スマホセット→構え→素振り開始を気持ちよく」): 準備中は映像を画面いっぱいに */
@@ -118,7 +119,7 @@
   .pchk { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 800; font-size: .95rem; color: var(--soft); }
   .pchk li.ok { color: #fff; }
   .pskip { display: block; margin: 4px 0 0 auto; min-height: 48px; padding: 0 6px; background: none; border: 0; color: var(--soft); font-weight: 800; font-size: .95rem; cursor: pointer; }
-  @media (orientation: landscape) { body.prep .stage { grid-column: 1; } body.prep { grid-template-columns: minmax(0, 1fr) clamp(320px, 38vw, 400px); } .pguide { left: 6%; right: 6%; top: 16%; bottom: 38%; } }
+  @media (orientation: landscape) { .prepov { right: var(--rc); } .pguide { left: 6%; right: 6%; top: 16%; bottom: 38%; } }
   /* 表示は「メーター」の1種類(2026-11-24 中山さん「モード切替は要る?1種類でよくね」)。はじめる/とめるを大きく真ん中に */
   .dock { justify-content: center; }
   .go { flex: 1; max-width: 460px; }
