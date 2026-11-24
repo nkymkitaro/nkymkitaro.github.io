@@ -52,7 +52,7 @@
   body.ui-c .view { display: none; }
   @media (orientation: portrait) {
     main { flex-direction: column; }
-    body.ui-a .stage, body.ui-b .stage { width: auto; height: 28%; margin: 0 12px; border-radius: 12px; overflow: hidden; }
+    body.ui-a .stage, body.ui-b .stage { width: auto; height: 38%; margin: 0 12px; border-radius: 12px; overflow: hidden; }
   }
   .big { position: absolute; left: 14px; top: 12px; font-weight: 900; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.8); display: none; }
   body.ui-c .big { display: block; }
@@ -118,11 +118,25 @@
   .pchk { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-weight: 800; font-size: .95rem; color: var(--soft); }
   .pchk li.ok { color: #fff; }
   .pskip { display: block; margin: 4px 0 0 auto; min-height: 48px; padding: 0 6px; background: none; border: 0; color: var(--soft); font-weight: 800; font-size: .95rem; cursor: pointer; }
-  @media (orientation: landscape) { body.prep .stage { grid-column: 1 / -1; } .pcard { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .psteps { right: auto; width: calc(100% - clamp(340px, 48vw, 560px) - 24px); } .pguide { left: 3%; right: calc(clamp(340px, 48vw, 560px) + 12px); top: 18%; bottom: 40%; } }
+  @media (orientation: landscape) { body.prep .stage { grid-column: 1; } body.prep { grid-template-columns: minmax(0, 1fr) clamp(320px, 38vw, 400px); } .pguide { left: 6%; right: 6%; top: 16%; bottom: 38%; } }
   /* 表示は「メーター」の1種類(2026-11-24 中山さん「モード切替は要る?1種類でよくね」)。はじめる/とめるを大きく真ん中に */
   .dock { justify-content: center; }
   .go { flex: 1; max-width: 460px; }
   .help div div { text-wrap: balance; }
+  /* 今回の結果(とめたあと) */
+  .sum { width: min(100%, 360px); text-align: left; }
+  .sumh { display: flex; align-items: baseline; justify-content: space-between; font-size: 1.1rem; font-weight: 900; border-bottom: 2px solid #fff; padding-bottom: 6px; }
+  .sumh span { font-size: .85rem; color: var(--soft); }
+  .sumg { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 8px; }
+  .sumg div { display: flex; flex-direction: column; padding-left: 10px; border-left: 2px solid rgba(255,255,255,.2); }
+  .sumg div:first-child { border-left: 0; padding-left: 0; }
+  .sumg i { font-style: normal; font-size: .85rem; color: var(--soft); }
+  .sumg b { font-size: 2.4rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .sumg .r b { color: #ff5a52; }
+  .sumpb { display: inline-block; margin-top: 10px; background: var(--red); font-weight: 900; padding: 4px 18px 4px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+  .sum p { margin: 10px 0 0; font-size: .9rem; color: var(--soft); }
+  .sumlink { display: inline-flex; align-items: center; min-height: 48px; margin-top: 4px; color: #fff; font-weight: 900; text-decoration: none; }
+  html:not(.dev) .devonly { display: none !important; }
   .savebtn { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 4; min-height: 52px; border-radius: 14px; border: 0; background: #fff; color: var(--n900); font-weight: 900; font-size: 1rem; display: none; cursor: pointer; }
   .flip { flex: none; min-width: 72px; min-height: 64px; border-radius: 18px; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-weight: 800; font-size: .72rem; cursor: pointer; padding: 0 8px; }
   .flip svg { width: 26px; height: 26px; }
@@ -142,13 +156,13 @@
     <label>道具 <select id="tool">
       <option value="101.5">木刀(形の大刀)</option><option value="120">竹刀 一般 120</option><option value="117">竹刀 高校 117</option><option value="114">竹刀 中学 114</option>
     </select></label>
-    <label>色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
+    <label>竹刀の色 <select id="col"><option value="wood">木・竹</option><option value="white">白</option><option value="black">黒</option></select></label>
     <label>カメラ <select id="facing"><option value="user">インカメ(自撮り)</option><option value="environment">外カメ</option></select></label>
-    <label>骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
-    <h4>試験用</h4>
-    <div class="row"><label class="file">動画で試す<input id="file" type="file" accept="video/*"></label></div>
-    <label>再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
-    <label>重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
+    <label class="devonly">骨格 <select id="pose"><option value="on">使う(1秒10回)</option><option value="off">使わない</option></select></label>
+    <h4 class="devonly">試験用</h4>
+    <div class="row devonly"><label class="file">動画で試す<input id="file" type="file" accept="video/*"></label></div>
+    <label class="devonly">再生 <select id="rate"><option value="1">そのまま</option><option value="0.5">1/2</option><option value="0.25">1/4</option></select></label>
+    <label class="devonly">重ねる <select id="dbg"><option value="off">なし</option><option value="on">道具の見つけ方</option></select></label>
     <h4>記録(この端末の中だけ)</h4>
     <div class="row"><a class="btn" href="kensoku-record.html" style="text-decoration:none">記録を見る</a><button class="btn" id="btnReset" type="button">表示をリセット</button><button class="btn" id="btnExport" type="button">書き出す(CSV)</button><button class="btn" id="btnClearLog" type="button">記録を消す</button></div>
     <h4>録画</h4><label>素振りの録画 <select id="recSel"><option value="on">する</option><option value="off">しない</option></select></label>
@@ -176,7 +190,7 @@
 <script type="module">
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
-const DEV = new URLSearchParams(location.search).has('dev'); // 開発用の数字の行は ?dev=1 のときだけ出す
+const DEV = new URLSearchParams(location.search).has('dev'); document.documentElement.classList.toggle('dev', DEV); // 開発用の数字の行は ?dev=1 のときだけ出す
 const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押してください</div></div>';
 $('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
@@ -232,10 +246,10 @@ async function maybePose(t) {
 // ---- 入力 ----
 let stopped = false;
 function stopAll() { // とめる: カメラを閉じ、計測を止める(記録はそのまま)
-  stopRec(); stopped = true; running = false;
+  stopRec(); keepAwake(false); stopped = true; running = false;
   if (v.srcObject) { v.srcObject.getTracks().forEach((tr) => tr.stop()); v.srcObject = null; }
   if (isFile) v.pause();
-  camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = HELP_HTML; prepPhase = 2; prepDoneAt = 0; $('prep').style.display = 'none'; applyBody();
+  camTrack = null; setGo(false); coachMsg = ''; $('coach').style.display = 'none'; $('help').style.display = 'flex'; $('help').innerHTML = summaryHTML() || HELP_HTML; prepPhase = 2; prepDoneAt = 0; $('prep').style.display = 'none'; applyBody();
 }
 $('coach').onclick = () => { coachMuteUntil = performance.now() + 30000; coachMsg = ''; $('coach').style.display = 'none'; };
 const KSLOGO = $('band').innerHTML; // ロゴ「ケンソク！」(案A 一太刀: 「！」が振り下ろした剣、点が剣先)
@@ -274,7 +288,7 @@ function checkCamFps() { /* 露出は触らない(上の説明)。見張りと�
 
 function begin() {
   stopped = false; setGo(true);
-  $('help').style.display = 'none'; startPrep(); eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
+  $('help').style.display = 'none'; startPrep(); keepAwake(true); eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
   applyBody();
 }
@@ -304,7 +318,6 @@ function coach(st, vis) {
   else if (r('noPerson') > 0.5) m = '体と剣先が入るよう、離れてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
   else if (luma < 45) m = '暗いようです。明るい場所へお願いします';
-  else if (camFps > 0 && camFps < 45) m = `このカメラは1秒${camFps}コマです。外カメだと正確です`;
   else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が切れています。離れてください';
   else if (meas && vis < 50 && (st.short || 0) / meas > 0.3) m = '体を真横に向けてください';
   else if (meas && vis < 50 && (st.colorNear || 0) / meas < 0.3) m = '⚙の「色」を道具に合わせてください';
@@ -341,6 +354,20 @@ setInterval(() => {
 }, 1000);
 
 
+// ---- とめたあとの「今回の結果」(本数・平均・最高。自己ベストなら赤い帯)。0本なら最初の絵に戻す ----
+function summaryHTML() {
+  const D = downs(); if (!D.length || isFile) return '';
+  const a = trimMean(D.map(val)), b = D.reduce((m, x) => Math.max(m, val(x)), 0), n = D.length;
+  return `<div class="sum"><div class="sumh">今回の結果<span>${WHICH[which()]}・m/秒</span></div><div class="sumg"><div><i>本数</i><b>${n}</b></div><div><i>平均</i><b>${a.toFixed(1)}</b></div><div class="r"><i>最高</i><b>${b.toFixed(1)}</b></div></div>${sessionPB ? '<div class="sumpb">自己ベスト更新</div>' : ''}${n < SET_N ? `<p>あと${SET_N - n}本で、平均が安定します</p>` : ''}<a class="sumlink" href="kensoku-record.html">記録を見る ›</a></div>`;
+}
+
+// ---- 画面を消さない(2026-11-24): 素振りの間は画面にさわらないので、消灯すると見えない・測れない。測っている間だけ点けたままにする ----
+let wake = null;
+async function keepAwake(on) {
+  try { if (on && 'wakeLock' in navigator && !wake && document.visibilityState === 'visible') { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } else if (!on && wake) { await wake.release(); wake = null; } } catch (e) { wake = null; }
+}
+document.addEventListener('visibilitychange', () => { if (running && !isFile) keepAwake(true); });
+
 // ---- 録画(2026-11-24 中山さん「録画できてる方がよさそう」): 素振りの間(準備のあと〜とめるまで)カメラの映像を端末の中に録り、とめたあとに「録画を保存」で書き出す。外には送らない ----
 let rec = null, recChunks = [], recBytes = 0, recUrl = '', recT0 = 0, recDur = 0, recMime = '';
 const REC_MAX = 150e6; // 約5分(4Mbps)。超えたら録画だけ止める(測るのは続く)
@@ -360,10 +387,10 @@ function startRec() {
 }
 function stopRec() { if (rec && rec.state !== 'inactive') { try { rec.stop(); } catch (e) { /* そのまま */ } } }
 function showSave() {
-  if (!recChunks.length) return;
+  if (!recChunks.length || recDur < 3) return; // 3秒未満(準備のすぐあとに止めた)は出さない
   const blob = new Blob(recChunks, { type: (recMime || 'video/webm').split(';')[0] });
   if (recUrl) URL.revokeObjectURL(recUrl); recUrl = URL.createObjectURL(blob);
-  $('btnSave').textContent = `録画を保存(${Math.floor(recDur / 60)}分${recDur % 60}秒・${Math.round(blob.size / 1e6)}MB)`;
+  $('btnSave').textContent = `録画を保存(${Math.floor(recDur / 60)}分${recDur % 60}秒・${blob.size < 1e6 ? '1MB未満' : Math.round(blob.size / 1e6) + 'MB'})`;
   if (!running) $('btnSave').style.display = 'block';
 }
 $('btnSave').onclick = () => {
@@ -380,7 +407,7 @@ const PREP = [
   { say: '準備できました。どうぞ', msg: 'どうぞ振ってください' },
 ];
 let prepPhaseAt = 0, prepSpoken = new Set(), prepPhase = 2, prepOk = 0, prepRun = { msg: '', n: 0 }, prepSaid = { msg: '', at: 0 }, prepDoneAt = 0, prepLast = { items: [], msg: '', warn: false };
-function applyBody() { document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : ''); resize(); }
+function applyBody() { document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : ''); if (running && !isFile) $('band').innerHTML = prepPhase < 2 ? '準備中' : '計測中'; resize(); }
 function prepRender(items, msg, warn) {
   if (items) prepLast = { items, msg, warn };
   const P = $('prep'), L = prepLast;
@@ -398,7 +425,7 @@ function startPrep() {
 function prepNext(skip) {
   prepOk = 0; prepRun = { msg: '', n: 0 }; prepSaid = { msg: '', at: performance.now() }; prepSpoken = new Set(); prepPhaseAt = performance.now();
   prepPhase = skip ? 2 : prepPhase + 1;
-  if (prepPhase >= 2) { startRec(); prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
+  if (prepPhase >= 2) { startRec(); loadPB(); sessionPB = false; setSaid = false; prepDoneAt = performance.now(); eng.swings = []; eng.signStats = { 1: [], '-1': [] }; spoken = new Set(); } // 準備中の動きは数えない
   if (!skip) say(PREP[prepPhase].say);
   applyBody(); prepRender([], PREP[prepPhase].msg, false);
 }
@@ -501,11 +528,11 @@ function drawGauge(last, avg, best, n) {
   const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(5, R * 0.05); g.lineCap = 'round';
   g.beginPath(); g.moveTo(cx + Math.cos(an) * R * 0.62, cy + Math.sin(an) * R * 0.62); g.lineTo(cx + Math.cos(an) * R * 0.97, cy + Math.sin(an) * R * 0.97); g.stroke();
   // 札「剣先」と大きい数字
-  const tag = WHICH[which()], ts = R * 0.13; g.textBaseline = 'alphabetic';
+  const pbOn = performance.now() < pbUntil, tag = pbOn ? '自己ベスト' : WHICH[which()], ts = R * 0.13; g.textBaseline = 'alphabetic';
   g.font = `900 ${ts}px ${FONT}`; const tw = g.measureText(tag).width + ts * 1.2, th = ts * 1.45, tx = cx - tw / 2, ty = cy - R * 0.5;
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
-  g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
-  g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
+  g.save(); g.fillStyle = pbOn ? '#d6231b' : '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
+  g.fillStyle = pbOn ? '#fff' : '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
   g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, cy + R * 0.22);
   g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, cy + R * 0.42);
   if (wide) statsCol(g, W * 0.82, H, R, last, avg, best, n); else statsRow(g, cx, cy + R * 0.92, R, last, avg, best, n);
@@ -516,8 +543,8 @@ function statsRow(g, cx, y, R, last, avg, best, n) {
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   items.forEach(([k, v2], i) => {
     const x = cx + (i - 1) * R * 0.78;
-    g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.085}px ${FONT}`; g.fillText(k, x, y);
-    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.2}px ${FONT}`; g.fillText(v2, x, y + R * 0.22);
+    g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.26}px ${FONT}`; g.fillText(v2, x, y + R * 0.28);
   });
 }
 function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
@@ -525,7 +552,7 @@ function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
   g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const step = Math.min(H / 3.3, R * 0.62), y0 = H / 2 - step;
   items.forEach(([k, v2], i) => {
     const y = y0 + (i - 0.5) * step + step * 0.25;
-    g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText(k, x, y);
+    g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
     g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
   });
 }
@@ -551,7 +578,9 @@ function drawBars(last, avg, best, D) {
   if (avg) { const ya = y1 - (y1 - y0 - bw * 0.35) * avg / MAX; g.strokeStyle = 'rgba(255,255,255,.6)'; g.setLineDash([6, 6]); g.beginPath(); g.moveTo(x0, ya); g.lineTo(x1, ya); g.stroke(); g.setLineDash([]); }
 }
 // ---- 読み上げ(遠くからでも分かるように。奥さまの案 2026-11-22)。振り下ろしの1本ごとに「12.3」と言う。押すと止める ----
-let voiceOn = true, spoken = new Set();
+let voiceOn = true, spoken = new Set(), pbBest = 0, pbBase = 0, pbUntil = 0, sessionPB = false, setSaid = false;
+// 自己ベストの基準: この端末の記録のうち、同じ道具・今の測り方(m あり)の最高
+function loadPB() { const tool = $('tool').selectedOptions[0].textContent, k = which(), a = readLog().filter((r) => r.m && r.tool === tool); pbBase = a.length; pbBest = a.reduce((m, r) => Math.max(m, r[k] || 0), 0); }
 try { voiceOn = localStorage.getItem('mitori.speedo.voice') !== '0'; } catch (e) { /* そのまま */ }
 const vb = $('btnVoice'); const showVoice = () => { vb.classList.toggle('off', !voiceOn); vb.setAttribute('aria-pressed', String(voiceOn)); }; showVoice();
 vb.onclick = () => { voiceOn = !voiceOn; try { localStorage.setItem('mitori.speedo.voice', voiceOn ? '1' : '0'); } catch (e) { /* そのまま */ } showVoice(); if (!voiceOn) speechSynthesis.cancel(); else say('読み上げます'); };
@@ -572,7 +601,12 @@ function say(text, fast) { // 案内は、やさしくゆっくり(2026-11-24 �
 function speakNew() {
   if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
-  spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return; say(val(s).toFixed(1), true);
+  spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return;
+  const vv = val(s), now = performance.now(); display = Math.max(display, vv); holdUntil = now + 1800; // 確かな1本の数字を、2秒近く読めるように止める
+  let txt = vv.toFixed(1);
+  if (pbBase >= 10 && vv > pbBest) { pbBest = vv; pbUntil = now + 3000; sessionPB = true; txt += '。自己ベストです'; } // 記録が10本以上あるときだけ(最初の数本で毎回ベストにならないように)
+  if (D.length === SET_N && !setSaid) { setSaid = true; txt += `。${SET_N}本、平均${trimMean(D.map(val)).toFixed(1)}です`; }
+  say(txt, true);
 }
 
 // ---- 記録(端末の中だけ。localStorage)。振り下ろしの1本ごとに、日時・道具・剣先・物打ち・手元を残す。書き出しはCSV ----
@@ -593,7 +627,7 @@ setInterval(saveDowns, 1000);
 applyBody(); // 起動直後(まだ測っていない)も、映像の場所を大きくとる
 // 見た目の確認用: ?demo=12.3 で、測らずに表示だけ出す
 const DEMO = new URLSearchParams(location.search).get('demo');
-if (DEMO) { running = true; display = parseFloat(DEMO) || 12.3; $('help').style.display = 'none'; resize(); const fake = [11.2, 12.8, 10.9, 13.4, 14.6, 12.1, 13.1].map((x, i) => ({ v: x, mono: x * 0.7, hand: 3.1, sign: 1, t: i })); eng.swings = fake; eng.isDown = () => true; setInterval(() => { display = parseFloat(DEMO) || 12.3; draw(); }, 200); }
+if (DEMO) { running = true; prepPhase = 2; applyBody(); display = parseFloat(DEMO) || 12.3; $('help').style.display = 'none'; resize(); const fake = [11.2, 12.8, 10.9, 13.4, 14.6, 12.1, 13.1].map((x, i) => ({ v: x, mono: x * 0.7, hand: 3.1, sign: 1, t: i })); eng.swings = fake; eng.isDown = () => true; setInterval(() => { display = parseFloat(DEMO) || 12.3; draw(); }, 200); }
 $('btnExport').onclick = () => {
   const a = readLog(); if (!a.length) { $('logInfo').textContent = 'まだ記録がありません'; return; }
   const csv = '日時,道具,剣先(m/秒),物打ち(m/秒),手元(m/秒)\n' + a.map((r) => [new Date(r.at).toLocaleString(), r.tool, r.tip, r.mono, r.hand].join(',')).join('\n');
