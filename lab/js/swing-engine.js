@@ -98,7 +98,7 @@ export class SwingEngine {
     const torso = sh.length && hp2.length ? Math.hypot(sh.reduce((m, j) => m + kp[j][0], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][0], 0) / hp2.length, sh.reduce((m, j) => m + kp[j][1], 0) / sh.length - hp2.reduce((m, j) => m + kp[j][1], 0) / hp2.length) * k : null;
     if (torso) { this.torsoHist.push(torso); if (this.torsoHist.length > 30) this.torsoHist.shift(); }
     this.pose.push({ t, hand, hipY }); if (this.pose.length > 40) this.pose.shift();
-    this.bodyInfo = { t, hips: hips.length > 0, knees: ok(13) || ok(14), torsoFrac: torso ? torso / H : null }; // 準備の案内用: 全身が映っているか・近すぎ/遠すぎ(2026-11-24 顔のアップで「体」に✔が付いた)
+    this.bodyInfo = { t, face: ok(0) || sh.length > 0, hips: hips.length > 0, knees: ok(13) || ok(14), torsoFrac: torso ? torso / H : null }; // 準備の案内用: 全身が映っているか・近すぎ/遠すぎ(2026-11-24 顔のアップで「体」に✔が付いた)
     if (faceX != null && Math.abs(faceX) > 0.08) { this.faceVotes.push(Math.sign(faceX)); if (this.faceVotes.length > 60) this.faceVotes.shift(); } // 胴の長さの8%以上ずれているときだけ数える
     }
   }

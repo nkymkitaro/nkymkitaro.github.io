@@ -122,7 +122,7 @@
   .prepov { position: absolute; inset: 0; z-index: 3; display: none; pointer-events: none; }
   /* 準備(2026-11-24 中山さん「センサーの効率でなく、ユーザーの体験を」): チェック表を見せず、「ここに立つ」人の影と、やることを一言だけ */
   .pmsg { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); text-align: center; font-size: 1.3rem; font-weight: 900; line-height: 1.4; padding: 10px 22px; border-radius: 999px; background: rgba(7,13,34,.72); transition: background .3s; }
-  .ghost { position: absolute; left: 50%; top: 50%; height: 64%; transform: translate(-50%, -46%); overflow: visible; }
+  .ghost { position: absolute; left: 50%; top: 50%; height: 46%; transform: translate(-50%, -46%); overflow: visible; }
   .ghost g { stroke: rgba(255,255,255,.8); stroke-width: 4; stroke-dasharray: 7 6; filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); transition: stroke .3s; }
   .ghost .gs { stroke: rgba(255,120,110,.9); }
   .prepov.ok .ghost g { stroke: #fff; stroke-dasharray: none; stroke-width: 5; animation: gl .9s ease-out; }
@@ -135,7 +135,7 @@
   body.popping .view, body.ready .view { opacity: .12; transition: opacity .2s; } /* 数字が弾ける間・合図の間は、メーターを引っ込めて主役を一つに */
   .view { transition: opacity .4s; }
   @media (orientation: landscape) {
-    .prepov { right: var(--rc); } .ghost { height: 70%; }
+    .prepov { right: var(--rc); } .ghost { height: 56%; }
     /* 横向きの準備: 空いている右の列に、やることを大きく出す(映像の上は人の影だけ) */
     .pmsg { position: fixed; left: auto !important; right: 0; top: 50%; transform: translateY(-60%); width: var(--rc); max-width: none; padding: 0 22px; background: none !important; font-size: 1.6rem; line-height: 1.45; text-align: center; }
     .prepov.ok .pmsg { color: #fff; font-size: 2.4rem; }
@@ -208,7 +208,7 @@
     <video id="v" playsinline muted></video>
     <canvas id="ov"></canvas>
     <div class="big" id="big"><span class="tag" id="bigTag">剣先</span><span class="n" id="bigN">--</span><span class="s" id="bigS"></span></div>
-    <div class="prepov" id="prep"><div class="pmsg" id="pMain"></div><svg class="ghost" id="pGhost" viewBox="0 0 120 200" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="52" cy="26" r="13"/><path d="M52 40v62M52 102l-12 46-6 40M52 102l14 44 10 42M52 54l22 22 14-4"/><path class="gs" d="M84 74 116 8"/></g></svg><button class="pskip" id="pSkip" type="button">すぐはじめる</button></div><div class="pop" id="pop"><i id="popTag"></i><b id="popN"></b></div>
+    <div class="prepov" id="prep"><div class="pmsg" id="pMain"></div><svg class="ghost" id="pGhost" viewBox="0 0 120 110" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="52" cy="26" r="13"/><path d="M52 40v56M52 54l22 22 14-4"/><path class="gs" d="M84 74 116 8"/></g></svg><button class="pskip" id="pSkip" type="button">すぐはじめる</button></div><div class="pop" id="pop"><i id="popTag"></i><b id="popN"></b></div>
     <div class="savebar" id="saveBar"><button class="savebtn" id="btnSave" type="button"></button><button class="savebtn share" id="btnShare" type="button">シェア</button></div>
     <div class="help" id="help"><ol class="steps"><li><b>真横</b>にスマホを置く</li><li><b>剣先</b>まで映るよう離れる</li><li>「はじめる」で振る</li></ol></div>
   </div>
@@ -341,15 +341,15 @@ let coachShown = { msg: '', at: 0 }, coachMuteUntil = 0, low60 = 0, no60 = false
 let presentedNow = 0, visPct = 100, coachMsg = '', coachSaid = '', coachSaidAt = 0, coachRun = { msg: '', n: 0 };
 // ---- 測れないときに、どうすればよいかを出す(中山さん 2026-11-22)。1秒ごとの見え方から、いちばん先に直すことを1つだけ選ぶ ----
 // 同じ理由が2秒続いたら出す(一瞬の取り違えで出さない)。読み上げがオンなら、変わったときと、同じ案内は10秒ごとに言う(遠くにいても分かるように)
-const COACH_VOICE = (m) => /足りません/.test(m) ? '映像が足りないようです。明るい場所へお願いします' : /固定/.test(m) ? 'スマホを固定してください' : /切れて/.test(m) ? '剣先が切れています。もう少し離れてください' : /離れて/.test(m) ? '体が映るように、離れてください' : /暗い/.test(m) ? '少し暗いようです。明るい場所へお願いします' : /1秒/.test(m) ? 'このカメラは映像が少なめです。外カメだと正確です' : /真横に向けて/.test(m) ? '体を真横に向けてください' : /色/.test(m) ? '設定で、色を合わせてください' : /見えにくい/.test(m) ? '竹刀を、真横から映してください' : m;
+const COACH_VOICE = (m) => /明るい場所/.test(m) && !/暗い/.test(m) ? '明るい場所へお願いします' : /固定/.test(m) ? 'スマホを固定してください' : /切れて/.test(m) ? '剣先が切れています。もう少し離れてください' : /離れて/.test(m) ? '体が映るように、離れてください' : /暗い/.test(m) ? '少し暗いようです。明るい場所へお願いします' : /1秒/.test(m) ? 'このカメラは映像が少なめです。外カメだと正確です' : /真横に向けて/.test(m) ? '体を真横に向けてください' : /色/.test(m) ? '設定で、色を合わせてください' : /見えにくい/.test(m) ? '竹刀を、真横から映してください' : m;
 function coach(st, vis) {
   if (!running || isFile || !st || !st.n) { coachMsg = ''; return; }
   const r = (k) => (st[k] || 0) / st.n, meas = st.measured || 0, luma = st.lumaN ? st.luma / st.lumaN : 128; lastLuma = luma;
   const caps = camTrack && camTrack.getCapabilities ? camTrack.getCapabilities() : {};
   let m = '';
-  if (no60) m = `映像が足りません(いま${Math.min(camFps, frames)}コマ)。明るい場所へお願いします`;
+  if (no60) m = '明るい場所へお願いします'; // 映像のコマ数が足りないときの、ほとんどの原因は暗さ。専門用語を出さず、やることだけ言う
   else if (r('shaky') > 0.3) m = 'スマホを固定してください';
-  else if (r('noPerson') > 0.5) m = '体と剣先が入るよう、離れてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
+  else if (r('noPerson') > 0.5) m = '顔と腕と竹刀が映るようにしてください'; // 全身は要らない(足は使わない。中山さん 2026-11-22: フォーム確認には全身、スピードメーターは別)
   // 暗さは映像の明るさだけで決める(コマ数で決めていたため、明るいのに「暗い」と出ていた。インカメは明るくても30コマまでのことがある)
   else if (luma < 45) m = '暗いようです。明るい場所へお願いします';
   else if (meas && st.seen && st.edge / st.seen > 0.4) m = '剣先が切れています。離れてください';
@@ -444,7 +444,7 @@ $('btnSave').onclick = () => {
 // ---- 準備の案内: スマホをセット → 構える → 素振り(2026-11-24 中山さん) ----
 // 条件がそろって2秒続いたら次へ進む。声は「次へ進むとき」と「同じ問題が3秒続いたとき」だけ(間違った案内で鬱陶しくならないように)。問題は同じ文を15秒あけて言う
 const PREP = [
-  { say: '全身が映るところで、構えてください', msg: '全身が映るところで、構えてください' },
+  { say: '顔と腕と竹刀が映るように、構えてください', msg: '顔と腕と竹刀が映るように構えてください' },
   { say: '', msg: '' },
   { say: 'どうぞ', msg: 'どうぞ！' },
 ];
@@ -459,7 +459,7 @@ function layoutGuide() {
   if (vw && vh) { const sc = (v.style.objectFit === 'cover' ? Math.max : Math.min)(st.width / vw, st.height / vh), cw = vw * sc, ch = vh * sc; x = (getComputedStyle(v).objectPosition.startsWith('0%') ? 0 : (st.width - cw) / 2) - (bx.left - st.left); y = (st.height - ch) / 2 - (bx.top - st.top); w = cw; h = ch; }
   const l = Math.max(x, 0), r = Math.min(x + w, W), t = Math.max(y, 0), b = Math.min(y + h, H);
   g.style.visibility = vw && vh ? 'visible' : 'hidden'; // カメラの切り替え中(映像の大きさが0)は出さない
-  g.style.left = (l + r) / 2 + 'px'; g.style.top = (t + b) / 2 + 'px'; g.style.height = (b - t) * 0.64 + 'px';
+  g.style.left = (l + r) / 2 + 'px'; g.style.top = (t + b) / 2 + 'px'; g.style.height = (b - t) * 0.46 + 'px';
   $('pMain').style.left = (l + r) / 2 + 'px'; $('pSkip').style.left = (l + r) / 2 + 'px';
 }
 /* 縦向きで縦長の映像なら画面いっぱいに(黒い帯をなくす)。横長の映像は切らずに全体を見せる */
@@ -498,21 +498,24 @@ function bodyCheck() { const b = eng.bodyInfo, now = !!b && b.hips && b.knees &&
 function bodyIssue() { const b = eng.bodyInfo; if (b && b.torsoFrac != null && b.torsoFrac > 0.3) return ['近すぎます。もっと離れてください', '近すぎます。もっと離れてください']; if (b && b.torsoFrac != null && b.torsoFrac < 0.06) return ['遠すぎます。少し近づいてください', '遠すぎます。少し近づいてください']; return ['全身が映るよう、離れてください', '全身が映るように、離れてください']; }
 function prepTick(st, vis) {
   if (!st || !st.n) return;
-  const r = (k) => (st[k] || 0) / st.n, luma = st.lumaN ? st.luma / st.lumaN : 128, cut = !!(st.seen && st.edge / st.seen > 0.3);
-  const c = { still: r('shaky') < 0.2, person: r('noPerson') < 0.3, sword: vis >= 50 && !cut }; c.body = c.person && bodyCheck().body;
-  // 見せるのは、いちばん先にやることを一つだけ(映像の速さ・明るさは、測れない原因のときだけ言う)
+  const r = (k) => (st[k] || 0) / st.n, luma = st.lumaN ? st.luma / st.lumaN : 128, cut = !!(st.seen && st.edge / st.seen > 0.4);
+  // 必要十分: 顔と腕(手首)と竹刀が映っていること(2026-11-24 中山さん「判定が厳しい」)。全身・膝・胴の大きさは見ない
+  faceHist.push(!!(eng.bodyInfo && eng.bodyInfo.face)); if (faceHist.length > 3) faceHist.shift();
+  const c = { still: r('shaky') < 0.3, arm: r('noPerson') < 0.5, face: faceHist.some(Boolean), sword: vis >= 35 && !cut };
   let iss = null, key = '';
+  const dark = ['もう少し明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'];
   if (!c.still) { iss = ['スマホを置いて、固定してください', 'スマホを置いて、固定してください']; key = 'still'; }
-  else if (!c.body) { iss = c.person ? bodyIssue() : (luma < 45 ? ['もう少し明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'] : ['全身が映るまで、離れてください', '全身が映るまで、離れてください']); key = 'body'; }
-  else if (!c.sword) { iss = luma < 45 ? ['もう少し明るい場所へお願いします', '少し暗いようです。明るい場所へお願いします'] : cut ? ['剣先まで映るよう、離れてください', '剣先が切れています。少し離れてください'] : ['竹刀を構えてください', '竹刀を、構えてください']; key = 'sword'; }
+  else if (!c.arm || !c.face) { iss = luma < 45 ? dark : ['顔と腕が映るようにしてください', '顔と腕が映るようにしてください']; key = 'arm'; }
+  else if (!c.sword) { iss = luma < 45 ? dark : cut ? ['竹刀が切れています。少し離れてください', '竹刀が切れています。少し離れてください'] : ['竹刀を構えてください', '竹刀を、構えてください']; key = 'sword'; }
   const ok = !iss;
-  if (performance.now() - prepPhaseAt < 4000) iss = null; // はじめの4秒は、置いて離れる時間。何も言わない
+  if (performance.now() - prepPhaseAt < 3000) iss = null; // はじめの3秒は、置いて構える時間。何も言わない
   prepRun = (iss ? iss[0] : '') === prepRun.msg ? { msg: prepRun.msg, n: prepRun.n + 1 } : { msg: iss ? iss[0] : '', n: 1 };
   prepOk = ok ? prepOk + 1 : 0;
   if (iss && prepRun.n >= 3 && !prepSpoken.has(key)) { prepSpoken.add(key); say(iss[1]); } // 同じことは1回だけ言う
   if (prepOk >= 2) { prepNext(false); return; }
   prepRender([], iss && prepRun.n >= 2 ? iss[0] : PREP[0].msg, false);
 }
+let faceHist = [];
 
 // ---- 表示 ----
 const downs = () => eng.swings.filter((s) => eng.isDown(s));
