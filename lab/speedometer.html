@@ -383,7 +383,7 @@ setInterval(() => {
   // 60コマの見張り(中山さん 2026-11-23「必ず60fps。強制。絶対」): カメラが54コマ未満、または処理が追いつかず52コマ未満が2秒続いたら、数えるのを止めて知らせる
   if (running && !isFile && camFps > 0) {
     // 2026-11-24 中山さん「30でもよくね?」: 30コマでも、打つ瞬間を3次の曲線で求めれば1.00倍(試算)。止めるのは25コマ未満だけ
-    low60 = (camFps < 20 || frames < 18) ? low60 + 1 : 0; // 暫定: 25→20(明るくても数えが止まる、と実機で指摘)。20〜24でも1本の山は曲線で補う no60 = low60 >= 2;
+    low60 = (camFps < 12 || frames < 10) ? low60 + 1 : 0; // 全体を止めるのは、本当に使えない(12コマ未満)ときだけ。ふだんのぶれは、1本ごとにコマの間隔で見る(swing-engine) no60 = low60 >= 3;
     // 処理が重くて落としているときは、処理する画素を2割ずつ減らす(最小2万)
     // 1コマの処理が11msを超えたら(60コマに間に合わない)、カメラのコマ数に関係なく処理する画素を減らす
     if (procMs > 11 && eng.targetPx > 20000) { eng.targetPx = Math.max(20000, Math.round(eng.targetPx * 0.8)); eng.setRoi(eng.roi); }
@@ -463,7 +463,7 @@ $('btnSave').onclick = () => {
 const PREP = [
   { say: '顔と腕と竹刀が映るように、構えてください', msg: '顔と腕と竹刀が映るように構えてください' },
   { say: '', msg: '' },
-  { say: 'どうぞ', msg: 'どうぞ！' },
+  { say: '準備オーケーです。どうぞ', msg: '準備OK！どうぞ！' }, // そろった合図は、音(ポン)・声・画面の3つで
 ];
 let prepPhaseAt = 0, prepSpoken = new Set(), prepPhase = 2, prepOk = 0, prepRun = { msg: '', n: 0 }, prepSaid = { msg: '', at: 0 }, prepDoneAt = 0, prepLast = { items: [], msg: '', warn: false };
 function applyBody() { const keep = ['ready', 'popping'].filter((k) => document.body.classList.contains(k)).join(' '); document.body.className = 'ui-' + ui + (prepPhase < 2 || !running ? ' prep' : '') + (keep ? ' ' + keep : ''); if (running && !isFile) { $('band').innerHTML = prepPhase < 2 ? '準備中' : '計測中'; $('btnCam').textContent = prepPhase < 2 ? 'やめる' : 'とめる'; } resize(); }
@@ -550,7 +550,7 @@ const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0)
 function colorOf(sp) { const u = Math.max(0, Math.min(1, (sp - 4) / 12)); return `rgb(${Math.round(255 - 41 * u)},${Math.round(255 - 220 * u)},${Math.round(255 - 228 * u)})`; }
 const FONT = '"Murecho", system-ui, sans-serif';
 let cntLast = 0, rejShown = 0, rejHide = 0;
-const REJ = { noRaise: 'もう少し振りかぶると数えます', slow: 'ゆっくりなので数えませんでした' };
+const REJ = { noRaise: 'もう少し振りかぶると数えます', slow: 'ゆっくりなので数えませんでした', lowfps: '動きが重く、数えられませんでした' };
 function drawCount(n) {
   const on = running && prepPhase >= 2 && !isFile, c = $('cnt'); c.style.display = on ? 'flex' : 'none';
   if (!on) { cntLast = 0; $('rej').style.display = 'none'; return; }
