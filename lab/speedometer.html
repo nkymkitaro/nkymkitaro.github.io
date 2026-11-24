@@ -240,7 +240,7 @@ $('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
 const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
 let holdUntil = 0;
-let ui = 'a', running = false, isFile = false, frames = 0, procMs = 0, display = 0, lastT = null, poseFps = 0;
+let needle = 0, ui = 'a', running = false, isFile = false, frames = 0, procMs = 0, display = 0, lastT = null, poseFps = 0;
 
 // ---- 設定 ----
 document.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => {
@@ -334,7 +334,7 @@ function checkCamFps() { /* 露出は触らない(上の説明)。見張りと�
 
 function begin() {
   stopped = false; setGo(true);
-  $('help').style.display = 'none'; startPrep(); keepAwake(true); eng.reset(); logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
+  $('help').style.display = 'none'; startPrep(); keepAwake(true); eng.reset(); needle = 0; display = 0; logged = new Set(); spoken = new Set(); eng.needPerson = $('pose').value === 'on'; startWorker(); resize();
   if (!running) { running = true; v.requestVideoFrameCallback(onFrame); }
   applyBody();
 }
@@ -544,6 +544,7 @@ const WHICH = { tip: '剣先', mono: '物打ち', hand: '手元' };
 const which = () => $('which').value;
 const val = (s) => (which() === 'tip' ? s.v : s[which()]) || 0;
 // 平均(2026-11-24 中山さん「30本以上振ろう」): 1本ごとのぶれは平均で薄まる(30コマで1本±4%、30本なら±1%弱)。外れに強いよう、上下1割を除く
+const AVG_MIN = 3; // 平均を出し始める本数
 const SET_N = 30;
 function trimMean(a) { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1), c = b.slice(k, b.length - k); return c.reduce((x, y) => x + y, 0) / c.length; }
 const avgLabel = (n) => (n < SET_N ? `平均(あと${SET_N - n}本)` : `平均(${n}本)`);
@@ -569,7 +570,11 @@ function draw() {
   // いまの速さ(リアルタイム。中山さん 2026-11-22「スピードメーターなので、リアルタイムの速度を」)。上がるときはすぐ、下がるときは0.3秒止めてからゆっくり(数字を読めるように)
   // メーターは「その時の平均」(中山さん 2026-11-24。1本ごとは30コマだとぶれるので、平均を主役に)。1本数えるたびに針がなめらかに動く
   const D = downs(), last = eng.lastDown(), avg = trimMean(D.map(val)), best = D.reduce((m, s) => Math.max(m, pkOf(s)), 0);
-  display += ((D.length ? avg : 0) - display) * 0.12; if (Math.abs(display - avg) < 0.02 && D.length) display = avg;
+  // 針(中山さん 2026-11-24): 平均が出るまで(3本まで)は、振った動きに反応する。ただし半分あたりで頭打ち(振り切れない)。平均が出たら、針は平均の位置にいて、動きに合わせて少し上に揺れる
+  const cv = no60 ? 0 : cur(), ready = D.length >= AVG_MIN;
+  const tgt = ready ? avg + Math.min(1.5, cv * 0.12) : 11 * (1 - Math.exp(-cv / 7));
+  needle += (tgt - needle) * (tgt > needle ? 0.5 : 0.1);
+  display += ((ready ? avg : 0) - display) * 0.12; if (ready && Math.abs(display - avg) < 0.02) display = avg;
   drawOverlay();
   const hint = coachMsg;
   const cb = $('coach'); if (hint) { cb.style.display = 'flex'; if (cb.textContent !== hint) cb.textContent = hint; } else cb.style.display = 'none';
@@ -622,12 +627,12 @@ function drawGauge(last, avg, best, n) {
   g.lineCap = 'butt'; g.lineWidth = R * 0.14;
   { const ro = Math.min(R * 1.45, cy, H - cy + R * 0.6), rg = g.createRadialGradient(cx, cy, R * 0.6, cx, cy, ro); rg.addColorStop(0, 'rgba(7,13,34,.62)'); rg.addColorStop(0.75, 'rgba(7,13,34,.45)'); rg.addColorStop(1, 'rgba(7,13,34,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H); } // 輪の下地: ふちをぼかし、枠で切れた硬い縁を出さない
   g.strokeStyle = 'rgba(255,255,255,.22)'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();          // 地
-  g.strokeStyle = colorOf(display); g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();      // いま: 白→赤
+  g.strokeStyle = colorOf(needle); g.beginPath(); g.arc(cx, cy, R, a0, A(needle)); g.stroke();      // いま: 白→赤
   g.fillStyle = 'rgba(255,255,255,.9)'; g.font = `800 ${R * 0.11}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
   for (let sp = 0; sp <= MAX; sp += 5) { const a = A(sp); g.fillText(sp, cx + Math.cos(a) * R * 1.18, cy + Math.sin(a) * R * 1.18); }
   if (best) { const a = A(best); g.strokeStyle = '#d6231b'; g.lineWidth = Math.max(4, R * 0.04); g.beginPath(); g.moveTo(cx + Math.cos(a) * R * 0.86, cy + Math.sin(a) * R * 0.86); g.lineTo(cx + Math.cos(a) * R * 1.1, cy + Math.sin(a) * R * 1.1); g.stroke(); } // 最高の印(赤)
   // 針: 弧の内側の短い棒(真ん中の数字に重ならない)
-  const an = A(display); g.strokeStyle = '#fff'; g.lineWidth = Math.max(5, R * 0.05); g.lineCap = 'round';
+  const an = A(needle); g.strokeStyle = '#fff'; g.lineWidth = Math.max(5, R * 0.05); g.lineCap = 'round';
   g.beginPath(); g.moveTo(cx + Math.cos(an) * R * 0.62, cy + Math.sin(an) * R * 0.62); g.lineTo(cx + Math.cos(an) * R * 0.97, cy + Math.sin(an) * R * 0.97); g.stroke();
   // 札「剣先」と大きい数字
   const pbOn = performance.now() < pbUntil, tag = pbOn ? '自己ベスト' : WHICH[which()] + 'の平均', ts = R * 0.13; g.textBaseline = 'alphabetic';
@@ -635,8 +640,8 @@ function drawGauge(last, avg, best, n) {
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = pbOn ? '#d6231b' : '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = pbOn ? '#fff' : '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && n ? fmtAvg(display, n) : '--', cx, cy + R * 0.22);
-  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, cy + R * 0.42);
+  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && n >= AVG_MIN ? fmtAvg(display, n) : '--', cx, cy + R * 0.22);
+  g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText(n >= AVG_MIN || !running ? 'm/秒' : `あと${AVG_MIN - n}本で平均`, cx, cy + R * 0.42);
   if (wide) statsCol(g, W * 0.82, H, R, last, avg, best, n); else statsRow(g, cx, cy + R * 0.92, R, last, avg, best, n);
 }
 // 「今の1本・平均・最高」を横に3つ。y は見出しの高さ、R は大きさの基準
@@ -669,7 +674,7 @@ function drawBars(last, avg, best, D) {
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && D.length ? fmtAvg(display, D.length) : '--', cx, y);
+  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running && D.length >= AVG_MIN ? fmtAvg(display, D.length) : '--', cx, y);
   y += R * 0.17; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, y);
   y += R * 0.22; statsRow(g, cx, y, R, last, avg, best, D.length);
   if (last) { g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `500 ${R * 0.08}px ${FONT}`; g.fillText(three(last), cx, y + R * 0.38); }
