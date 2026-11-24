@@ -457,6 +457,7 @@ export class SwingEngine {
     }
     // 打った瞬間の速さ(中山さん 2026-11-23「振り下ろしたところでスピードを取って」): 振り下ろしで、竹刀が前で水平から hitDeg 度の高さまで下りてきた時刻の速さ
     // (打突は竹刀が前でほぼ水平のとき。いちばん速い瞬間は、その少し前の振り下ろしの途中に来る)
+    const pkv = best ? { pv: best.v, pm: best.mono, ph: best.hand } : null; // 振り下ろし中の最大(打突の瞬間に置き換える前の山)。画面の「最大」(中山さん 2026-11-24)
     const f = this.front(), ds = this.downSign();
     if (this.speedAt === 'hit' && f && pk.sign === ds && cands.length) {
       const el = (a) => Math.atan2(-Math.sin(a), Math.cos(a) * f) * 180 / Math.PI;
@@ -475,7 +476,7 @@ export class SwingEngine {
         if (h) { best = Object.assign({}, h, { peak: best ? best.v : h.v, hitT: tHit }); }
       }
     }
-    if (best && best.sign) { pk.pre = pk.v; Object.assign(pk, best, { recalc: true }); }
+    if (best && best.sign) { pk.pre = pk.v; Object.assign(pk, best, { recalc: true }); if (pkv) Object.assign(pk, pkv); }
   }
   // 時刻 t0 の向きと回る速さを、前後 ±3.5コマの点に当てた3次の曲線(最小二乗)から出し、剣先・物打ち・手元の速さにする
   _cubicAt(S, A, t0, dtm) {
