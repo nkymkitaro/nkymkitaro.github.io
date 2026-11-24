@@ -346,10 +346,12 @@ export class SwingEngine {
       dts.sort((x, y) => x - y); const med = dts[dts.length >> 1]; pk.dt = med || 0;
       if (dts.length >= 3 && med > 0.07) { this._rej('lowfps'); return; } } // 中央の間隔が0.07秒超(約14コマ未満)のときだけ、その1本を数えない
     if (this.blockCount) { this._rej('block'); return; } // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
-    // 1本の振り下ろしが、0.45秒以内の2つの山に割れたら、速いほうの1つだけ残す(2026-11-24 30コマの動画の答え合わせ)。
+    // 1本の振り下ろしが、近い2つの山に割れたら、速いほうの1つだけ残す(2026-11-24 30コマの動画の答え合わせ)。
     // 以前は0.15秒以内だけ。0.2〜0.3秒前の小さい山が先に1本と数えられ(速さも小さく出る)、本物の山は「振りかぶりなし」で捨てられるか、もう1本と数えられていた
     if (pk.sign === this.downSign()) {
-      const prev = this.pending.concat(this.swings).filter((q) => q.sign === pk.sign && Math.abs(pk.t - q.t) < 0.45).pop();
+      const all = this.pending.concat(this.swings);
+      // 近い(0.33秒未満)か、0.45秒未満で間に振りかぶり(逆向きの山)がないときだけ、同じ1本の割れとみなす(早い連続素振りは0.43秒おき。間に必ず振りかぶりがある)
+      const prev = all.filter((q) => q.sign === pk.sign && pk.t - q.t >= 0 && pk.t - q.t < 0.45 && (pk.t - q.t < 0.33 || !all.some((u) => u.sign !== pk.sign && u.t > q.t && u.t < pk.t))).pop();
       if (prev) {
         if (pk.v > prev.v) {
           if (this.recalcOn) this._recalc(pk);
