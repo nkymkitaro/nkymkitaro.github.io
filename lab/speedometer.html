@@ -404,7 +404,7 @@ setInterval(() => {
 function summaryHTML() {
   const D = downs(); if (!D.length || isFile) return '';
   const a = trimMean(D.map(val)), b = D.reduce((m, x) => Math.max(m, val(x)), 0), n = D.length;
-  return `<div class="sum"><div class="sumh">今回の結果<span>${WHICH[which()]}・m/秒</span></div><div class="sumg"><div><i>本数</i><b>${n}</b></div><div><i>平均</i><b>${a.toFixed(1)}</b></div><div class="r"><i>最高</i><b>${b.toFixed(1)}</b></div></div>${sessionPB ? '<div class="sumpb">自己ベスト更新</div>' : ''}${n < SET_N ? `<p>あと${SET_N - n}本で、平均が安定します</p>` : ''}<a class="sumlink" href="kensoku-record.html">記録を見る ›</a></div>`;
+  return `<div class="sum"><div class="sumh">今回の結果<span>${WHICH[which()]}・m/秒</span></div><div class="sumg"><div><i>本数</i><b>${n}</b></div><div><i>平均</i><b>${fmtAvg(a, n)}</b></div><div class="r"><i>最高</i><b>${fmtSw(b)}</b></div></div>${sessionPB ? '<div class="sumpb">自己ベスト更新</div>' : ''}<p>${n < SET_N ? `1本ごとは目安です。あと${SET_N - n}本で、平均が安定します` : '1本ごとは目安です。平均で見ましょう'}</p><a class="sumlink" href="kensoku-record.html">記録を見る ›</a></div>`;
 }
 
 // ---- 画面を消さない(2026-11-24): 素振りの間は画面にさわらないので、消灯すると見えない・測れない。測っている間だけ点けたままにする ----
@@ -446,7 +446,7 @@ let recFile = null;
 function recName() { const d = new Date(), z = (n) => String(n).padStart(2, '0'); return `kensoku-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.${(recMime || '').startsWith('video/mp4') ? 'mp4' : 'webm'}`; }
 // シェア(2026-11-24 TikTok世代): 端末のシェア画面に、録画をそのまま渡す。結果の数字を一言そえる
 $('btnShare').onclick = async () => {
-  if (!recFile) return; const D = downs(), b = D.reduce((m, x) => Math.max(m, val(x)), 0), text = D.length ? `ケンソク！ ${WHICH[which()]} 最高 ${b.toFixed(1)} m/秒(${D.length}本)` : 'ケンソク！';
+  if (!recFile) return; const D = downs(), b = D.reduce((m, x) => Math.max(m, val(x)), 0), text = D.length ? `ケンソク！ ${WHICH[which()]} 最高 ${Math.round(b)} m/秒(${D.length}本)` : 'ケンソク！';
   toast('シェア画面を開きます…');
   try { await navigator.share({ files: [recFile], text }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   try { await navigator.share({ files: [recFile] }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
@@ -544,6 +544,8 @@ const val = (s) => (which() === 'tip' ? s.v : s[which()]) || 0;
 const SET_N = 30;
 function trimMean(a) { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y), k = Math.floor(b.length * 0.1), c = b.slice(k, b.length - k); return c.reduce((x, y) => x + y, 0) / c.length; }
 const avgLabel = (n) => (n < SET_N ? `平均(あと${SET_N - n}本)` : `平均(${n}本)`);
+// 見せ方(2026-11-24 中山さん「Aで」): 30コマでは1本ごとの数字はばらつく(実測: 正解11〜15に対しメーター5〜16)。1本ごとは整数の目安、平均は10本以上で小数1けた(平均はばらつきが薄まる)
+const fmtSw = (x) => String(Math.round(x)), fmtAvg = (x, n) => (n >= 10 ? x.toFixed(1) : String(Math.round(x)));
 const cur = () => (eng.speeds ? eng.speeds[which()] : eng.speed) || 0;
 const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0).toFixed(1)} ・ 手元 ${(s.hand || 0).toFixed(1)}` : '';
 // 速さの色: 遅い=白 → 速い=赤(MITORIの赤 #d6231b)
@@ -572,7 +574,7 @@ function draw() {
   $('bigTag').textContent = WHICH[which()];
   if (ui === 'a') drawGauge(last, avg, best, D.length);
   else if (ui === 'b') drawBars(last, avg, best, D);
-  else { $('bigN').innerHTML = (running ? display.toFixed(1) : '--') + '<span class="u">m/秒</span>'; $('bigN').style.color = colorOf(display); $('bigS').textContent = `今の1本 ${last ? val(last).toFixed(1) : '--'} ・ ${avgLabel(D.length)} ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)\n${three(last)}`; }
+  else { $('bigN').innerHTML = (running ? fmtSw(display) : '--') + '<span class="u">m/秒</span>'; $('bigN').style.color = colorOf(display); $('bigS').textContent = `今の1本 ${last ? val(last).toFixed(1) : '--'} ・ ${avgLabel(D.length)} ${avg.toFixed(1)} ・ 最高 ${best.toFixed(1)}(${D.length}本)\n${three(last)}`; }
 }
 function vidRect() { // 映像が実際に映っている場所(object-fit: contain)
   const W = ov.width, H = ov.height, ar = (v.videoWidth || 16) / (v.videoHeight || 9); let w = W, h = W / ar; if (h > H) { h = H; w = H * ar; }
@@ -630,27 +632,27 @@ function drawGauge(last, avg, best, n) {
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = pbOn ? '#d6231b' : '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = pbOn ? '#fff' : '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, cy + R * 0.22);
+  g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? fmtSw(display) : '--', cx, cy + R * 0.22);
   g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, cy + R * 0.42);
   if (wide) statsCol(g, W * 0.82, H, R, last, avg, best, n); else statsRow(g, cx, cy + R * 0.92, R, last, avg, best, n);
 }
 // 「今の1本・平均・最高」を横に3つ。y は見出しの高さ、R は大きさの基準
 function statsRow(g, cx, y, R, last, avg, best, n) {
-  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], [avgLabel(n), avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], [avgLabel(n), avg ? fmtAvg(avg, n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic';
   items.forEach(([k, v2], i) => {
     const x = cx + (i - 1) * R * 0.78;
     g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
-    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.26}px ${FONT}`; g.fillText(v2, x, y + R * 0.28);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${i === 1 ? R * 0.34 : R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.28); // 主役は平均
   });
 }
 function statsCol(g, x, H, R, last, avg, best, n) { // 縦に3つ
-  const items = [['今の1本', last ? val(last).toFixed(1) : '--'], [avgLabel(n), avg ? avg.toFixed(1) : '--'], [`最高(${n}本)`, best ? best.toFixed(1) : '--']];
+  const items = [['今の1本', last ? fmtSw(val(last)) : '--'], [avgLabel(n), avg ? fmtAvg(avg, n) : '--'], [`最高(${n}本)`, best ? fmtSw(best) : '--']];
   g.textAlign = 'center'; g.textBaseline = 'alphabetic'; const step = Math.min(H / 3.3, R * 0.62), y0 = H / 2 - step;
   items.forEach(([k, v2], i) => {
     const y = y0 + (i - 0.5) * step + step * 0.25;
     g.fillStyle = 'rgba(255,255,255,.72)'; g.font = `800 ${Math.max(13 * devicePixelRatio, R * 0.1)}px ${FONT}`; g.fillText(k, x, y);
-    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${R * 0.24}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
+    g.fillStyle = i === 2 && best ? '#ff5a52' : '#fff'; g.font = `900 ${i === 1 ? R * 0.32 : R * 0.22}px ${FONT}`; g.fillText(v2, x, y + R * 0.26);
   });
 }
 // 数字: 上に大きい数字、まん中に「今の1本・平均・最高」、下に直近12本の棒
@@ -664,7 +666,7 @@ function drawBars(last, avg, best, D) {
   g.save(); g.fillStyle = '#2c4aa0'; g.transform(1, 0, -0.25, 1, ty * 0.25 + 4, 4); g.fillRect(tx, ty, tw, th); g.restore();
   g.save(); g.fillStyle = '#fff'; g.transform(1, 0, -0.25, 1, ty * 0.25, 0); g.fillRect(tx, ty, tw, th); g.restore();
   g.fillStyle = '#0c1636'; g.fillText(tag, cx, ty + th * 0.76);
-  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? display.toFixed(1) : '--', cx, y);
+  y += R * 0.6; g.fillStyle = colorOf(display); g.font = `900 ${R * 0.62}px ${FONT}`; g.fillText(running ? fmtSw(display) : '--', cx, y);
   y += R * 0.17; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = `800 ${R * 0.1}px ${FONT}`; g.fillText('m/秒', cx, y);
   y += R * 0.22; statsRow(g, cx, y, R, last, avg, best, D.length);
   if (last) { g.fillStyle = 'rgba(255,255,255,.6)'; g.font = `500 ${R * 0.08}px ${FONT}`; g.fillText(three(last), cx, y + R * 0.38); }
@@ -698,16 +700,16 @@ function say(text, fast) { // 案内は、やさしくゆっくり(2026-11-24 �
 let lastSwingAt = 0;
 if (DEV) window.__ks = { eng, prepNext: (k) => prepNext(k), showPop: (v2, pb) => showPop(v2, pb) }; // 見た目の確認用(?dev のときだけ)
 let popT = 0;
-function showPop(vv, pb) { clearTimeout(popT); document.body.classList.add('popping'); popT = setTimeout(() => document.body.classList.remove('popping'), 1300); const p = $('pop'); p.classList.remove('on', 'pb'); void p.offsetWidth; $('popN').textContent = vv.toFixed(1); $('popN').style.color = colorOf(vv); $('popTag').textContent = pb ? '自己ベスト！' : WHICH[which()]; p.classList.toggle('pb', pb); p.classList.add('on'); }
+function showPop(vv, pb) { clearTimeout(popT); document.body.classList.add('popping'); popT = setTimeout(() => document.body.classList.remove('popping'), 1300); const p = $('pop'); p.classList.remove('on', 'pb'); void p.offsetWidth; $('popN').textContent = fmtSw(vv); $('popN').style.color = colorOf(vv); $('popTag').textContent = pb ? '自己ベスト！' : WHICH[which()]; p.classList.toggle('pb', pb); p.classList.add('on'); }
 function speakNew() {
   if (prepPhase < 2) return;
   const D = downs(); const s = D[D.length - 1]; if (!s || spoken.has(s)) return;
   spoken.add(s); if (performance.now() - (s.at || 0) > 3000 && s.at) return;
   const vv = val(s), now = performance.now(); display = Math.max(display, vv); holdUntil = now + 1800; // 確かな1本の数字を、2秒近く読めるように止める
-  let txt = vv.toFixed(1), isPB = false; lastSwingAt = now;
+  let txt = fmtSw(vv), isPB = false; lastSwingAt = now;
   if (pbBase >= 10 && vv > pbBest) { pbBest = vv; pbUntil = now + 3000; sessionPB = true; isPB = true; txt += '。自己ベストです'; }
   showPop(vv, isPB); // 記録が10本以上あるときだけ(最初の数本で毎回ベストにならないように)
-  if (D.length === SET_N && !setSaid) { setSaid = true; txt += `。${SET_N}本、平均${trimMean(D.map(val)).toFixed(1)}です`; }
+  if (D.length === SET_N && !setSaid) { setSaid = true; txt += `。${SET_N}本、平均${fmtAvg(trimMean(D.map(val)), D.length)}です`; }
   say(txt, true);
 }
 
