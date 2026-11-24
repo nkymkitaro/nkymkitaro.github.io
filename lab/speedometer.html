@@ -94,7 +94,8 @@
     .ib { width: 42px; height: 42px; } .ib svg { width: 21px; height: 21px; }
     #stat { grid-column: 1; grid-row: 1; z-index: 3; align-self: start; font-size: .62rem; padding: 4px 8px; margin: 6px; border-radius: 8px; background: rgba(7,13,34,.6); pointer-events: none; } /* 映像の上に小さく重ねる(右の列はメーターに使う) */
     .view { grid-row: 2 / 4 !important; }
-    .view { grid-column: 2; z-index: 3; pointer-events: none; background: linear-gradient(to left, rgba(7,13,34,.6) 45%, rgba(7,13,34,0)); }
+    .view { grid-column: 2; z-index: 3; pointer-events: none; }
+    .stage video { object-position: left center; } /* 映像は左に寄せ、余った黒は右(メーターの下)へ。左に黒い帯を作らない */
     .view canvas { opacity: .9; }
     .dock { grid-column: 2; grid-row: 4; padding: 6px 10px calc(8px + env(safe-area-inset-bottom)); background: none; }
     .dock { gap: 6px; } .tabs { gap: 2px; } .tabs button { font-size: .92rem; padding: 10px 11px; min-height: 44px; white-space: nowrap; }
@@ -201,7 +202,7 @@
 import { SwingEngine } from './js/swing-engine.js';
 const $ = (id) => document.getElementById(id);
 const DEV = new URLSearchParams(location.search).has('dev'); document.documentElement.classList.toggle('dev', DEV); // 開発用の数字の行は ?dev=1 のときだけ出す
-const HELP_HTML = '<div><svg viewBox="0 0 300 150" width="260" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押してください</div></div>';
+const HELP_HTML = '<div><svg viewBox="0 0 300 150" style="width:min(84vw,460px);height:auto" role="img" aria-label="スマホを真横に置き、剣先まで映る"><g fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><rect x="12" y="52" width="22" height="40" rx="4"/><path d="M36 66 150 18M36 78 150 132" stroke-dasharray="6 6" stroke-width="2" opacity=".7"/><circle cx="205" cy="44" r="10"/><path d="M205 56v46M205 102l-11 30M205 102l12 30M205 68l22-8"/><path d="M227 60l26-42" stroke="#d6231b" stroke-width="5"/></g></svg><div style="font-size:1.05rem;margin-top:4px">スマホを真横に置いて<br>「はじめる」を押してください</div></div>';
 $('help').innerHTML = HELP_HTML;
 const v = $('v'), ov = $('ov'), oc = ov.getContext('2d'), gauge = $('gauge'), gc = gauge.getContext('2d'), stat = $('stat');
 const eng = new SwingEngine({ lengthCm: 101.5, color: 'wood', width: 320 });
@@ -424,7 +425,7 @@ function layoutGuide() {
   const W = box.clientWidth, H = box.clientHeight, vw = v.videoWidth, vh = v.videoHeight; if (!W || !H) return;
   const st = box.parentElement.getBoundingClientRect(), bx = box.getBoundingClientRect();
   let x = 0, y = 0, w = W, h = H;
-  if (vw && vh) { const sc = (v.style.objectFit === 'cover' ? Math.max : Math.min)(st.width / vw, st.height / vh), cw = vw * sc, ch = vh * sc; x = (st.width - cw) / 2 - (bx.left - st.left); y = (st.height - ch) / 2 - (bx.top - st.top); w = cw; h = ch; if (cw < 520 && W > cw) { x = 0; w = W; } } /* 映像が細いとき(縦長の映像を横向きで見る等)は、帯もカードも全幅 */
+  if (vw && vh) { const sc = (v.style.objectFit === 'cover' ? Math.max : Math.min)(st.width / vw, st.height / vh), cw = vw * sc, ch = vh * sc; x = (getComputedStyle(v).objectPosition.startsWith('0%') ? 0 : (st.width - cw) / 2) - (bx.left - st.left); y = (st.height - ch) / 2 - (bx.top - st.top); w = cw; h = ch; if (cw < 520 && W > cw) { x = 0; w = W; } } /* 映像が細いとき(縦長の映像を横向きで見る等)は、帯もカードも全幅 */
   const l = Math.max(x, 0) + w * .07, r = Math.min(x + w, W) - w * .07, t = Math.max(y, 0) + Math.max(h * .12, 52);
   const c = $('pCard'), bottom = Math.min(y + h, H) - 8, cardTop = c && c.style.display !== 'none' ? H - c.offsetHeight - 16 : bottom;
   const L = Math.max(x, 0) + 8, Rr = W - Math.min(x + w, W) + 8, sp = box.querySelector('.psteps'); // 帯とカードも映像の幅に揃える
@@ -476,7 +477,7 @@ function prepTick(st, vis) {
   if (iss && prepRun.n >= 3 && !prepSpoken.has(bad[0])) { prepSpoken.add(bad[0]); say(iss[1]); } // 同じ問題は、その段階で1回だけ(画面には出し続ける)
   if (prepOk >= 2) { prepNext(false); return; }
   const warn = !!(iss && prepRun.n >= 2);
-  prepRender(sets.map(([k, l]) => [l, c[k]]), warn ? iss[0] : PREP[prepPhase].msg, warn);
+  prepRender(sets.map(([k, l]) => [l, c[k]]), iss ? iss[0] : PREP[prepPhase].msg, warn); // 指示は一つ: 足りない項目の、やること
 }
 
 // ---- 表示 ----
@@ -550,7 +551,7 @@ function drawGauge(last, avg, best, n) {
   const wide = W / H > 1.45; // 横に長い枠(横向きの右の列)は、3つの数字を弧の右に縦に並べて、弧を大きくする
   const R = wide ? Math.min(W * 0.3, H / 2.05) : Math.min(W * 0.4, H / 2.5), cx = wide ? W * 0.37 : W / 2, cy = wide ? H / 2 + R * 0.25 : H / 2 - R * 0.01, MAX = 20, a0 = Math.PI * 0.8, a1 = Math.PI * 2.2, A = (sp) => a0 + (a1 - a0) * Math.min(1, sp / MAX);
   g.lineCap = 'butt'; g.lineWidth = R * 0.14;
-  g.fillStyle = 'rgba(7,13,34,.55)'; g.beginPath(); g.arc(cx, cy, R * 1.3, 0, 7); g.fill();            // 輪の下地(映像の上でも読める)
+  { const ro = Math.min(R * 1.45, cy, H - cy + R * 0.6), rg = g.createRadialGradient(cx, cy, R * 0.6, cx, cy, ro); rg.addColorStop(0, 'rgba(7,13,34,.62)'); rg.addColorStop(0.75, 'rgba(7,13,34,.45)'); rg.addColorStop(1, 'rgba(7,13,34,0)'); g.fillStyle = rg; g.fillRect(0, 0, W, H); } // 輪の下地: ふちをぼかし、枠で切れた硬い縁を出さない
   g.strokeStyle = 'rgba(255,255,255,.22)'; g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();          // 地
   g.strokeStyle = colorOf(display); g.beginPath(); g.arc(cx, cy, R, a0, A(display)); g.stroke();      // いま: 白→赤
   g.fillStyle = 'rgba(255,255,255,.9)'; g.font = `800 ${R * 0.11}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle';
