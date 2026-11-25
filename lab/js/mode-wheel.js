@@ -199,7 +199,7 @@ function init() {
       const k = MODES[mi].k;
       e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_SEL[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
-      e.style.opacity = land && Math.abs(x) > W * 1.5 ? 0 : Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)。横は3つだけ見せる(同じ名前が2回出ていた)
+      e.style.opacity = Math.abs(x) > W * 1.5 ? 0 : Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)。横は3つだけ見せる(同じ名前が2回出ていた)
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
       e.setAttribute('aria-selected', String(Math.abs(x) < W * 0.3));
     });
@@ -396,6 +396,11 @@ function init() {
     let camCorner = both; let landFlipSide = false;
     if (!land && bandsEl) bandsEl.style.left = '';
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
+    // 向きを変えたのに、カメラの形が前の向きのまま(横の16:9のまま縦に戻した、など)なら、少し待って頼み直す(2026-11-26。Pixelの全画面で、縦に戻しても9:16のままだった)。
+    // 出せない端末で頼み続けないよう、向きが変わるごとに3回まで
+    if (fit.land !== land) { fit.land = land; fit.retry = 0; fit.since = Date.now(); }
+    { const want = land ? (askAspect.last || 16 / 9) : 3 / 4; const now = Date.now();
+      if (Math.abs(ar - want) > 0.05 && fit.retry < 3 && now - fit.since > 1500) { fit.retry++; fit.since = now; askAspect.trackId = null; askAspect(land ? (askAspect.last || 16 / 9) : 4 / 3); } }
     // 縦向き(2026-11-26 作り直し。中山さん「画面の大きさに合わせてボタンや帯も小さく。映像を最大限大きく」):
     // 映像は幅いっぱい(3:4。センサーを全部使う 11/14 の決定はそのまま)。ボタン・名前の帯は画面の大きさに合わせて伸び縮みする(押せる大きさは44px以上を守る)。
     // 上の段(←・ロゴ・秒数・⚙)は、映像の上に空きがあれば紺の上、なければ映像の上に重ねる。下の操作も、入らなければ映像の上に半透明で重ねる
@@ -426,10 +431,10 @@ function init() {
       const backOn = backBtn && getComputedStyle(backBtn).display !== 'none';
       if (backBtn) px(backBtn, 2, safe().t + 6, 44, 44, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
       if (vy > 0) { // 上の段は紺の上: ←・ロゴを並べ、LIVEの帯は映像の左上
-        if (bandsEl) bandsEl.style.left = '';
+        if (bandsEl) { bandsEl.style.left = ''; bandsEl.style.top = ''; }
         px(logo, backOn ? 50 : 12, safe().t + 6 + (44 - LOGO_H) / 2, null, null);
       } else { // 映像の上に重ねる: ←とLIVEの帯を横に並べ、ロゴは帯の下に小さく
-        if (bandsEl) bandsEl.style.left = backOn ? '48px' : '';
+        if (bandsEl) { bandsEl.style.left = backOn ? '48px' : ''; bandsEl.style.top = `${safe().t + 6 + 6}px`; } // ←と同じ高さ(全画面では上の切り欠きの分だけ下げる)
         px(logo, 12, safe().t + 6 + 44 + 6, null, null);
       }
       flip.classList.toggle('mw-big', false);
@@ -443,8 +448,8 @@ function init() {
       // 横向き(2026-11-26 作り直し。縦と同じ考え方): ボタンは画面の高さに合わせて伸び縮みし、右の列は要る幅だけにする。
       // 映像は高さいっぱい。列の分の幅が残れば16:9(横に広く大きく)、残らなければ4:3にして、列は映像の上に半透明で重ねる
       m = Math.round(Math.max(52, Math.min(76, H * 0.19)));
-      const wheelW = 44; const gap = 8; const pad = 4;
-      const colNeed = Math.round(8 + wheelW + gap + Math.max(m, 76) + pad + safe().r);
+      const wheelW = 58; const gap = 6; const pad = 4; // 名前の札の幅(CSS の --mw-wheel-w と同じ。小さくすると、選んだ札が画面の右からはみ出る)
+      const colNeed = Math.round(12 + wheelW + gap + Math.max(m, 76) + pad + safe().r);
       askAspect(W - H * 16 / 9 >= colNeed - 8 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar;
       let col = W - vw;
@@ -455,7 +460,7 @@ function init() {
       mx = W - col + pad + Math.max(0, (avail - m) / 2); my = (H - m) / 2;
       const bx = Math.round(Math.max(44, Math.min(52, m * 0.68))); root.style.setProperty('--mw-bx', `${bx}px`);
       const scx = mx + m / 2;
-      px(wheel, W - 8 - safe().r - wheelW, H / 2 - 84, wheelW, 168);
+      px(wheel, W - 12 - safe().r - wheelW, H / 2 - 84, wheelW, 168);
       px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 20); px(slotDl, scx - 38, my + m + 10, 76, bx + 20);
       if (flipOn && !seatDel()) px(flip, scx - 24, my + m + 12, 48, 48, { borderRadius: '50%', background: '' });
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
@@ -463,7 +468,7 @@ function init() {
       // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
       const backShown = backBtn && getComputedStyle(backBtn).display !== 'none';
       if (backBtn) px(backBtn, 4 + safe().l, 4, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
-      if (bandsEl) bandsEl.style.left = backShown ? `${52 + safe().l}px` : '';
+      if (bandsEl) { bandsEl.style.left = backShown ? `${52 + safe().l}px` : ''; bandsEl.style.top = ''; }
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
