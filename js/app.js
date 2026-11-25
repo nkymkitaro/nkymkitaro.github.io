@@ -131,6 +131,7 @@ function startMonitor() {
       const f = tr && tr.getSettings ? tr.getSettings().facingMode : null;
       facingMode = f === 'user' || f === 'environment' ? f : cameraLink.monitorFacing;
     }
+    if (btnFlipCam && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) initFlipCam(); // 許可のあとは、カメラの数が正しく分かる
     if (!liveStartSent) { liveStartSent = true; track('live_start'); } // 撮影の画面に着いた(許可が通り、映像が出た)。1回だけ
     player.startLiveLoop(() => cameraLink.getActiveVideoElement());
     // 親機自身のカメラ(カメラ1)のズーム。対応していない端末では出さない
@@ -678,11 +679,19 @@ function selectQuality(key, { auto = false } = {}) {
 let facingMode = 'environment'; // 起動時に、実際に開いた向きで上書きする
 const btnFlipCam = document.getElementById('btnFlipCam');
 const btnDelayFlip = document.getElementById('btnDelayFlip'); // 10秒ディレイの画面にも同じボタンを出す
+// 切り替えボタンを出すか(2026-11-26 直し。依頼 2026-11-26-to-coder-flip-camera-and-live-layout.md の1)。
+// 前は、ページを開いた直後(カメラの許可の前)に1回だけ数えていた。許可の前は、iPhone の Safari・Edge も Android の Chrome も
+// カメラを1つ(名前なし)としか返さないため、許可が毎回いる iPhone では、いつまでも出なかった(外カメラに切り替えられない)。
+// いまは: 数が確かなとき(名前が付いて返るとき=許可のあと)にカメラが1つなら隠す。それ以外(2つ以上・数が分からない)は出す。
+// カメラが動き出したあと・カメラの抜き差しのたびに数え直す
 async function initFlipCam() {
+  let n = null; // null = 数が分からない
   try {
-    const devs = await navigator.mediaDevices.enumerateDevices();
-    if (devs.filter((d) => d.kind === 'videoinput').length >= 2) { btnFlipCam.hidden = false; if (btnDelayFlip) btnDelayFlip.hidden = false; } // カメラが1つの端末では出さない
-  } catch (err) { /* 数えられないときは出さない */ }
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    if (cams.some((d) => d.label)) n = cams.length;
+  } catch (err) { /* 数えられないときは、分からない扱い(出す) */ }
+  const show = n === null || n >= 2;
+  [btnFlipCam, btnDelayFlip].forEach((b) => { if (b) b.hidden = !show; });
 }
 let flipping = false;
 async function flipCamera() {
@@ -698,6 +707,7 @@ async function flipCamera() {
 }
 if (btnFlipCam && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
   initFlipCam();
+  try { navigator.mediaDevices.addEventListener('devicechange', initFlipCam); } catch (err) { /* 古い端末は、開いたときと映像が出たときだけ */ }
   [btnFlipCam, btnDelayFlip].forEach((b) => { if (!b) return; attachPress(b, { vibrate: 12 }); b.addEventListener('click', flipCamera); });
 }
 
