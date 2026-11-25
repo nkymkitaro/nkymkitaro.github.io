@@ -933,6 +933,7 @@ async function initParent(app) {
     recBtn.hidden = busy;
     cancelBtn.hidden = !busy;
     monitorArea.classList.toggle('lab-recording', recording);
+    monitorArea.classList.toggle('lab-noflip', recording && !!capture.recording && !capture.canSwapStream); // 録画中にカメラを替えられない端末だけ、切り替えを薄く
     monitorArea.classList.toggle('lab-busy', busy);
     if (collecting) lastEta = recvEtaMs(); else { lastEta = null; recvSamples.length = 0; }
     overlayBand.refresh();

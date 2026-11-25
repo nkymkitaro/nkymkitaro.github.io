@@ -165,6 +165,19 @@ export class LocalCapture {
     this.onChange();
   }
 
+  // 録画を止めずに、カメラ(内⇄外)を替えられるか(コマ送り重視の録画だけ。「ふつう」の録画は替えられない)
+  get canSwapStream() { return !!(this.status.recording && this.recorder && typeof this.recorder.setSource === 'function'); }
+
+  // 録画中にカメラを替えた(2026-11-26)。新しい映像の流れで、録画を続ける
+  async swapStream(stream) {
+    if (!this.canSwapStream || !stream || stream === this._stream) return false;
+    if (this._stream && this._trackEnded) this._stream.getVideoTracks().forEach((t) => t.removeEventListener('ended', this._trackEnded));
+    const ok = await this.recorder.setSource(stream);
+    if (this._trackEnded) stream.getVideoTracks().forEach((t) => t.addEventListener('ended', this._trackEnded));
+    this._stream = stream;
+    return ok;
+  }
+
   async stop() {
     clearInterval(this._watch);
     clearTimeout(this._autoStop);

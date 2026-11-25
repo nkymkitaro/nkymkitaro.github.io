@@ -273,8 +273,9 @@ export class RecorderB {
 
   // ---- 映像 ----
   _pump() {
+    const gen = this._gen = (this._gen || 0) + 1; // カメラを替えたら、前の見張りは止める(二重に回さない)
     const tick = (now, metadata) => {
-      if (!this.running) return;
+      if (!this.running || gen !== this._gen) return;
       this._grab(metadata);
       if (this.video.requestVideoFrameCallback) this.video.requestVideoFrameCallback(tick);
       else setTimeout(tick, 1000 / this.fps);
@@ -296,7 +297,14 @@ export class RecorderB {
     if (this.encoder.encodeQueueSize > 8) { this.dropped++; return; }
     let frame;
     try {
-      if (this._canvas) { this._ctx.drawImage(this.video, 0, 0, this._canvas.width, this._canvas.height); frame = new VideoFrame(this._canvas, { timestamp: ts }); }
+      if (this._contain) { // カメラを替えたあと: 始めたときの大きさのまま、縦横比を保って収める(余りは黒)
+        const cw = this._canvas.width; const ch = this._canvas.height; const vw = this.video.videoWidth; const vh = this.video.videoHeight;
+        if (!vw || !vh) return;
+        const k = Math.min(cw / vw, ch / vh); const dw = Math.round(vw * k); const dh = Math.round(vh * k);
+        if (dw !== cw || dh !== ch) { this._ctx.fillStyle = '#000'; this._ctx.fillRect(0, 0, cw, ch); }
+        this._ctx.drawImage(this.video, Math.round((cw - dw) / 2), Math.round((ch - dh) / 2), dw, dh);
+        frame = new VideoFrame(this._canvas, { timestamp: ts });
+      } else if (this._canvas) { this._ctx.drawImage(this.video, 0, 0, this._canvas.width, this._canvas.height); frame = new VideoFrame(this._canvas, { timestamp: ts }); }
       else frame = new VideoFrame(this.video, { timestamp: ts });
     } catch (err) { this.dropped++; return; }
     this._lastTs = ts;
@@ -304,9 +312,10 @@ export class RecorderB {
     if (ts - this._segStartTs >= this.segMs * 1000 && this._boundaries.length === 0 && this._seg) {
       this._boundaries.push(ts); // 区切りの時間が来た。次のキーフレームから新しい区切りにする
       key = true;
-    } else if (ts - this._lastKeyTs >= this.keyMs * 1000 - 20000) {
+    } else if (this._forceKey || ts - this._lastKeyTs >= this.keyMs * 1000 - 20000) {
       key = true;
     }
+    this._forceKey = false;
     if (key) this._lastKeyTs = ts;
     try { this.encoder.encode(frame, { keyFrame: key }); this.encodedFrames++; } catch (err) { this.onError('圧縮に失敗しました'); }
     frame.close();
@@ -360,6 +369,26 @@ export class RecorderB {
     const durMs = Math.round((seg.lastTs - seg.firstTs) / 1000 + 1000 / this.fps);
     const t0 = Math.round(this._wall0 + seg.firstTs / 1000);
     this.onSegment({ seq: this._seq++, blob, mime: B_MIME, t0, durMs, fps: this.fps, meta: { codec: config.codec, frames: seg.chunks.length, audio: this._aDesc ? this._aDesc.codec : '', audioChunks: aChunks.length } });
+  }
+
+  // 録画を止めずに、映像の元(カメラ)を替える(2026-11-26。録画中の内⇄外の切り替え)。
+  // ファイルの大きさ・向きは始めたときのまま。新しい映像は縦横比を保って収め、余りは黒(内と外で縦横の大きさが違う端末がある)。
+  // 内カメラも左右反転しない(画面の表示だけが鏡写し)。替えた直後のコマはキーフレームにする
+  async setSource(stream) {
+    if (!this.running || !stream || !this.video) return false;
+    if (!this._canvas) {
+      const w = this._config.width; const h = this._config.height;
+      this._canvas = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : Object.assign(document.createElement('canvas'), { width: w, height: h });
+      this._ctx = this._canvas.getContext('2d', { alpha: false });
+      if (!this._ctx) { this._canvas = null; return false; }
+    }
+    this._contain = true;
+    this._forceKey = true;
+    this.stream = stream;
+    this.video.srcObject = stream;
+    await this.video.play().catch(() => {});
+    this._pump();
+    return true;
   }
 
   async stop() {

@@ -104,7 +104,7 @@ body.mode-monitor #monitorArea.delaying #displayCanvas { background: transparent
 body.mode-monitor #monitorArea:is(.replaying, .delaying) .zoom-toggle { display: none !important; }
 
 /* カメラの切り替え(インカメ): 録画中は押せない。切り替え中は少し薄く */
-body.mode-monitor #monitorArea.lab-recording #btnFlipCam { opacity: 0.4; pointer-events: none; }
+body.mode-monitor #monitorArea.lab-recording.lab-noflip :is(#btnFlipCam, #mwFlip) { opacity: 0.4; } /* 録画中に替えられない端末(「ふつう」の録画方式)だけ薄く。押すと一言(2026-11-26) */
 #btnFlipCam.is-busy { opacity: 0.5; pointer-events: none; }
 /* 横向き: カメラ切り替えが出ているときは、上のボタンが5つになり1つだけ次の行に落ちるので、3つずつに並べる */
 @media (orientation: landscape) and (max-height: 540px) {

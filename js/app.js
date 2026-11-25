@@ -695,12 +695,22 @@ async function initFlipCam() {
 }
 let flipping = false;
 async function flipCamera() {
-  if (flipping || document.getElementById('monitorArea').classList.contains('lab-recording')) return;
+  if (flipping) return;
+  // 録画中も、止めずに切り替える(2026-11-26。依頼 2026-11-26-to-videocoder-flip-while-recording.md)。録画は、切り替え後の映像から続く。
+  // 「ふつう」の録画方式(コマ送り重視が使えない端末)だけは替えられないので、押せない見た目(薄く)にしてあり、押すと一言だけ出す
+  const recording = document.getElementById('monitorArea').classList.contains('lab-recording');
+  const cap = window.__lab && window.__lab.capture;
+  const ownRec = !!(recording && cap && cap.recording);
+  if (ownRec && !cap.canSwapStream) { showToast('この端末では、録画中はカメラを切り替えられません'); return; }
   flipping = true;
   [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.add('is-busy'));
   const opt = QUALITY_OPTIONS.find((o) => o.key === varSettings.qualityKey) || QUALITY_OPTIONS[1];
   const used = await cameraLink.switchLocalCamera(facingMode === 'user' ? 'environment' : 'user', opt.capture);
   if (used) { facingMode = used; writeLocal(FACING_KEY, used); } else showToast('カメラを切り替えられませんでした');
+  if (ownRec && cap.recording) { // 新しい映像(切り替えに失敗して元の向きに戻った場合も、開き直した流れ)で録画を続ける
+    const ok = await cap.swapStream(cameraLink.localMonitorVideo.srcObject).catch(() => false);
+    if (!ok) showToast('録画を続けられませんでした。録画を止めて、もう一度始めてください');
+  }
   if (hostZoom) hostZoom.refresh(); // 前面カメラはズームがないことが多い。倍率は1倍から
   [btnFlipCam, btnDelayFlip].forEach((b) => b && b.classList.remove('is-busy'));
   flipping = false;
