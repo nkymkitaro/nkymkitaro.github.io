@@ -15,7 +15,7 @@ import { diagOn, diagSet, diagTime } from './diag.js';
 import { DelayCodec } from './delay-codec.js';
 import { motionMs } from './motion.js';
 import { initInstallPrompt } from './install-prompt.js';
-import { maybeShowHomeNudge } from './home-nudge.js';
+import { maybeShowHomeNudge, maybeShowHomeNudgeLandscape } from './home-nudge.js';
 import { prefetchRelayConfig } from './relay.js';
 import { createReplayUi } from './replay-ui.js';
 import { setBandState, showSubBand, hideSubBand, subBandText, createStateBand } from './state-band.js';
@@ -960,12 +960,14 @@ document.addEventListener('click', (e) => {
 // 横向きにしたのに全画面でないとき、1回だけ「押すと全画面」と知らせる(Android の Chrome など、全画面に入れる端末だけ)
 let fsHintShown = false;
 function maybeHintFullscreen() {
+  if (!document.fullscreenEnabled && document.body.classList.contains('mode-monitor') && window.innerWidth > window.innerHeight) { maybeShowHomeNudgeLandscape(); return; } // iPhone: 全画面にできないので、ホーム画面への追加を1回だけ勧める
   if (fsHintShown || document.fullscreenElement || !document.fullscreenEnabled || getDisplayMode() === 'home_screen') return;
   if (!document.body.classList.contains('mode-monitor') || window.innerWidth <= window.innerHeight) return;
   fsHintShown = true;
   showToast('画面を押すと全画面になります');
 }
 window.addEventListener('resize', () => setTimeout(maybeHintFullscreen, 400));
+setTimeout(maybeHintFullscreen, 3000); // 横向きで開いたとき(向きを変えなくても)
 
 function exitBrowserFullscreen() {
   // 一度入った全画面は、VARを閉じても・ディレイを止めても出ない(出入りのたびにChromeの「上からスワイプで終了」の案内が出て邪魔だった。中山さん 2026-11-15)。

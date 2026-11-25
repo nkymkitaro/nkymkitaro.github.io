@@ -9,11 +9,15 @@ import { readLocal, writeLocal } from './safe-storage.js';
 
 const DONE_KEY = 'kendo-var-home-nudge-done';
 
+// 横向きの iPhone 用(2026-11-26 中山さん: iPhoneのSafariはページを全画面にできない。ホーム画面から開けばバーが出ない)。VAR後の案内とは別に、1回だけ
+const LAND_KEY = 'kendo-var-home-nudge-land-done';
+let curKey = DONE_KEY;
+let curText = 'ホーム画面に追加すると、すぐ開けます。';
 function isDone() {
-  return readLocal(DONE_KEY) === '1';
+  return readLocal(curKey) === '1';
 }
 function markDone() {
-  writeLocal(DONE_KEY, '1');
+  writeLocal(curKey, '1');
 }
 function isStandalone() {
   return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
@@ -64,8 +68,18 @@ function hide({ remember = true } = {}) {
 let waitTimer = null;
 // 立場の問いは0.7秒後に開くので、それより後に見る
 export function maybeShowHomeNudge() {
+  if (el && !el.hidden) return;
+  curKey = DONE_KEY; curText = 'ホーム画面に追加すると、すぐ開けます。';
   clearTimeout(waitTimer);
   waitTimer = setTimeout(() => check(0), 1200);
+}
+// 撮影画面で iPhone を横にしたとき(全画面にできないため、映像が小さい)。iPad はページを全画面にできるので出さない
+export function maybeShowHomeNudgeLandscape() {
+  if (!/iPhone|iPod/.test(navigator.userAgent) || isStandalone() || isInApp()) return;
+  if (el && !el.hidden) return;
+  curKey = LAND_KEY; curText = 'ホーム画面に追加すると、横向きでも全画面で使えます。';
+  clearTimeout(waitTimer);
+  waitTimer = setTimeout(() => check(0), 800);
 }
 function check(tries) {
   if (isDone() || isStandalone() || isInApp()) return;
@@ -84,7 +98,7 @@ function check(tries) {
     : [MENU_ICON, PLUS_ICON, APP_ICON]);
   el.innerHTML = `
     <div class="home-nudge-head">
-      <p class="home-nudge-text">ホーム画面に追加すると、すぐ開けます。</p>
+      <p class="home-nudge-text">${curText}</p>
       <button type="button" class="home-nudge-close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
     ${steps

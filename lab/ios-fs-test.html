@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>試験: iPhoneの動画の全画面でディレイを見る</title>
+<!-- 試験ページ(2026-11-26 中山さん了承)。iPhoneのSafariはページを全画面にできないが、動画1本は全画面にできる。
+     その仕組みで、ライブ・ディレイを全画面に映せるか、全画面の間もディレイと録画が止まらないかを確かめる。リンクなし・計測なし -->
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; background: #0c1636; color: #fff; padding: 12px env(safe-area-inset-right) 24px env(safe-area-inset-left); }
+  h1 { font-size: 17px; margin: 4px 12px 10px; }
+  .row { display: flex; gap: 8px; padding: 0 12px; flex-wrap: wrap; }
+  .pv { flex: 1 1 45%; min-width: 150px; }
+  .pv video { width: 100%; background: #000; border-radius: 8px; aspect-ratio: 16 / 9; object-fit: contain; }
+  .pv p { margin: 2px 0 6px; font-size: 13px; color: #c9d2ee; }
+  button { font-size: 16px; font-weight: 700; min-height: 48px; padding: 0 14px; border: 0; border-radius: 12px; background: #fff; color: #0c1636; }
+  button.sub { background: #2c4aa0; color: #fff; }
+  label { display: flex; align-items: center; gap: 8px; font-size: 15px; min-height: 44px; }
+  #log { margin: 12px; padding: 10px; background: rgba(255,255,255,.08); border-radius: 8px; font: 13px/1.5 ui-monospace, monospace; white-space: pre-wrap; min-height: 80px; }
+  .steps { margin: 4px 12px 10px; font-size: 14px; color: #c9d2ee; line-height: 1.6; }
+</style>
+</head>
+<body>
+<h1>試験: 動画の全画面でディレイを見る(iPhone)</h1>
+<div class="steps">
+  1. 「カメラを開く」→ 2. 横向きにする → 3. 「ディレイを全画面」(または「ライブを全画面」)<br>
+  4. 全画面で20秒ほど振る(ディレイが10秒遅れで動くか見る)→ 5. 「完了」で戻る → 6. 下の結果を「結果をコピー」で送る
+</div>
+<div class="row">
+  <button id="open">カメラを開く</button>
+  <label><input type="checkbox" id="rec" checked> 録画もする(止まらないかを見る)</label>
+</div>
+<div class="row" style="margin-top:8px">
+  <div class="pv"><video id="live" playsinline muted autoplay></video><p>ライブ</p></div>
+  <div class="pv"><video id="dly" playsinline muted autoplay></video><p>ディレイ(10秒)</p></div>
+</div>
+<div class="row">
+  <button id="fsLive" class="sub" disabled>ライブを全画面</button>
+  <button id="fsDelay" disabled>ディレイを全画面</button>
+  <button id="copy" class="sub">結果をコピー</button>
+</div>
+<div id="log">まだ測っていません</div>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const live = $('live'); const dly = $('dly'); const logEl = $('log');
+  const DELAY_MS = 10000; const FPS = 15;
+  const lines = [];
+  const log = (s) => { lines.push(s); logEl.textContent = lines.join('\n'); };
+  log(`端末: ${navigator.userAgent}`);
+  log(`video.webkitEnterFullscreen: ${'webkitEnterFullscreen' in HTMLVideoElement.prototype} / requestFullscreen(ページ): ${!!document.fullscreenEnabled} / ホーム画面から: ${window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches}`);
+
+  let stream = null; const buf = []; // { t, bmp }
+  const cv = document.createElement('canvas'); const ctx = cv.getContext('2d');
+  // 全画面の間の数え(1秒ごと)
+  const st = { grab: 0, draw: 0, chunks: 0, bytes: 0 };
+  let fsStart = 0; let fsBase = null; let fsKind = '';
+
+  $('open').addEventListener('click', async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    } catch (e) { log(`カメラを開けませんでした: ${e.name}`); return; }
+    live.srcObject = stream; await live.play().catch(() => {});
+    const s = stream.getVideoTracks()[0].getSettings();
+    log(`カメラ: ${s.width}×${s.height} ${s.frameRate || '?'}fps`);
+    // ディレイ: 15コマ/秒で画像をため、10秒前の画像をキャンバスに描き、そのキャンバスの流れを2つ目の動画に入れる(押す前に再生しておく。全画面は押した操作の中ですぐ呼ぶ必要があるため)
+    cv.width = 960; cv.height = Math.round(960 * (s.height || 720) / (s.width || 1280));
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const cs = cv.captureStream(FPS); dly.srcObject = cs; await dly.play().catch(() => {});
+    setInterval(async () => {
+      if (live.readyState < 2) return;
+      try { const bmp = await createImageBitmap(live, { resizeWidth: cv.width, resizeHeight: cv.height }); buf.push({ t: performance.now(), bmp }); st.grab++; } catch (e) { return; }
+      const now = performance.now();
+      while (buf.length > 1 && buf[1].t <= now - DELAY_MS) { const o = buf.shift(); o.bmp.close && o.bmp.close(); }
+      const f = buf[0];
+      if (f && f.t <= now - DELAY_MS + 200) { ctx.drawImage(f.bmp, 0, 0); st.draw++; }
+      else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = '#fff'; ctx.font = 'bold 40px sans-serif'; ctx.fillText(`ためています ${Math.ceil((DELAY_MS - (now - (buf[0] ? buf[0].t : now))) / 1000)}`, 40, cv.height / 2); st.draw++; }
+    }, 1000 / FPS);
+    // 録画(止まらないかだけ見る。ファイルは保存しない)
+    if ($('rec').checked && window.MediaRecorder) {
+      try {
+        const mr = new MediaRecorder(stream);
+        mr.ondataavailable = (e) => { st.chunks++; st.bytes += e.data.size; };
+        mr.start(1000); log(`録画: 開始(${mr.mimeType || '形式不明'})`);
+      } catch (e) { log(`録画: 始められません ${e.name}`); }
+    }
+    $('fsLive').disabled = false; $('fsDelay').disabled = false;
+    log('準備できました。横向きにして、全画面のボタンを押してください(ディレイは10秒たまってから映ります)');
+  });
+
+  function enterFs(v, kind) {
+    fsKind = kind; fsStart = performance.now(); fsBase = { ...st };
+    try {
+      if (v.webkitEnterFullscreen) v.webkitEnterFullscreen(); // iPhone: 動画の全画面
+      else if (v.requestFullscreen) v.requestFullscreen();
+      else { log('全画面にする仕組みがありません'); return; }
+    } catch (e) { log(`全画面に入れません: ${e.name} ${e.message}`); return; }
+    log(`— ${kind}を全画面にしました(${new Date().toLocaleTimeString()})`);
+  }
+  function onExit() {
+    if (!fsStart) return;
+    const sec = (performance.now() - fsStart) / 1000;
+    const d = (k) => st[k] - fsBase[k];
+    log(`— ${fsKind}の全画面から戻りました: ${sec.toFixed(1)}秒`);
+    log(`   全画面の間: 画像をためた ${(d('grab') / sec).toFixed(1)}回/秒、ディレイを描いた ${(d('draw') / sec).toFixed(1)}回/秒(目安 ${FPS})、録画の区切り ${d('chunks')}個(目安 約${Math.round(sec)}個)・${(d('bytes') / 1e6).toFixed(1)}MB`);
+    log(`   戻ったあと: ライブ ${live.paused ? '止まっている' : '動いている'}、ディレイ ${dly.paused ? '止まっている' : '動いている'}`);
+    fsStart = 0;
+  }
+  [live, dly].forEach((v) => {
+    v.addEventListener('webkitendfullscreen', () => { onExit(); v.play().catch(() => {}); });
+  });
+  document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) onExit(); });
+  $('fsLive').addEventListener('click', () => enterFs(live, 'ライブ'));
+  $('fsDelay').addEventListener('click', () => enterFs(dly, 'ディレイ'));
+  $('copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(lines.join('\n')); $('copy').textContent = 'コピーしました'; setTimeout(() => { $('copy').textContent = '結果をコピー'; }, 1500); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(logEl); getSelection().removeAllRanges(); getSelection().addRange(r); }
+  });
+})();
+</script>
+</body>
+</html>
