@@ -946,7 +946,9 @@ document.addEventListener('fullscreenchange', () => {
 });
 document.addEventListener('click', (e) => {
   // 試験ページ(モードホイール)は、撮影画面のどこを押しても全画面に入る(中山さん 2026-11-06「アドレスバーが邪魔」)。<html data-fs-any-tap> のページだけ
-  const anyTap = document.documentElement.hasAttribute('data-fs-any-tap') && document.body.classList.contains('mode-monitor')
+  // 2026-11-26 中山さん: 本番も、撮影画面を最初に押したときに全画面に入る(ディレイから始めても映像を大きく。横向きで約1.5倍)。
+  // ブラウザの決まりで、押す操作なしには全画面にできない(向きを変えただけでは入れない)ので、横にしたときは「押すと全画面」を1回だけ知らせる
+  const anyTap = document.body.classList.contains('mode-monitor')
     && !document.fullscreenElement && e.target.closest && e.target.closest('#monitorArea');
   const rec = e.target.closest && e.target.closest('#labRec');
   if (!anyTap && (!rec || document.getElementById('monitorArea').classList.contains('lab-recording'))) return; // 録画を始めるときだけ
@@ -954,6 +956,16 @@ document.addEventListener('click', (e) => {
   enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
   setTimeout(() => { pendingKeep = false; }, 1500); // 全画面に入れなかったときの後始末
 }, true);
+
+// 横向きにしたのに全画面でないとき、1回だけ「押すと全画面」と知らせる(Android の Chrome など、全画面に入れる端末だけ)
+let fsHintShown = false;
+function maybeHintFullscreen() {
+  if (fsHintShown || document.fullscreenElement || !document.fullscreenEnabled || getDisplayMode() === 'home_screen') return;
+  if (!document.body.classList.contains('mode-monitor') || window.innerWidth <= window.innerHeight) return;
+  fsHintShown = true;
+  showToast('画面を押すと全画面になります');
+}
+window.addEventListener('resize', () => setTimeout(maybeHintFullscreen, 400));
 
 function exitBrowserFullscreen() {
   // 一度入った全画面は、VARを閉じても・ディレイを止めても出ない(出入りのたびにChromeの「上からスワイプで終了」の案内が出て邪魔だった。中山さん 2026-11-15)。
