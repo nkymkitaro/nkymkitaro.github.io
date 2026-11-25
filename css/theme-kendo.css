@@ -15,6 +15,13 @@
   --surface: var(--navy-900);
   --surface-2: var(--navy-800);
   --glass: rgba(255, 255, 255, 0.1);
+  /* 白地の画面(映像が出ていない画面。デザインポリシー 5-0、2026-11-23)。暗の色とは名前を分け、混ぜない。値は lab/kensoku-record.html と同じ */
+  --paper: #ffffff;      /* 地 */
+  --ink: #0c1636;        /* 文字・上の段と見出しの帯・主なボタン(紺) */
+  --ink-soft: #4a5478;   /* 補足の文字(白地で約7.6:1) */
+  --ink-rule: #dfe3ee;   /* 区切りの線 */
+  --ink-tint: #eef1f8;   /* 薄い面(ふつうのボタン) */
+  --ink-shade: #2c4aa0;  /* 主なボタンの影(明るい紺) */
 }
 body.mode-monitor { background: var(--navy-950); }
 
@@ -132,3 +139,26 @@ body:not(.mode-monitor) .delay-countdown, #monitorArea:not(.delaying) .delay-cou
 @keyframes dc-pop { 0% { transform: scale(1.6); opacity: 0; } 18% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(.85); opacity: .15; } }
 @keyframes dc-go { 0% { transform: skewX(-10deg) scale(.4); opacity: 0; } 25% { transform: skewX(-10deg) scale(1.1); opacity: 1; } 70% { transform: skewX(-10deg) scale(1); opacity: 1; } 100% { transform: skewX(-10deg) scale(1.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .delay-countdown span { animation: none; } }
+
+/* =========================================================
+   白地の画面(2026-11-23。中山さんの決定「映像が出ている間は暗、出ていないときは白地」。依頼 2026-11-23-to-coder-light-screens.md)
+   第1段階: 録画の一覧(#labSheet)だけ。シートの中だけ、暗の色の名前を白地の色に置き換える(形・大きさ・働きは変えない)。
+   録画を見る画面(.lab-viewer)は映像なので暗のまま
+   ========================================================= */
+#labSheet {
+  --text: var(--ink); --text-soft: var(--ink-soft); --text-dim: var(--ink-soft); --bg: var(--paper);
+  --hairline: var(--ink-rule); --surface-2: var(--ink-tint); --glass-strong: var(--ink-tint);
+  background: var(--paper); color: var(--ink); border-top: 0;
+  transition: none; /* 暗から白へ、動きなしで切り替える(すぐ出す) */
+}
+#labSheet.open { box-shadow: 0 -8px 30px rgba(12, 22, 54, 0.3); }
+/* 主なボタン(録画開始・選んだ最長・閉じる・未保存の保存)は紺の地に白い文字 */
+#labSheet :is(.lab-big, .lab-opt.on, .btn-hero, .lab-act-text) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+#labSheet .btn-hero { box-shadow: 0 4px 0 var(--ink-shade); }
+#labSheet :is(.lab-act, .lab-opt, .lab-resume) { color: var(--ink); }
+#labSheet .lab-act:not(.lab-act-text) { border: 2px solid var(--ink-rule); }
+/* 見出し「録画の一覧」は紺の斜めの帯(撮影画面の帯と同じ形) */
+#labSheet .mw-sheet-title { display: none; }
+body.mw-listonly #labSheet .mw-sheet-title { display: inline-block; color: var(--paper); background: var(--ink); padding: 5px 22px 5px 10px; clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); }
+body.mw-listonly #labSheet #labTakes:empty::before { color: var(--ink-soft); }
+#labSheet :is(.lab-act, .lab-resume).lab-sure { background: var(--accent-live); color: #fff; border-color: var(--accent-live); } /* 2回押しの1回目(赤は「消える」の目印) */
