@@ -269,3 +269,11 @@ body.mode-monitor #mwList { display:none !important; }
 body.mode-monitor .toast { padding: 8px 14px; font-size: 0.8rem; max-width: min(92vw, 30em); }
 body.mode-monitor .toast.toast-low, body.mode-monitor .toast.has-action { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; white-space: nowrap; }
 body.mode-monitor .toast .toast-action { width: auto; min-height: 40px; margin: 0; padding: 0 14px; flex: none; font-size: 0.85rem; }
+
+/* 重ねる配置(縦向きの小さい画面。2026-11-26 中山さん承認): 帯を付けず、映像の上に半透明の暗い丸・面で重ねる。色は紺・白・赤・黒だけ */
+body.mode-monitor #monitorArea:not(.replaying) .mw.mw-compact .mw-slot .bx.vrb { background: rgba(0,0,0,.45); border-radius: 50%; }
+.mw.mw-compact .mw-slot .lb { font-size: 13px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.mw.mw-compact .mw-wheel .m:not(.sel) .pl { background: rgba(0,0,0,.5); } /* 選んでいない名前の下地(明るい映像の上でも読める) */
+.mw.mw-compact .mw-wheel .m b { font-size: 15px; }
+.mw.mw-compact .mw-wheel .m:not(.sel) b { color: #fff; }
+.mw.mw-compact .mw-logo { opacity: .8; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }

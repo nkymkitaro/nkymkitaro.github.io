@@ -199,7 +199,7 @@ function init() {
       const k = MODES[mi].k;
       e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_SEL[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
-      e.style.opacity = Math.max(0, 1 - 0.45 * Math.abs(x) / W);
+      e.style.opacity = Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
       e.setAttribute('aria-selected', String(Math.abs(x) < W * 0.3));
     });
@@ -396,7 +396,38 @@ function init() {
     let camCorner = both; let landFlipSide = false;
     if (!land && bandsEl) bandsEl.style.left = '';
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
-    if (!land) {
+    // 縦向きで、映像を幅いっぱいにすると上の段(一覧・⚙)と下の操作の帯(210px)が入らない画面(iPhone SE・ブラウザの帯が厚い画面など)は、
+    // 標準のカメラと同じ「重ねる配置」にする: 映像は幅いっぱい、上の段と下の操作は帯を付けずに映像の上へ半透明で重ねる、ボタンは小さく(中山さん 2026-11-26 承認。依頼 2026-11-26-to-coder-flip-camera-and-live-layout.md の0-B)
+    const compact = !land && (H - (safe().t + 8 + 48 + 8) - 210) < W / ar;
+    root.classList.toggle('mw-compact', compact);
+    if (compact) {
+      askAspect(4 / 3);
+      vw = W; vh = W / ar; if (vh > H) { vh = H; vw = H * ar; }
+      vx = (W - vw) / 2; const vy = 0;
+      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
+      const sb = safe().b; const wheelY = H - 48 - Math.max(10, sb + 4);
+      m = H < 600 ? 60 : 68; // 真ん中のボタン(標準のカメラのシャッターくらい)
+      mx = (W - m) / 2; my = wheelY - 6 - m;
+      px(wheel, 0, wheelY, W, 48);
+      const bx = 48; root.style.setProperty('--mw-bx', `${bx}px`);
+      const boxY = my + (m - bx) / 2 - 9; // 左右の席の丸の中心を、真ん中のボタンの中心にそろえる(下の名前の分 9px 上げる)
+      px(slotRc, 10, boxY, 76, bx + 22); px(slotDl, W - 86, boxY, 76, bx + 22);
+      clear(secs); clear(topRow);
+      // 上の段: ←と、映像の左上の帯(LIVE)を横に並べる。ロゴは帯の下に小さく
+      const backOn = backBtn && getComputedStyle(backBtn).display !== 'none';
+      if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (bandsEl) bandsEl.style.left = backOn ? '52px' : '';
+      px(logo, 14, safe().t + 8 + 48 + 8, null, null);
+      flip.classList.toggle('mw-big', false);
+      camCorner = true;
+      // カメラを追加・ズームは、真ん中の段のすぐ上、左右の端に小さく(被写体の手・体に重なりにくい)
+      const upY = my - 10 - 44;
+      if (camBtn) px(camBtn, 10, upY, 44, 44, { background: 'rgba(0,0,0,.45)', minWidth: '44px', borderRadius: '50%' });
+      // 自撮り: 右の席(ディレイの止めるが出ているときは、ズームの上)
+      if (flipOn && !seatDel()) px(flip, W - 86 + 14, boxY, 48, 48, { borderRadius: '50%', background: '' });
+      placeZoom(vx, vw, upY + 44 + 12, true, flipOn && seatDel());
+      document.body.style.setProperty('--mw-toast-top', `${Math.max(70, upY - 60)}px`);
+    } else if (!land) {
       askAspect(4 / 3); // 横向きで16:9にしたあと縦に戻したとき、縦長(9:16)のままで映像が細くならないように
       vw = W; vh = W / ar;
       if (H - vh < 210) { vh = H - 210; vw = vh * ar; }
