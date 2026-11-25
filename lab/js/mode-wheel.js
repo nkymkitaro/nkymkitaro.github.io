@@ -376,7 +376,8 @@ function init() {
   const safeProbe = document.createElement('div');
   safeProbe.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:0;visibility:hidden;padding-top:env(safe-area-inset-top);padding-left:env(safe-area-inset-left);padding-bottom:env(safe-area-inset-bottom);padding-right:env(safe-area-inset-right)';
   document.body.appendChild(safeProbe);
-  const safe = () => { const c = getComputedStyle(safeProbe); return { l: parseFloat(c.paddingLeft) || 0, t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
+  // window.__mwSafe: 試験用(切り欠きのある端末を手元で再現する)
+  const safe = () => { if (window.__mwSafe) return window.__mwSafe; const c = getComputedStyle(safeProbe); return { l: parseFloat(c.paddingLeft) || 0, t: parseFloat(c.paddingTop) || 0, b: parseFloat(c.paddingBottom) || 0, r: parseFloat(c.paddingRight) || 0 }; };
   const zoomBtn = () => $('#monitorArea .zoom-toggle'); const zoomBar = () => $('#monitorArea .zoom-host');
   function placeZoom(vx, vw, vh, both, flipHere) {
     // ボタンは映像の右下(48px)。スライダーは映像の下側で、ボタンの左。録画+ディレイ中は、左下のカメラを追加の上に上げる
@@ -428,14 +429,18 @@ function init() {
       const sw = bx + 26;
       px(slotRc, 8, boxY, sw, bx + 22); px(slotDl, W - 8 - sw, boxY, sw, bx + 22);
       clear(secs); clear(topRow);
+      // 上の段は、1本の基準の高さ(rowY)にそろえる(2026-11-26 直し)。前は ←・⚙ が画面の切り欠きの下(JS と CSS の env)、
+      // LIVEの帯が映像の上端(CSS の 8px)と、別々の基準で置いていたため、全画面などで切り欠きが大きいとき・映像が上端にあるときに段がずれた
+      const rowY = safe().t + 6;
       const backOn = backBtn && getComputedStyle(backBtn).display !== 'none';
-      if (backBtn) px(backBtn, 2, safe().t + 6, 44, 44, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (backBtn) px(backBtn, 2, rowY, 44, 44, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (topRow) { const tw = topRow.getBoundingClientRect().width || 0; px(topRow, W - 8 - safe().r - tw, rowY - 2, null, null, { zIndex: '6' }); }
       if (vy > 0) { // 上の段は紺の上: ←・ロゴを並べ、LIVEの帯は映像の左上
         if (bandsEl) { bandsEl.style.left = ''; bandsEl.style.top = ''; }
-        px(logo, backOn ? 50 : 12, safe().t + 6 + (44 - LOGO_H) / 2, null, null);
-      } else { // 映像の上に重ねる: ←とLIVEの帯を横に並べ、ロゴは帯の下に小さく
-        if (bandsEl) { bandsEl.style.left = backOn ? '48px' : ''; bandsEl.style.top = `${safe().t + 6 + 6}px`; } // ←と同じ高さ(全画面では上の切り欠きの分だけ下げる)
-        px(logo, 12, safe().t + 6 + 44 + 6, null, null);
+        px(logo, backOn ? 50 : 12, rowY + (44 - LOGO_H) / 2, null, null);
+      } else { // 映像の上に重ねる: ←とLIVEの帯を同じ段に並べ、ロゴは段の下に小さく
+        if (bandsEl) { bandsEl.style.left = backOn ? '48px' : ''; bandsEl.style.top = `${rowY - vy + 6}px`; }
+        px(logo, 12, rowY + 44 + 6, null, null);
       }
       flip.classList.toggle('mw-big', false);
       camCorner = true;
