@@ -199,7 +199,7 @@ function init() {
       const k = MODES[mi].k;
       e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_SEL[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
-      e.style.opacity = Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)
+      e.style.opacity = land && Math.abs(x) > W * 1.5 ? 0 : Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)。横は3つだけ見せる(同じ名前が2回出ていた)
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
       e.setAttribute('aria-selected', String(Math.abs(x) < W * 0.3));
     });
@@ -396,89 +396,66 @@ function init() {
     let camCorner = both; let landFlipSide = false;
     if (!land && bandsEl) bandsEl.style.left = '';
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
-    // 縦向きで、映像を幅いっぱいにすると上の段(一覧・⚙)と下の操作の帯(210px)が入らない画面(iPhone SE・ブラウザの帯が厚い画面など)は、
-    // 標準のカメラと同じ「重ねる配置」にする: 映像は幅いっぱい、上の段と下の操作は帯を付けずに映像の上へ半透明で重ねる、ボタンは小さく(中山さん 2026-11-26 承認。依頼 2026-11-26-to-coder-flip-camera-and-live-layout.md の0-B)
-    const compact = !land && (H - (safe().t + 8 + 48 + 8) - 210) < W / ar;
+    // 縦向き(2026-11-26 作り直し。中山さん「画面の大きさに合わせてボタンや帯も小さく。映像を最大限大きく」):
+    // 映像は幅いっぱい(3:4。センサーを全部使う 11/14 の決定はそのまま)。ボタン・名前の帯は画面の大きさに合わせて伸び縮みする(押せる大きさは44px以上を守る)。
+    // 上の段(←・ロゴ・秒数・⚙)は、映像の上に空きがあれば紺の上、なければ映像の上に重ねる。下の操作も、入らなければ映像の上に半透明で重ねる
+    const compact = !land;
     root.classList.toggle('mw-compact', compact);
     if (compact) {
+      logo.style.visibility = '';
       askAspect(4 / 3);
       vw = W; vh = W / ar; if (vh > H) { vh = H; vw = H * ar; }
-      vx = (W - vw) / 2; const vy = 0;
-      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
-      const sb = safe().b; const wheelY = H - 48 - Math.max(10, sb + 4);
-      m = H < 600 ? 60 : 68; // 真ん中のボタン(標準のカメラのシャッターくらい)
+      vx = (W - vw) / 2;
+      const sb = safe().b;
+      const wh = Math.round(Math.max(40, Math.min(48, H * 0.054))); // 名前の帯の高さ
+      const wheelY = H - wh - Math.max(8, sb + 4);
+      m = Math.round(Math.max(56, Math.min(72, W * 0.17))); // 真ん中のボタン(標準のカメラのシャッターくらい)
       mx = (W - m) / 2; my = wheelY - 6 - m;
-      px(wheel, 0, wheelY, W, 48);
-      const bx = 48; root.style.setProperty('--mw-bx', `${bx}px`);
+      const bx = Math.round(Math.max(44, Math.min(50, m * 0.7))); root.style.setProperty('--mw-bx', `${bx}px`);
+      const upY = my - 8 - 44; // カメラを追加・ズームの段
+      const need = safe().t + 8 + 44 + 6; // 上の段の高さ
+      // 映像の置き場所: 上の段と下の操作(カメラを追加の段まで)の間に収まれば、映像に何も重ねない。収まらなければ上に詰めて重ねる
+      const room = upY - 6 - vh;
+      const vy = room >= need ? need : 0;
+      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
+      px(wheel, 0, wheelY, W, wh);
       const boxY = my + (m - bx) / 2 - 9; // 左右の席の丸の中心を、真ん中のボタンの中心にそろえる(下の名前の分 9px 上げる)
-      px(slotRc, 10, boxY, 76, bx + 22); px(slotDl, W - 86, boxY, 76, bx + 22);
+      const sw = bx + 26;
+      px(slotRc, 8, boxY, sw, bx + 22); px(slotDl, W - 8 - sw, boxY, sw, bx + 22);
       clear(secs); clear(topRow);
-      // 上の段: ←と、映像の左上の帯(LIVE)を横に並べる。ロゴは帯の下に小さく
       const backOn = backBtn && getComputedStyle(backBtn).display !== 'none';
-      if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
-      if (bandsEl) bandsEl.style.left = backOn ? '52px' : '';
-      px(logo, 14, safe().t + 8 + 48 + 8, null, null);
+      if (backBtn) px(backBtn, 2, safe().t + 6, 44, 44, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (vy > 0) { // 上の段は紺の上: ←・ロゴを並べ、LIVEの帯は映像の左上
+        if (bandsEl) bandsEl.style.left = '';
+        px(logo, backOn ? 50 : 12, safe().t + 6 + (44 - LOGO_H) / 2, null, null);
+      } else { // 映像の上に重ねる: ←とLIVEの帯を横に並べ、ロゴは帯の下に小さく
+        if (bandsEl) bandsEl.style.left = backOn ? '48px' : '';
+        px(logo, 12, safe().t + 6 + 44 + 6, null, null);
+      }
       flip.classList.toggle('mw-big', false);
       camCorner = true;
-      // カメラを追加・ズームは、真ん中の段のすぐ上、左右の端に小さく(被写体の手・体に重なりにくい)
-      const upY = my - 10 - 44;
       if (camBtn) px(camBtn, 10, upY, 44, 44, { background: 'rgba(0,0,0,.45)', minWidth: '44px', borderRadius: '50%' });
       // 自撮り: 右の席(ディレイの止めるが出ているときは、ズームの上)
-      if (flipOn && !seatDel()) px(flip, W - 86 + 14, boxY, 48, 48, { borderRadius: '50%', background: '' });
-      placeZoom(vx, vw, upY + 44 + 12, true, flipOn && seatDel());
-      document.body.style.setProperty('--mw-toast-top', `${Math.max(70, upY - 60)}px`);
-    } else if (!land) {
-      askAspect(4 / 3); // 横向きで16:9にしたあと縦に戻したとき、縦長(9:16)のままで映像が細くならないように
-      vw = W; vh = W / ar;
-      if (H - vh < 210) { vh = H - 210; vw = vh * ar; }
-      vx = (W - vw) / 2;
-      // 余った高さ(ブラウザのバーが消えて画面が伸びたときなど)は、下の帯だけに回さない。
-      // 下の帯は 260px まで。それより余る分は上に回し(最大72px。LIVEの帯・一覧・⚙が映像にかからない)、まだ余れば上下に半分ずつ
-      // 上は、一覧・⚙の段(画面の上の切り欠き+8+48+8)が映像にかからない高さを空ける。足りなければ、下の帯を210pxまで詰めて空ける
-      const need = safe().t + 8 + 48 + 8;
-      // それでも上が足りないとき(アドレスバーが出ている画面など)は、映像を少し小さくして空ける(一覧・⚙が映像に半分かかると、はみ出して見えるため。中山さん 2026-11-07)。
-      // 小さくするのは2割まで。それ以上足りなければ、ボタンを映像の上に重ねる(vy = 0)
-      { const short = need + 210 - (H - vh); if (short > 0 && short <= vh * 0.2) { vh -= short; vw = vh * ar; vx = (W - vw) / 2; } }
-      const avail = H - vh;
-      const zone = Math.max(210, Math.min(260, avail - need));
-      let vy = Math.max(0, avail - zone);
-      if (vy < need) vy = 0; // 空けきれないときは、半分かけずに、映像の上に重ねる
-      if (vy > need) vy = need + Math.round((vy - need) / 2);
-      const vb = vy + vh; // 映像の下端
-      document.body.style.setProperty('--mw-toast-top', `${Math.max(70, vb - 84)}px`); // お知らせは映像の下側(上の←・⚙に重ならない。2026-11-15)
-      const wheelY = H - 48 - 18 - safe().b; // 下のジェスチャーバーにかからないように
-      m = Math.max(88, Math.min(120, Math.round((H - vb) * 0.36)));
-      mx = (W - m) / 2; my = vb + Math.max(12, Math.round((wheelY - vb - m) / 2));
-      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
-      px(wheel, 0, wheelY, W, 48);
-      const side = 64; const sideY = my + (m - side) / 2; const boxY = my + (m - 56) / 2 - 9;
-      px(slotRc, 14, boxY, 76, 78); px(slotDl, W - 90, boxY, 76, 78);
-      clear(secs); clear(topRow);
-      // ←は左上(よく押さないので上へ)。真ん中のボタンの横は、自撮りとカメラを追加(中山さん 2026-11-07)。
-      // 録画か・ディレイの片方だけ使っているとき: 片側は止める枠。空いた側に自撮り、カメラを追加は映像の左下。両方のとき: 自撮りは映像の右下、カメラを追加は映像の左下
-      if (backBtn) px(backBtn, 4, safe().t + 8, 48, 48, { background: 'transparent', boxShadow: 'none' });
-      // アプリ名(ロゴ)は、映像の上の紺の帯の中、←の右に小さく(中山さん 2026-11-07。依頼 2026-11-07-to-tech-app-name-on-screen.md)。←が出ていないときは左端から
-      { const backOn = backBtn && getComputedStyle(backBtn).display !== 'none'; px(logo, backOn ? 58 : 14, safe().t + 8 + (48 - LOGO_H) / 2, null, null); }
-      // 真ん中の両横は、いつもモードのボタン(案B')。自撮りは映像の右下、カメラを追加は映像の左下
-      flip.classList.toggle('mw-big', false);
-      camCorner = true;
-      if (camBtn) px(camBtn, vx + 12, vb - 68, 56, 56, { background: 'rgba(44,74,160,.85)', minWidth: '56px', borderRadius: '16px' });
-      root.style.setProperty('--mw-bx', '56px');
-      // 自撮り: ディレイの止めるが出ていなければ、真ん中の右の席。出ているときは映像の右下(ズームの上)
-      if (flipOn && !seatDel()) px(flip, W - 90 + 14, boxY + 2, 48, 48, { borderRadius: '50%', background: '' });
-      placeZoom(vx, vw, vb, true, flipOn && seatDel());
+      if (flipOn && !seatDel()) px(flip, W - 8 - sw + (sw - bx) / 2, boxY, bx, bx, { borderRadius: '50%', background: '' });
+      placeZoom(vx, vw, upY + 44 + 8, true, flipOn && seatDel());
+      document.body.style.setProperty('--mw-toast-top', `${Math.max(70, upY - 56)}px`);
     } else {
-      askAspect(W - H * 16 / 9 >= 120 ? 16 / 9 : 4 / 3);
-      vh = H; vw = H * ar; vx = 0;
+      // 横向き(2026-11-26 作り直し。縦と同じ考え方): ボタンは画面の高さに合わせて伸び縮みし、右の列は要る幅だけにする。
+      // 映像は高さいっぱい。列の分の幅が残れば16:9(横に広く大きく)、残らなければ4:3にして、列は映像の上に半透明で重ねる
+      m = Math.round(Math.max(52, Math.min(76, H * 0.19)));
+      const wheelW = 44; const gap = 8; const pad = 4;
+      const colNeed = Math.round(8 + wheelW + gap + Math.max(m, 76) + pad + safe().r);
+      askAspect(W - H * 16 / 9 >= colNeed - 8 ? 16 / 9 : 4 / 3);
+      vh = H; vw = H * ar;
       let col = W - vw;
-      const over = col < 120; if (over) col = 150; // 余白が足りない端末は、列を半透明で映像に重ねる
-      if (!over) px(stage, 0, 0, vw, vh, { padding: '0', zIndex: '0' }); else px(stage, 0, 0, Math.min(W, vw), vh, { padding: '0', zIndex: '0' });
-      const wheelW = 48; const gap = 14; const pad = 6; const avail = col - 8 - wheelW - gap - pad;
-      m = Math.max(64, Math.min(104, Math.round(Math.min(avail, H * 0.24))));
-      mx = W - col + pad + (avail - m) / 2; my = (H - m) / 2;
-      const bx = H < 380 ? 52 : 56; root.style.setProperty('--mw-bx', `${bx}px`);
+      const over = col < colNeed - 8; if (over) col = colNeed;
+      vx = 0;
+      px(stage, vx, 0, over ? Math.min(W, vw) : vw, vh, { padding: '0', zIndex: '0' });
+      const avail = col - 8 - wheelW - gap - pad;
+      mx = W - col + pad + Math.max(0, (avail - m) / 2); my = (H - m) / 2;
+      const bx = Math.round(Math.max(44, Math.min(52, m * 0.68))); root.style.setProperty('--mw-bx', `${bx}px`);
       const scx = mx + m / 2;
-      px(wheel, W - 8 - wheelW, H / 2 - 84, wheelW, 168);
+      px(wheel, W - 8 - safe().r - wheelW, H / 2 - 84, wheelW, 168);
       px(slotRc, scx - 38, my - 14 - 20 - bx, 76, bx + 20); px(slotDl, scx - 38, my + m + 10, 76, bx + 20);
       if (flipOn && !seatDel()) px(flip, scx - 24, my + m + 12, 48, 48, { borderRadius: '50%', background: '' });
       // 秒数の札・一覧・⚙は、左上のLIVEの帯の右に1列で並べる(右の列はモードの操作だけにする。中山さん 2026-11-06「一覧が変なところ」)
@@ -491,13 +468,13 @@ function init() {
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
       // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
-      px(logo, scx - logo.offsetWidth / 2, 16 + safe().t, null, null);
+      { const fits = my - 34 - bx >= 44; px(logo, W - col + Math.max(4, (col - 76) / 2), 12 + safe().t, null, null); logo.style.visibility = fits ? '' : 'hidden'; } // 右の列のいちばん上。低い画面では出さない(ボタンと重なる)
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
       camCorner = true;
-      if (camBtn) px(camBtn, 12, H - 68, 56, 56, { background: 'rgba(44,74,160,.85)' });
+      if (camBtn) px(camBtn, vx + 10 + safe().l, H - 56, 46, 46, { background: 'rgba(0,0,0,.45)', minWidth: '46px', borderRadius: '50%' });
       root.classList.toggle('mw-over', over);
-      placeZoom(0, Math.min(W - (over ? 150 : 0), vw), vh, true, flipOn && seatDel());
+      placeZoom(vx, over ? Math.min(W, vw) - col : vw, vh, true, flipOn && seatDel());
     }
     if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);
