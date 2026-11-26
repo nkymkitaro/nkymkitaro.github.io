@@ -28,7 +28,9 @@
   .band[data-state="on"]::before { content: ''; width: 9px; height: 9px; border-radius: 50%; background: #fff; }
   .sp { flex: 1; }
   .ib { width: 48px; height: 48px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.85); background: rgba(12,22,54,.9); color: #fff; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; list-style: none; }
+  .ib { flex: none; } /* 狭い画面で、ボタンが楕円につぶれない */
   .ib svg { width: 24px; height: 24px; }
+  @media (max-width: 359px) { .top { gap: 6px; padding: 10px 8px 6px; } .top .logo { height: 16px; } .kslogo { height: 36px; } .ib { width: 44px; height: 44px; } } /* 幅320pxの端末(iPhone SE 初代など): 全部が横に収まるように */
   .ib.off { opacity: .45; }
   .savebar { position: absolute; left: 16px; right: 16px; bottom: 12px; z-index: 4; display: none; gap: 8px; }
   .savebar .savebtn { position: static; display: block !important; flex: 1; }
