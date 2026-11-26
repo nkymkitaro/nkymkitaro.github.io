@@ -2030,6 +2030,13 @@ body.mode-monitor #btnRewind::before {
   .home-nudge { right: auto; left: 12px; margin: 0; width: min(60vw, 420px); }
 }
 .home-nudge-head { display: flex; align-items: center; gap: 8px; }
+/* iPhoneの横向き: 右上(Safariのバーの共有ボタン)を上向きの矢印で指す(2026-11-26) */
+.home-nudge.home-nudge-up { margin: 0; max-width: none; padding: 10px 6px 10px 14px; }
+.home-nudge-up .home-nudge-text { font-size: 0.9rem; }
+.home-nudge-up .home-nudge-steps svg { width: 30px; height: 30px; }
+.home-nudge-pointer { position: absolute; top: -38px; width: 28px; height: 32px; filter: drop-shadow(0 1px 3px rgba(0,0,0,.8)); animation: nudge-up 1.2s ease-in-out infinite; }
+@keyframes nudge-up { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .home-nudge-pointer { animation: none; } }
 .home-nudge-text { margin: 0; flex: 1; font-size: 0.95rem; font-weight: 800; line-height: 1.5; text-wrap: balance; }
 .home-nudge-close {
   flex: 0 0 auto; width: 48px; height: 48px; margin: 0; padding: 0; border-radius: 50%;

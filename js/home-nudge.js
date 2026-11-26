@@ -48,6 +48,14 @@ function build() {
 }
 
 function place() {
+  if (el.classList.contains('home-nudge-up')) { // iPhoneの横向き: 右上の共有ボタン(Safariのバーの中)を矢印で指す
+    const w = Math.min(Math.round(window.innerWidth * 0.48), 340); const left = window.innerWidth - 10 - w;
+    Object.assign(el.style, { width: `${w}px`, left: `${left}px`, right: 'auto', top: '42px', bottom: 'auto' });
+    const a = el.querySelector('.home-nudge-pointer');
+    // Safari(横)の共有ボタンは、右端の3つ(共有・＋・タブ)の左。右端から約110px(iPhone SE の実機の写真、2026-11-26)
+    if (a) a.style.left = `${Math.max(12, Math.min(w - 40, window.innerWidth - 110 - left - 14))}px`;
+    return;
+  }
   // 縦向き: 「カメラを追加」の上。横向き: 映像の左下(右の列は操作で使うため)
   const add = document.getElementById('btnAddCamera');
   const landscape = window.innerWidth > window.innerHeight;
@@ -93,6 +101,19 @@ function check(tries) {
   if (document.getElementById('monitorArea') && document.getElementById('monitorArea').classList.contains('replaying')) return; // 見返している最中は出さない
   if (!el) build();
   if (!el.hidden) return;
+  const up = curKey === LAND_KEY && window.innerWidth > window.innerHeight && !canPromptInstall();
+  el.classList.toggle('home-nudge-up', up);
+  if (up) { // 横向きの iPhone: Safariの右上の共有 → メニューの「ホーム画面に追加」(実機で確認、2026-11-26)
+    el.innerHTML = `
+    <svg class="home-nudge-pointer" viewBox="0 0 28 32" aria-hidden="true"><path d="M14 2 L26 16 H18 V30 H10 V16 H2 Z" fill="#fff"/></svg>
+    <div class="home-nudge-head">
+      <p class="home-nudge-text">右上の共有から「ホーム画面に追加」すると、全画面で使えます。</p>
+      <button type="button" class="home-nudge-close" aria-label="閉じる"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="home-nudge-steps" aria-hidden="true">${SHARE_ICON}${ARROW}${PLUS_ICON}</div>`;
+    const c = el.querySelector('.home-nudge-close'); attachPress(c, { vibrate: 0 }); c.addEventListener('click', () => hide());
+    place(); el.hidden = false; return;
+  }
   const steps = canPromptInstall() ? null : (isIos()
     ? [SHARE_ICON, PLUS_ICON, APP_ICON]
     : [MENU_ICON, PLUS_ICON, APP_ICON]);
