@@ -258,20 +258,27 @@ export class CameraLink {
     const w = port ? 480 : 640; const h = port ? 640 : 480;
     return { width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: w / h } };
   }
-  // 向きが変わったら、取り込みの形を頼み直す(流れを作り直さないので、親機への送りは途切れない)
+  // 取り込みの形が画面の向きと合っているか確かめ、合わなければ頼み直す。
+  // 端末によって、縦長(480×640)で頼むと縦で返るもの・横長(640×480)で頼むと縦で返るものがあるので、合うまで両方の形を順に試す(最大4回。
+  // 2026-11-26 Pixelで、縦に持っているのにカメラ2の映像が横向きだった)
+  async _fixOwnShape() {
+    const tr = this.ownStream && this.ownStream.getVideoTracks().find((x) => x.readyState === 'live');
+    if (!tr) return;
+    const wantPort = window.innerHeight > window.innerWidth;
+    const s = tr.getSettings();
+    if (!s.width || !s.height || (s.height > s.width) === wantPort) { this._shapeTry = 0; return; }
+    const n = (this._shapeTry = (this._shapeTry || 0) + 1);
+    if (n > 4) return;
+    const a = this._ownConstraints(); const long = 640; const short = 480;
+    const flipped = { width: { ideal: wantPort ? long : short }, height: { ideal: wantPort ? short : long }, aspectRatio: { ideal: wantPort ? long / short : short / long } };
+    try { await tr.applyConstraints(n % 2 === 1 ? a : flipped); } catch (err) { /* 端末が替えられなければ、今のまま */ }
+  }
+  // 向きが変わったとき・取り込み始めのあいだ、形を確かめる(流れは作り直さないので、親機への送りは途切れない)
   _watchOwnOrientation() {
     if (this._ownOrientWatch) return; this._ownOrientWatch = true;
-    let t = null; let lastPort = window.innerHeight > window.innerWidth;
-    window.addEventListener('resize', () => {
-      clearTimeout(t);
-      t = setTimeout(async () => {
-        const port = window.innerHeight > window.innerWidth;
-        if (port === lastPort) return; lastPort = port;
-        const tr = this.ownStream && this.ownStream.getVideoTracks().find((x) => x.readyState === 'live');
-        if (!tr) return;
-        try { await tr.applyConstraints(this._ownConstraints()); } catch (err) { /* 端末が替えられなければ、今のまま */ }
-      }, 500);
-    });
+    let t = null;
+    window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(() => { this._shapeTry = 0; this._fixOwnShape(); }, 500); });
+    setInterval(() => this._fixOwnShape(), 1500); // 向きの通知が来ない端末でも、映像の向きがずれていれば直す
   }
 
   // 自分のカメラの映像を用意する(つなぎ直しのたびに許可を求めないよう、取れていれば使い回す)
