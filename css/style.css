@@ -1027,6 +1027,9 @@ body.camera-sending .send-frame { animation: video-expand var(--dur-base) var(--
   font-size: 0.8rem;
   font-weight: 800;
   line-height: 1.5;
+  word-break: keep-all; /* 「す。」だけ次の行に落ちない。折れるのは、読点のあと(<wbr>)だけ */
+  overflow-wrap: anywhere;
+  text-wrap: balance;
   color: #fff;
   background: linear-gradient(to top, rgba(0,0,0,0.75), rgba(0,0,0,0));
   pointer-events: none;
