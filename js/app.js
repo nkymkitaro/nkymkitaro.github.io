@@ -958,8 +958,15 @@ function enterBrowserFullscreen() {
 let keepFullscreen = false;
 let pendingKeep = false;
 let fsExitAt = 0; // 全画面から出た時刻(自分で出たあと、すぐ入り直さないための印)
+let fsEnterLand = false;
 document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; } else { keepFullscreen = false; fsExitAt = Date.now(); }
+  const land = window.innerWidth > window.innerHeight;
+  if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; fsEnterLand = land; }
+  else {
+    keepFullscreen = false;
+    // 向きを変えたせいで解除された(横で入って縦に戻した、など)ときは「自分で出た」ではない。すぐ入り直せるようにする(2026-11-26 中山さん「横→縦を繰り返すと全画面にならない」)
+    if (land === fsEnterLand) fsExitAt = Date.now();
+  }
 });
 // 撮影画面は、何か触った瞬間に全画面に入る(中山さん 2026-11-26「なにか触った瞬間に全画面」)。
 // ブラウザの決まりで、押す・触る操作の中でしか入れない。指を離した瞬間(pointerup)でも入れるので、ホイールを横にスワイプしただけ(クリックにならない)でも入る。
