@@ -40,6 +40,8 @@
   <button id="fsDelay" disabled>ディレイを全画面</button>
   <button id="copy" class="sub">結果をコピー</button>
 </div>
+<div class="steps" style="margin-top:14px">共有メニューの試験: 下を押して開いたメニューに「ホーム画面に追加」があるか見てください(下の方までスクロール)。あった・なかったを教えてください</div>
+<div class="row"><button id="share" class="sub">共有メニューを開く</button></div>
 <div id="log">まだ測っていません</div>
 <script>
 (() => {
@@ -113,6 +115,11 @@
   document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) onExit(); });
   $('fsLive').addEventListener('click', () => enterFs(live, 'ライブ'));
   $('fsDelay').addEventListener('click', () => enterFs(dly, 'ディレイ'));
+  $('share').addEventListener('click', async () => {
+    if (!navigator.share) { log('共有メニュー: この端末では開けません(navigator.share なし)'); return; }
+    try { await navigator.share({ title: 'MITORI', url: 'https://kendovar.jp/' }); log('共有メニュー: 開いた → 何かを選んだ'); }
+    catch (e) { log(`共有メニュー: 閉じた(${e.name})`); }
+  });
   $('copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(lines.join('\n')); $('copy').textContent = 'コピーしました'; setTimeout(() => { $('copy').textContent = '結果をコピー'; }, 1500); }
     catch (e) { const r = document.createRange(); r.selectNodeContents(logEl); getSelection().removeAllRanges(); getSelection().addRange(r); }
