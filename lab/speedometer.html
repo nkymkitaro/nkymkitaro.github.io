@@ -558,7 +558,7 @@ const three = (s) => s ? `剣先 ${s.v.toFixed(1)} ・ 物打ち ${(s.mono || 0)
 function colorOf(sp) { const u = Math.max(0, Math.min(1, (sp - 4) / 12)); return `rgb(${Math.round(255 - 41 * u)},${Math.round(255 - 220 * u)},${Math.round(255 - 228 * u)})`; }
 const FONT = '"Murecho", system-ui, sans-serif';
 let cntLast = 0, rejShown = 0, rejHide = 0;
-const REJ = { noRaise: 'もう少し振りかぶると数えます', slow: 'ゆっくりなので数えませんでした', lowfps: '動きが重く、数えられませんでした' };
+const REJ = { noRaise: 'もう少し振りかぶると数えます', slow: 'ゆっくりなので数えませんでした', lowfps: '動きが重く、数えられませんでした', noTool: '竹刀が見えません(腕だけの動きは数えません)' };
 function drawCount(n) {
   const on = running && prepPhase >= 2 && !isFile, c = $('cnt'); c.style.display = on ? 'flex' : 'none';
   if (!on) { cntLast = 0; $('rej').style.display = 'none'; return; }

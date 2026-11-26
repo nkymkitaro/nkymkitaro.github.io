@@ -32,7 +32,7 @@ export class SwingEngine {
     this.signStats = { 1: [], '-1': [] };
     this.faceVotes = []; this.torsoHist = []; this.rejects = 0; this.pending = [];
     this.debug = null; // { mask, comp, a, p0, p1 }
-    this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; this.speedAt = 'hit'; this.hitDeg = 60; this.cubicOn = false; // cubicOn: 3次の曲線(試験台では1.16〜1.20倍に出すぎた。2026-11-24。直すまで切る) // 打つ瞬間 = 振り下ろしで竹刀が前60度まで下りた時刻の速さ(中山さん 2026-11-23)。'peak' で最速 // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
+    this.toolMinRatio = 1.4; this.movT = 18; this.fanOn = true; this.fanR = [0.6, 1.05]; this.gapMin = 0.05; this.extU = [1.5, 1.2]; this.gapNoFan = false; this.gapScale = 0.82; this.winSec = 0.07; this.recalcOn = true; this.recalcWait = 0.12; this.recalcMax = 0.6; this.recalcGapScale = 1; this.recalcGapHand = false; this.recalcSpan = 0.15; this.roi = null; this.roiOn = true; this.menOnly = true; this.raiseDeg = 55; this.raisedAt = null; this.raiseWin = 2.0; this.speedAt = 'hit'; this.hitDeg = 60; this.cubicOn = false; // cubicOn: 3次の曲線(試験台では1.16〜1.20倍に出すぎた。2026-11-24。直すまで切る) // 打つ瞬間 = 振り下ろしで竹刀が前60度まで下りた時刻の速さ(中山さん 2026-11-23)。'peak' で最速 // 振りかぶりから振り下ろしまでの待ち(中山さん 2026-11-23「1.2秒は短い」)
     // gapScale: 穴の両端の向きは、骨格の手元の遅れで外側へずれ、2割ほど出すぎる(2026-11-22 120コマの答え合わせ。白テープ・緑ネットの2本とも約1.2倍)
   }
   setLength(cm) { this.lengthCm = cm; }
@@ -347,6 +347,9 @@ export class SwingEngine {
     { const S = this.samples, dts = []; for (let k = S.length - 1; k > 0; k--) { if (S[k].t < pk.t - 0.2) break; if (S[k].t <= pk.t + 0.2) dts.push(S[k].t - S[k - 1].t); }
       dts.sort((x, y) => x - y); const med = dts[dts.length >> 1]; pk.dt = med || 0;
       if (dts.length >= 3 && med > 0.07) { this._rej('lowfps'); return; } } // 中央の間隔が0.07秒超(約14コマ未満)のときだけ、その1本を数えない
+    // 腕だけを振っても1本と数えていた(中山さん 2026-11-27)。見えている「道具」の長さが胴の1.4倍に満たないときは、腕・手を道具と取り違えているので数えない
+    // (答え合わせの動画では 道具/胴 = 1.9〜3.5。腕・手だけだと0.9前後。長さは、道具のかたまりを覚えたもの(lenPx)。覚える前(道具が15コマ見えるまで)は、道具かどうか分からないので数えない)
+    { const T0 = this.torso, L0 = this.lenPx; if (T0 && (!L0 || this.lenHist.length <= 15 || L0 < T0 * this.toolMinRatio)) { const W3 = this.why || (this.why = {}); W3.noTool = (W3.noTool || 0) + 1; this._rej('noTool'); return; } }
     if (this.blockCount) { this._rej('block'); return; } // 60コマが出ていない間は数えない(中山さん 2026-11-23「60fps強制。それ以外許さない」)
     // 1本の振り下ろしが、近い2つの山に割れたら、速いほうの1つだけ残す(2026-11-24 30コマの動画の答え合わせ)。
     // 以前は0.15秒以内だけ。0.2〜0.3秒前の小さい山が先に1本と数えられ(速さも小さく出る)、本物の山は「振りかぶりなし」で捨てられるか、もう1本と数えられていた
