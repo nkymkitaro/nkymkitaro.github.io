@@ -360,7 +360,7 @@ function init() {
       if (ar === wantAr && tr.id === askAspect.trackId && short === askAspect.short) return;
       askAspect.trackId = tr.id; askAspect.short = short; wantAr = ar;
       askAspect.busy = true;
-      await tr.applyConstraints({ width: { ideal: Math.round(short * ar) }, height: { ideal: short } });
+      await tr.applyConstraints({ width: { ideal: Math.round(short * ar) }, height: { ideal: short }, aspectRatio: { ideal: ar } }); // 形も添える(幅・高さだけだと、iPhoneが4:3のまま返すことがある)
     } catch (err) { /* 端末が出せない大きさなら、今のまま */ } finally {
       askAspect.busy = false;
       if (askAspect.again) { askAspect.again = false; askAspect(askAspect.last); }
@@ -454,11 +454,12 @@ function init() {
       // 映像は高さいっぱい。列の分の幅が残れば16:9(横に広く大きく)、残らなければ4:3にして、列は映像の上に半透明で重ねる
       m = Math.round(Math.max(52, Math.min(76, H * 0.19)));
       const wheelW = 58; const gap = 6; const pad = 4; // 名前の札の幅(CSS の --mw-wheel-w と同じ。小さくすると、選んだ札が画面の右からはみ出る)
-      const colNeed = Math.round(12 + wheelW + gap + Math.max(m, 76) + pad + safe().r);
-      askAspect(W - H * 16 / 9 >= colNeed - 8 ? 16 / 9 : 4 / 3);
+      // 列の最小の幅(真ん中のボタン52px)。16:9が入る横長の画面は、いつも16:9(4:3にすると、映像が細く列が広くなる。iPhone SE+Safariのバーで、列が画面の4割になっていた。2026-11-26)
+      const colMin = Math.round(12 + wheelW + gap + 52 + pad + safe().r);
+      askAspect(W / H >= 1.6 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar;
       let col = W - vw;
-      const over = col < colNeed - 8; if (over) col = colNeed;
+      const over = col < colMin - 4; if (over) col = colMin; // 入らないときだけ、列を映像に重ねる
       vx = 0;
       px(stage, vx, 0, over ? Math.min(W, vw) : vw, vh, { padding: '0', zIndex: '0' });
       const avail = col - 12 - safe().r - wheelW - gap - pad; // 右に切り欠き(カメラの穴)がある向きでは、その分も引く(2026-11-26。引いていなかったため、真ん中のボタンが名前の札に重なった)
