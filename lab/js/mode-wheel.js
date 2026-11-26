@@ -427,9 +427,13 @@ function init() {
       const wh = Math.round(Math.max(40, Math.min(48, H * 0.054))); // 名前の帯の高さ
       const wheelY = H - wh - Math.max(8, sb + 4);
       m = Math.round(Math.max(56, Math.min(72, W * 0.17))); // 真ん中のボタン(標準のカメラのシャッターくらい)
+      // 映像の下の紺の帯が低いとき、ボタンが帯と映像の境目をまたいで見苦しかった(iPhone SE、2026-11-26)。まず真ん中のボタンを小さく(最小52px)して、
+      // 「カメラを追加・ズーム」の段が帯に収まるようにする。それでも入らなければ、その段は映像の中(下端の少し上)に置く
+      m = Math.max(52, Math.min(m, wheelY - 6 - 52 - (vh + 6)));
       mx = (W - m) / 2; my = wheelY - 6 - m;
       const bx = Math.round(Math.max(44, Math.min(50, m * 0.7))); root.style.setProperty('--mw-bx', `${bx}px`);
-      const upY = my - 8 - 44; // カメラを追加・ズームの段
+      let upY = my - 8 - 44; // カメラを追加・ズームの段
+      if (upY < vh + 6 && upY + 44 > vh - 4) upY = vh - 44 - 8; // 帯との境目をまたぐなら、映像の中に収める
       const need = safe().t + 8 + 44 + 6; // 上の段の高さ
       // 映像の置き場所: 上の段と下の操作(カメラを追加の段まで)の間に収まれば、映像に何も重ねない。収まらなければ上に詰めて重ねる
       const room = upY - 6 - vh;

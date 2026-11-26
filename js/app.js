@@ -67,25 +67,25 @@ function autoDowngradeCapBytes() {
 }
 recorder.memCapBytes = autoDowngradeCapBytes();
 recorder.onAutoDowngrade = ({ width }) => {
-  // 真ん中のお知らせは出さない(iPhoneでは毎回出て邪魔だった。中山さん 2026-11-26)。⚙の下に小さく1回だけ
-  showGearNote('⚙でVARの画質を上げられます');
+  // 撮影中は何も出さない。VARの画面に行ったときに、⚙の下へ小さく1回だけ(2026-11-26 中山さん「VARの画面に行ったときに欲しい」)
+  gearNotePending = true;
   const note = document.getElementById('qualityAutoNote');
   if (note) { note.textContent = `VARは${width}pxに下げています。`; note.hidden = false; }
 };
-// ⚙の下に、小さな一言を数秒だけ出す(開いている間に1回)
-let gearNoteShown = false;
+// ⚙の下に、小さな一言を数秒だけ出す(開いている間に1回)。VARの画面に入ったときだけ呼ぶ。ほかの機能でも使えるよう、文は「画質を上げられます」(VARと書かない)
+let gearNotePending = false; let gearNoteShown = false;
 function showGearNote(text) {
   if (gearNoteShown) return; gearNoteShown = true;
   setTimeout(() => {
-    const g = document.getElementById('mwGear') || document.getElementById('btnSettings');
-    if (!g || !g.offsetParent) return;
+    const g = [document.getElementById('btnSettings'), document.getElementById('mwGear')].find((b) => b && b.offsetParent && b.getBoundingClientRect().width > 0);
+    if (!g) { gearNoteShown = false; return; }
     const r = g.getBoundingClientRect();
     const n = document.createElement('div'); n.className = 'gear-note'; n.textContent = text;
     document.body.appendChild(n);
     const w = n.offsetWidth;
     n.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w))}px`; n.style.top = `${r.bottom + 6}px`;
     setTimeout(() => n.classList.add('out'), 4500); setTimeout(() => n.remove(), 5200);
-  }, 300);
+  }, 600);
 }
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
@@ -873,6 +873,7 @@ function setReplayUI(isReplay, { newVar = false } = {}) {
   playerToolbar.classList.toggle('show', isReplay);
   saveRow.classList.toggle('show', isReplay);
   monitorArea.classList.toggle('replaying', isReplay); // リプレイ中は映像を全画面にして操作を重ねる(css の「VARリプレイの全画面」)
+  if (isReplay && gearNotePending) { gearNotePending = false; showGearNote('⚙で画質を上げられます'); }
   if (isReplay) replayUi.enter({ newSession: newVar }); // 操作を出した状態で始める。拡大は元の大きさ
   else replayUi.leave();
   updateStateBand();
