@@ -69,7 +69,7 @@ function place() {
 function hide({ remember = true } = {}) {
   if (!el) return;
   el.hidden = true;
-  if (remember) markDone();
+  if (remember && curKey !== LAND_KEY) markDone(); // 横向きの案内は、閉じても「3回後にまた」(下の数え方)
 }
 
 // 「LIVEに戻る」のあとに呼ぶ。条件を満たすときだけ、1回出す
@@ -82,15 +82,26 @@ export function maybeShowHomeNudge() {
   waitTimer = setTimeout(() => check(0), 1200);
 }
 // 撮影画面で iPhone を横にしたとき(全画面にできないため、映像が小さい)。iPad はページを全画面にできるので出さない
+// 出す回: 開いて横にした回を1回と数え、1・4・7…回目に出す(開いている間は最大1回)。合計5回まで。ホーム画面から開けば出ない(2026-11-26 中山さん)
+const LAND_N = 'kendo-var-home-nudge-land-n'; const LAND_SHOWN = 'kendo-var-home-nudge-land-shown'; const LAND_MAX = 5;
+let landVisit = null; // この回に出すか(null = まだ数えていない)
 export function maybeShowHomeNudgeLandscape() {
   if (!/iPhone|iPod/.test(navigator.userAgent) || isStandalone() || isInApp()) return;
   if (el && !el.hidden) return;
+  if (landVisit === null) {
+    const n = (parseInt(readLocal(LAND_N), 10) || 0) + 1; writeLocal(LAND_N, String(n));
+    const shown = parseInt(readLocal(LAND_SHOWN), 10) || 0;
+    landVisit = (n - 1) % 3 === 0 && shown < LAND_MAX;
+    if (landVisit) writeLocal(LAND_SHOWN, String(shown + 1));
+  }
+  if (!landVisit) return;
+  landVisit = false; // この回はもう出さない
   curKey = LAND_KEY; curText = 'ホーム画面に追加すると、横向きでも全画面で使えます。';
   clearTimeout(waitTimer);
   waitTimer = setTimeout(() => check(0), 800);
 }
 function check(tries) {
-  if (isDone() || isStandalone() || isInApp()) return;
+  if ((curKey !== LAND_KEY && isDone()) || isStandalone() || isInApp()) return; // 横向きの案内は、出す回を上の数え方で決める
   // 立場の問い(role-survey.js)が開いているときは、重ならないよう、閉じるのを待つ(最長20秒。待っても閉じなければ出さない)
   const survey = document.getElementById('roleSheet');
   if (survey && survey.classList.contains('open')) {
