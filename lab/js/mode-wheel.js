@@ -397,6 +397,7 @@ function init() {
     let camCorner = both; let landFlipSide = false;
     if (!land && bandsEl) bandsEl.style.left = '';
     let ar = videoAr(); let vx; let vw; let vh; let m; let mx; let my;
+    root.classList.remove('mw-over'); // 列を映像に重ねる形はやめた(2026-11-26)。前の向きで付いたままだと、縦に戻したとき右に謎のグラデーションが残っていた
     // 向きを変えたのに、カメラの形が前の向きのまま(横の16:9のまま縦に戻した、など)なら、少し待って頼み直す(2026-11-26。Pixelの全画面で、縦に戻しても9:16のままだった)。
     // 出せない端末で頼み続けないよう、向きが変わるごとに3回まで
     if (fit.land !== land) { fit.land = land; fit.retry = 0; fit.since = Date.now(); }
@@ -459,9 +460,12 @@ function init() {
       askAspect(W / H >= 1.6 ? 16 / 9 : 4 / 3);
       vh = H; vw = H * ar;
       let col = W - vw;
-      const over = col < colMin - 4; if (over) col = colMin; // 入らないときだけ、列を映像に重ねる
+      // 列が入らないときは、ボタンを映像に重ねず、映像を少し小さくして列を空ける(重ねると、真ん中のボタンが映像の端にかかって崩れて見えた。iPhone SE+Safari、2026-11-26)
+      const over = false; let vy = 0;
+      if (col < colMin) { col = colMin; vw = W - col; vh = vw / ar; vy = Math.round((H - vh) / 2); }
       vx = 0;
-      px(stage, vx, 0, over ? Math.min(W, vw) : vw, vh, { padding: '0', zIndex: '0' });
+      px(stage, vx, vy, vw, vh, { padding: '0', zIndex: '0' });
+      document.body.style.setProperty('--mw-toast-top-land', `${vy + 104}px`); document.body.style.setProperty('--mw-toast-cx', `${vx + vw / 2}px`);
       const avail = col - 12 - safe().r - wheelW - gap - pad; // 右に切り欠き(カメラの穴)がある向きでは、その分も引く(2026-11-26。引いていなかったため、真ん中のボタンが名前の札に重なった)
       m = Math.max(52, Math.min(m, avail)); // 列に入りきらないときは、真ん中のボタンを列の幅まで小さく(名前の札に重ならない)
       mx = W - col + pad + Math.max(0, (avail - m) / 2); my = (H - m) / 2;
@@ -474,9 +478,9 @@ function init() {
       clear(secs);
       // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
       const backShown = backBtn && getComputedStyle(backBtn).display !== 'none';
-      if (backBtn) px(backBtn, 4 + safe().l, 4, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
+      if (backBtn) px(backBtn, 4 + safe().l, vy + 4, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
       if (bandsEl) { bandsEl.style.left = backShown ? `${52 + safe().l}px` : (safe().l ? `${8 + safe().l}px` : ''); bandsEl.style.top = ''; } // 左に切り欠きがある向きでは、LIVEの帯をその分右へ
-      if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
+      if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, vy + 8, null, null, { zIndex: '6' }); }
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
       // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
@@ -484,9 +488,8 @@ function init() {
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
       camCorner = true;
-      if (camBtn) px(camBtn, vx + 10 + safe().l, H - 56, 46, 46, { background: 'rgba(0,0,0,.45)', minWidth: '46px', borderRadius: '50%' });
-      root.classList.toggle('mw-over', over);
-      placeZoom(vx, over ? Math.min(W, vw) - col : vw, vh, true, flipOn && seatDel());
+      if (camBtn) px(camBtn, vx + 10 + safe().l, vy + vh - 56, 46, 46, { background: 'rgba(0,0,0,.45)', minWidth: '46px', borderRadius: '50%' });
+      placeZoom(vx, vw, vy + vh, true, flipOn && seatDel());
     }
     if (camBtn && !camCorner) camBtn.style.background = '';
     root.style.setProperty('--mw-main', `${m}px`);

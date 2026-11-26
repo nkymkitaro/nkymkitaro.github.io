@@ -265,6 +265,7 @@ body.mode-monitor #mwList { display:none !important; }
 .mw-slot.stop .shape svg { width:60%; height:60%; }
 /* お知らせ(消しました・元に戻す など)は、縦向きの撮影画面では映像の下側に出す(上の←・⚙に重ならない。中山さんの実機の写し 2026-11-14) */
 @media (orientation: portrait) { body.mode-monitor .toast { top: var(--mw-toast-top, max(14px, env(safe-area-inset-top))); bottom: auto; } }
+@media (orientation: landscape) { body.mode-monitor .toast { top: var(--mw-toast-top-land, 64px); bottom: auto; left: var(--mw-toast-cx, 50%); } } /* 横: 上の段(LIVE・秒数・⚙)の下、映像の真ん中(2026-11-26。上の段に重なっていた) */
 /* お知らせは小さく1行に(「LIVEに戻りました・元に戻す」が縦に伸びて、真ん中のボタンを隠していた。中山さんの実機の写し 2026-11-15) */
 body.mode-monitor .toast { padding: 8px 14px; font-size: 0.8rem; max-width: min(92vw, 30em); }
 body.mode-monitor .toast.toast-low, body.mode-monitor .toast.has-action { display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 14px; white-space: nowrap; }
@@ -277,3 +278,7 @@ body.mode-monitor #monitorArea:not(.replaying) .mw.mw-compact .mw-slot .bx.vrb {
 .mw.mw-compact .mw-wheel .m b { font-size: 15px; }
 .mw.mw-compact .mw-wheel .m:not(.sel) b { color: #fff; }
 .mw.mw-compact .mw-logo { opacity: .8; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+
+/* ⚙の下の小さな一言(VARの画質を自動で下げたとき。2026-11-26) */
+.gear-note { position: fixed; z-index: 70; padding: 4px 10px; border-radius: 10px; background: rgba(12,22,54,.85); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none; transition: opacity .6s; }
+.gear-note.out { opacity: 0; }

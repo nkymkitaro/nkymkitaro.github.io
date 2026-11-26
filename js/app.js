@@ -67,10 +67,26 @@ function autoDowngradeCapBytes() {
 }
 recorder.memCapBytes = autoDowngradeCapBytes();
 recorder.onAutoDowngrade = ({ width }) => {
-  showToast('VARの画質を下げました。⚙で、さかのぼる秒数や画質を変えられます');
+  // 真ん中のお知らせは出さない(iPhoneでは毎回出て邪魔だった。中山さん 2026-11-26)。⚙の下に小さく1回だけ
+  showGearNote('⚙でVARの画質を上げられます');
   const note = document.getElementById('qualityAutoNote');
   if (note) { note.textContent = `VARは${width}pxに下げています。`; note.hidden = false; }
 };
+// ⚙の下に、小さな一言を数秒だけ出す(開いている間に1回)
+let gearNoteShown = false;
+function showGearNote(text) {
+  if (gearNoteShown) return; gearNoteShown = true;
+  setTimeout(() => {
+    const g = document.getElementById('mwGear') || document.getElementById('btnSettings');
+    if (!g || !g.offsetParent) return;
+    const r = g.getBoundingClientRect();
+    const n = document.createElement('div'); n.className = 'gear-note'; n.textContent = text;
+    document.body.appendChild(n);
+    const w = n.offsetWidth;
+    n.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w))}px`; n.style.top = `${r.bottom + 6}px`;
+    setTimeout(() => n.classList.add('out'), 4500); setTimeout(() => n.remove(), 5200);
+  }, 300);
+}
 const player = new ReplayPlayer(document.getElementById('displayCanvas'), recorder);
 
 // --- VAR設定(親機からいつでも調整できる) ---
