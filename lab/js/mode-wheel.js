@@ -461,7 +461,8 @@ function init() {
       const over = col < colNeed - 8; if (over) col = colNeed;
       vx = 0;
       px(stage, vx, 0, over ? Math.min(W, vw) : vw, vh, { padding: '0', zIndex: '0' });
-      const avail = col - 8 - wheelW - gap - pad;
+      const avail = col - 12 - safe().r - wheelW - gap - pad; // 右に切り欠き(カメラの穴)がある向きでは、その分も引く(2026-11-26。引いていなかったため、真ん中のボタンが名前の札に重なった)
+      m = Math.max(52, Math.min(m, avail)); // 列に入りきらないときは、真ん中のボタンを列の幅まで小さく(名前の札に重ならない)
       mx = W - col + pad + Math.max(0, (avail - m) / 2); my = (H - m) / 2;
       const bx = Math.round(Math.max(44, Math.min(52, m * 0.68))); root.style.setProperty('--mw-bx', `${bx}px`);
       const scx = mx + m / 2;
@@ -473,7 +474,7 @@ function init() {
       // ←は、いちばん左上(画面を移る操作なので、ほかのボタンと見た目を変え、枠なしの矢印だけ。中山さん 2026-11-07)。LIVEの帯はその右
       const backShown = backBtn && getComputedStyle(backBtn).display !== 'none';
       if (backBtn) px(backBtn, 4 + safe().l, 4, 48, 48, { background: 'transparent', boxShadow: 'none', zIndex: '6' });
-      if (bandsEl) { bandsEl.style.left = backShown ? `${52 + safe().l}px` : ''; bandsEl.style.top = ''; }
+      if (bandsEl) { bandsEl.style.left = backShown ? `${52 + safe().l}px` : (safe().l ? `${8 + safe().l}px` : ''); bandsEl.style.top = ''; } // 左に切り欠きがある向きでは、LIVEの帯をその分右へ
       if (topRow) { clear(topRow); const r = bandEl ? bandEl.getBoundingClientRect() : { right: 0 }; px(topRow, r.right + 8, 8, null, null, { zIndex: '6' }); }
       // 自撮り: 何もしていないときは、真ん中のボタンの上(縦の「横」に当たる場所)。録画・ディレイ中は、そこが止める枠やカメラを追加になるので、映像の右下
       landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
