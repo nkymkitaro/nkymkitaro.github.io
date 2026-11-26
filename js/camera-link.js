@@ -251,14 +251,38 @@ export class CameraLink {
     }
   }
 
+  // 子機のカメラの取り込みの頼み。いつも640×480(横長)で頼むと、スマホを縦に置いても横向きの映像になっていた(2026-11-26 利用者の報告)。
+  // 今の画面の向きに合わせて、縦なら480×640(3:4)で頼む
+  _ownConstraints() {
+    const port = window.innerHeight > window.innerWidth;
+    const w = port ? 480 : 640; const h = port ? 640 : 480;
+    return { width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: w / h } };
+  }
+  // 向きが変わったら、取り込みの形を頼み直す(流れを作り直さないので、親機への送りは途切れない)
+  _watchOwnOrientation() {
+    if (this._ownOrientWatch) return; this._ownOrientWatch = true;
+    let t = null; let lastPort = window.innerHeight > window.innerWidth;
+    window.addEventListener('resize', () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        const port = window.innerHeight > window.innerWidth;
+        if (port === lastPort) return; lastPort = port;
+        const tr = this.ownStream && this.ownStream.getVideoTracks().find((x) => x.readyState === 'live');
+        if (!tr) return;
+        try { await tr.applyConstraints(this._ownConstraints()); } catch (err) { /* 端末が替えられなければ、今のまま */ }
+      }, 500);
+    });
+  }
+
   // 自分のカメラの映像を用意する(つなぎ直しのたびに許可を求めないよう、取れていれば使い回す)
   async _ensureOwnStream() {
     if (this.ownStream && this.ownStream.getVideoTracks().some((t) => t.readyState === 'live')) return true;
     try {
       this.ownStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: 'environment', ...this._ownConstraints() },
         audio: false,
       });
+      this._watchOwnOrientation();
       return true;
     } catch (err) {
       console.error(err);
