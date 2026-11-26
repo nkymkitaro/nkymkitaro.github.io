@@ -57,6 +57,7 @@ const ICON_MODE_ON = {
 };
 const stopIcon = (c) => `<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="3" fill="${c}"/></svg>`;
 const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/><path d="M8.5 10.5l4 2.5-4 2.5z" fill="#fff"/></svg>';
+const ICON_FS = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
 const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M18.93 9.39 L21.80 10.01 L21.80 13.99 L18.93 14.61 L18.74 15.05 L20.33 17.53 L17.53 20.33 L15.05 18.74 L14.61 18.93 L13.99 21.80 L10.01 21.80 L9.39 18.93 L8.95 18.74 L6.47 20.33 L3.67 17.53 L5.26 15.05 L5.07 14.61 L2.20 13.99 L2.20 10.01 L5.07 9.39 L5.26 8.95 L3.67 6.47 L6.47 3.67 L8.95 5.26 L9.39 5.07 L10.01 2.20 L13.99 2.20 L14.61 5.07 L15.05 5.26 L17.53 3.67 L20.33 6.47 L18.74 8.95 Z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 function init() {
@@ -74,6 +75,7 @@ function init() {
   root.innerHTML = `<div class="mw-zone"></div>
     <div class="mw-top"><div class="mw-secs"></div><button type="button" class="mw-ic" id="mwList" aria-label="一覧">${ICON_LIST}</button><button type="button" class="mw-ic" id="mwGear" aria-label="設定">${ICON_GEAR}</button></div>
     <button type="button" class="mw-ic mw-flip" id="mwFlip" aria-label="カメラを切り替え" hidden></button>
+    <button type="button" class="mw-ic mw-fs" id="mwFs" aria-label="全画面" hidden>${ICON_FS}</button>
     <div class="mw-slot dl" hidden><button type="button" class="bx vrb" aria-label="ディレイ"><div class="shape"></div></button><span class="lb"></span></div>
     <div class="mw-slot rc" hidden><button type="button" class="bx vrb" aria-label="録画"><div class="shape"></div></button><span class="lb"></span></div>
     <div class="mw-slot vr" hidden><button type="button" class="bx vrb" aria-label="VAR"><div class="shape"></div></button><span class="lb">VAR</span></div>
@@ -393,9 +395,11 @@ function init() {
     if (flipHere) px(flip, vx + vw - 12 - 48, vh - 12 - 48 - (zShown ? 58 : 0), 48, 48, { borderRadius: '14px', background: '' });
     if (zs) { zs.dataset.mwFixed = '1'; const w = Math.min(380, vw - 12 - 48 - 12 - 12); px(zs, vx + vw - 12 - 48 - 12 - w, vh - 12 - 52 - (both && w > vw - 160 ? 64 : 0), w, 52); }
   }
+  const fsBtn = q('#mwFs');
+  const canFs = () => !!(document.fullscreenEnabled && document.documentElement.requestFullscreen) && !document.fullscreenElement && !window.matchMedia('(display-mode: standalone)').matches && !navigator.standalone;
   function fit() {
-    const all = [stage, main, wheel, slotRc, slotDl, slotVr, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip, logo];
-    if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); return; }
+    const all = [fsBtn, stage, main, wheel, slotRc, slotDl, slotVr, secs, camBtn, backBtn, zoomBtn(), zoomBar(), topRow, flip, logo];
+    if (area.classList.contains('replaying') || !document.body.classList.contains('mode-monitor')) { all.forEach(clear); fsBtn.hidden = true; return; }
     const W = window.innerWidth; const H = window.innerHeight; const land = isLand();
     const both = st.rec && st.delay;
     const flipOn = !flip.hidden && !document.body.classList.contains('mw-no-camtools');
@@ -414,6 +418,7 @@ function init() {
     const compact = !land;
     root.classList.toggle('mw-compact', compact);
     if (compact) {
+      fsBtn.hidden = true; clear(fsBtn); // 全画面ボタンは横だけ(縦は、触れば全画面)
       logo.style.visibility = '';
       askAspect(4 / 3);
       vw = W; vh = W / ar; if (vh > H) { vh = H; vw = H * ar; }
@@ -490,6 +495,8 @@ function init() {
       landFlipSide = false; // 真ん中の上下は、いつもモードのボタン(案B')。自撮りは映像の右下
       // アプリ名(ロゴ)は、右の列のいちばん上の紺の空きに
       { const fits = my - 34 - bx >= 44; px(logo, W - col + Math.max(4, (col - 76) / 2), 12 + safe().t, null, null); logo.style.visibility = fits ? '' : 'hidden'; } // 右の列のいちばん上。低い画面では出さない(ボタンと重なる)
+      // 全画面ボタン(Androidで、ブラウザのバーが出ているとき。全画面に入れば帯が細くなり、ボタンも消える)。右の列の下、「ディレイ」の札の下に空きがあるときだけ(2026-11-26)
+      { const fsY = H - 12 - safe().b - 44; const room = fsY >= my + m + 10 + bx + 20 + 6; if (canFs() && room) { px(fsBtn, scx - 22, fsY, 44, 44, {}); fsBtn.hidden = false; } else { clear(fsBtn); fsBtn.hidden = true; } }
       if (landFlipSide) px(flip, scx - 32, my - 14 - 64, 64, 64, { borderRadius: '18px', background: 'rgba(44,74,160,.55)' });
       flip.classList.toggle('mw-big', landFlipSide);
       camCorner = true;

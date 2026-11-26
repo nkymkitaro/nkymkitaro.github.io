@@ -957,21 +957,26 @@ function enterBrowserFullscreen() {
 // ブラウザ側で解除されたら、この印を外す(次に「録画」を押したときに、また入る)
 let keepFullscreen = false;
 let pendingKeep = false;
+let fsExitAt = 0; // 全画面から出た時刻(自分で出たあと、すぐ入り直さないための印)
 document.addEventListener('fullscreenchange', () => {
-  if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; } else { keepFullscreen = false; }
+  if (document.fullscreenElement) { keepFullscreen = pendingKeep; pendingKeep = false; } else { keepFullscreen = false; fsExitAt = Date.now(); }
 });
-document.addEventListener('click', (e) => {
-  // 試験ページ(モードホイール)は、撮影画面のどこを押しても全画面に入る(中山さん 2026-11-06「アドレスバーが邪魔」)。<html data-fs-any-tap> のページだけ
-  // 2026-11-26 中山さん: 本番も、撮影画面を最初に押したときに全画面に入る(ディレイから始めても映像を大きく。横向きで約1.5倍)。
-  // ブラウザの決まりで、押す操作なしには全画面にできない(向きを変えただけでは入れない)ので、横にしたときは「押すと全画面」を1回だけ知らせる
-  const anyTap = document.body.classList.contains('mode-monitor')
-    && !document.fullscreenElement && e.target.closest && e.target.closest('#monitorArea');
-  const rec = e.target.closest && e.target.closest('#labRec');
+// 撮影画面は、何か触った瞬間に全画面に入る(中山さん 2026-11-26「なにか触った瞬間に全画面」)。
+// ブラウザの決まりで、押す・触る操作の中でしか入れない。指を離した瞬間(pointerup)でも入れるので、ホイールを横にスワイプしただけ(クリックにならない)でも入る。
+// 自分で全画面から出た直後(20秒)は、勝手に入り直さない(アドレスバーを使いたくて出たのかもしれない)。「全画面」ボタンはいつでも入る
+function fsTouch(e) {
+  const t = e.target;
+  const btn = t.closest && t.closest('#mwFs');
+  const anyTap = document.body.classList.contains('mode-monitor') && !document.fullscreenElement
+    && (btn || Date.now() - fsExitAt > 20000) && !(t.closest && t.closest('[role="dialog"], dialog'));
+  const rec = e.type === 'click' && t.closest && t.closest('#labRec');
   if (!anyTap && (!rec || document.getElementById('monitorArea').classList.contains('lab-recording'))) return; // 録画を始めるときだけ
   pendingKeep = true;
-  enterBrowserFullscreen(); // 押した操作の中で呼ぶ(ブラウザの決まり)
+  enterBrowserFullscreen(); // 触った操作の中で呼ぶ(ブラウザの決まり)
   setTimeout(() => { pendingKeep = false; }, 1500); // 全画面に入れなかったときの後始末
-}, true);
+}
+document.addEventListener('pointerup', fsTouch, true);
+document.addEventListener('click', fsTouch, true);
 
 // 横向きにしたのに全画面でないとき、1回だけ「押すと全画面」と知らせる(Android の Chrome など、全画面に入れる端末だけ)
 let fsHintShown = false;
