@@ -50,6 +50,11 @@ const ICON_MODE_SEL = {
   rec: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="#0c1636" stroke-width="2.4"/><circle cx="12" cy="12" r="4.8" fill="#d6231b"/></svg>',
   delay: '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke-width="2.4" aria-hidden="true"><rect x="8" y="4" width="12" height="12" rx="3" stroke="rgba(12,22,54,.45)"/><rect x="4" y="8" width="12" height="12" rx="3" stroke="#0c1636"/></svg>',
 };
+// 横向きで選んでいるときの絵(2026-11-26: 白い平行四辺形の札をやめ、白い線の絵+左の白い印に。札が狭い列で窮屈だった)
+const ICON_MODE_ON = {
+  rec: ICON_MODE.rec.replace('rgba(201,210,238,.75)', '#fff').replace('stroke-width="2"', 'stroke-width="2.4"'),
+  delay: ICON_MODE.delay.replace('rgba(201,210,238,.4)', 'rgba(255,255,255,.55)').replace('rgba(201,210,238,.85)', '#fff').replace('stroke-width="2"', 'stroke-width="2.4"'),
+};
 const stopIcon = (c) => `<svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect x="2" y="2" width="18" height="18" rx="3" fill="${c}"/></svg>`;
 const ICON_LIST = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="14" height="14" rx="3"/><path d="M7 3h11a3 3 0 0 1 3 3v11"/><path d="M8.5 10.5l4 2.5-4 2.5z" fill="#fff"/></svg>';
 const ICON_GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M18.93 9.39 L21.80 10.01 L21.80 13.99 L18.93 14.61 L18.74 15.05 L20.33 17.53 L17.53 20.33 L15.05 18.74 L14.61 18.93 L13.99 21.80 L10.01 21.80 L9.39 18.93 L8.95 18.74 L6.47 20.33 L3.67 17.53 L5.26 15.05 L5.07 14.61 L2.20 13.99 L2.20 10.01 L5.07 9.39 L5.26 8.95 L3.67 6.47 L6.47 3.67 L8.95 5.26 L9.39 5.07 L10.01 2.20 L13.99 2.20 L14.61 5.07 L15.05 5.26 L17.53 3.67 L20.33 6.47 L18.74 8.95 Z"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -197,7 +202,7 @@ function init() {
       const dot = MODES[mi].k === 'rec' && st.rec ? '<i class="rec"></i>' : MODES[mi].k === 'delay' && st.delay ? '<i class="dl"></i>' : '';
       const selNow = Math.abs(x) < W * 0.3;
       const k = MODES[mi].k;
-      e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_SEL[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
+      e.querySelector('b').innerHTML = (land && k !== 'var' ? (selNow ? ICON_MODE_ON[k] : ICON_MODE[k]) : MODES[mi].lb) + dot;
       e.style.transform = land ? `translateY(${x}px) rotateX(${x / W * 28}deg) scale(${1 - 0.16 * a})` : `translateX(${x}px) rotateY(${-x / W * 28}deg) scale(${1 - 0.16 * a})`;
       e.style.opacity = Math.abs(x) > W * 1.5 ? 0 : Math.max(0, 1 - 0.25 * Math.abs(x) / W); // 選んでいない名前も読めるように(2026-11-26。前は0.55まで薄くしていた)。横は3つだけ見せる(同じ名前が2回出ていた)
       e.classList.toggle('sel', Math.abs(x) < W * 0.3);
@@ -454,7 +459,7 @@ function init() {
       // 横向き(2026-11-26 作り直し。縦と同じ考え方): ボタンは画面の高さに合わせて伸び縮みし、右の列は要る幅だけにする。
       // 映像は高さいっぱい。列の分の幅が残れば16:9(横に広く大きく)、残らなければ4:3にして、列は映像の上に半透明で重ねる
       m = Math.round(Math.max(52, Math.min(76, H * 0.19)));
-      const wheelW = 58; const gap = 6; const pad = 4; // 名前の札の幅(CSS の --mw-wheel-w と同じ。小さくすると、選んだ札が画面の右からはみ出る)
+      const wheelW = 44; const gap = 8; const pad = 4; // 名前の列の幅(CSS の横向きの --mw-wheel-w と同じ。2026-11-26 に札をやめて58→44px)
       // 列の最小の幅(真ん中のボタン52px)。16:9が入る横長の画面は、いつも16:9(4:3にすると、映像が細く列が広くなる。iPhone SE+Safariのバーで、列が画面の4割になっていた。2026-11-26)
       const colMin = Math.round(12 + wheelW + gap + 52 + pad + safe().r);
       askAspect(W / H >= 1.6 ? 16 / 9 : 4 / 3);

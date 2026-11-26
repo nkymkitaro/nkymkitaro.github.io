@@ -282,3 +282,14 @@ body.mode-monitor #monitorArea:not(.replaying) .mw.mw-compact .mw-slot .bx.vrb {
 /* ⚙の下の小さな一言(VARの画質を自動で下げたとき。2026-11-26) */
 .gear-note { position: fixed; z-index: 70; padding: 4px 10px; border-radius: 10px; background: rgba(12,22,54,.85); color: #fff; font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none; transition: opacity .6s; }
 .gear-note.out { opacity: 0; }
+
+/* 横向きの名前の列(2026-11-26 中山さん「平行四辺形が狭苦しい」): 札をやめ、絵だけ。選んだものは白く、左に白い印 */
+@media (orientation: landscape) and (max-height: 540px) {
+  :root { --mw-wheel-w: 44px; }
+  .mw-wheel { width: 44px; }
+  .mw-wheel .m { width: 44px; }
+  .mw-wheel .m .pl, .mw-wheel .m .sh { display: none; }
+  .mw-wheel .m b { color: rgba(201,210,238,.7); }
+  .mw-wheel .m.sel b { color: #fff; }
+  .mw-wheel .m.sel::before { content: ''; position: absolute; left: 0; top: 11px; bottom: 11px; width: 3px; border-radius: 2px; background: #fff; }
+}
